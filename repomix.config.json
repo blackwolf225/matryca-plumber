@@ -1,0 +1,24 @@
+{
+    "output": {
+      "filePath": "repomix-output.xml",
+      "style": "xml",
+      "parsableStyle": true,
+      "fileSummary": true,
+      "directoryStructure": true
+    },
+    "ignore": {
+      "useGitignore": true,
+      "useDefaultPatterns": true,
+      "customPatterns": [
+        ".cursor/",
+        ".github/",
+        "tests/.*_cache/",
+        "*.sqlite3",
+        "repomix-output.*",
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "poetry.lock",
+        "uv.lock"
+      ]
+    }
+  }

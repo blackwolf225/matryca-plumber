@@ -1,0 +1,1 @@
+"""Agent-facing MCP integration."""

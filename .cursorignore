@@ -1,0 +1,23 @@
+# Ignora le cartelle del virtual environment
+.venv/
+venv/
+env/
+
+# Ignora tutte le cache di Python e dei linter
+__pycache__/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Ignora i file generati da altri tool AI (per evitare loop di contesto)
+repomix-output.xml
+repomix-output.txt
+
+# Ignora la cartella .git
+.git/
+
+# Ignora eventuali file di database o grafi logseq testuali enormi
+*.sqlite3
+*.db
+journals/
+pages/
