@@ -10,7 +10,7 @@ Thank you for helping improve **matryca-logseq-llm-wiki**. This project bridges 
 
 ## Local setup
 
-1. Use **Python 3.11+** (see ``.python-version``).
+1. Use **Python 3.12+** (see ``.python-version``).
 2. Install **[uv](https://docs.astral.sh/uv/)**. That is the only required toolchain besides a CPython interpreter compatible with the project.
 3. From the repository root, install dependencies and dev tools:
 

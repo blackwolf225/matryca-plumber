@@ -7,10 +7,11 @@ name = "matryca-logseq-llm-wiki"
 version = "0.1.0"
 description = "MCP bridge between AI agents and Logseq OG (pure Markdown outliner)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 dependencies = [
     "httpx>=0.27.0,<1.0.0",
+    "logseq-matryca-parser @ git+https://github.com/MarcoPorcellato/logseq-matryca-parser.git",
     "pydantic>=2.0.0,<3.0.0",
     "python-dotenv>=1.0.0,<2.0.0",
     "loguru>=0.7.0,<1.0.0",
@@ -29,7 +30,7 @@ dev = [
 where = ["."]
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
 
@@ -47,7 +48,7 @@ ignore = ["ANN401"]
 "tests/**" = ["ANN"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_unused_configs = true
 show_error_codes = true
@@ -57,6 +58,10 @@ namespace_packages = true
 
 [[tool.mypy.overrides]]
 module = "loguru"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "logseq_matryca_parser.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -102,11 +102,13 @@ The client posts the serialized envelope, checks HTTP status, requires a JSON **
 
 ---
 
-## 3. Spatial RAG (Future)
+## 3. Spatial RAG (External parser)
 
 Retrieval over Logseq OG cannot treat pages as unstructured prose: hierarchy (indentation), block boundaries, and properties such as **`id::`** carry meaning.
 
-**`src/rag/matryca_hooks.py`** defines the extension point for the **Matryca Spatial Parser**: **`parse_markdown_hierarchy(file_path)`** is specified to read local **`.md`** files, interpret **indented bullets** as a parent–child outline, preserve important property lines, and emit a structure suitable for RAG and agent planning. The implementation is currently a **`NotImplementedError`** placeholder; once implemented, it will close the loop between **agent reasoning**, **on-disk Markdown**, and **optional offline or hybrid retrieval** without losing spatial context that flat chunking would destroy.
+**This repository does not host the spatial parsing implementation.** Parsing (indentation stack, AST, UUID and reference semantics) lives in the standalone **`logseq-matryca-parser`** package, installed here as a Git dependency and **on the roadmap for a PyPI release** so other tools can depend on it without vendoring.
+
+**`src/rag/matryca_hooks.py`** is a **lightweight adapter**: **`get_spatial_context(file_path)`** delegates to the external parser and returns its graph-native page model (for example a **`LogseqPage`** from **`LogosParser.parse_page_file`**). **matryca-logseq-llm-wiki** remains the **orchestrator** (MCP bridge, agent tools, RAG wiring); the parser remains the **single source of truth** for how Logseq Markdown becomes structured context.
 
 ---
 

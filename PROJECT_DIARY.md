@@ -43,6 +43,26 @@ The project aims to connect LLM agents to **Logseq OG**—a local, **pure Markdo
 
 ### Next Steps
 
-- Implement **`parse_markdown_hierarchy`** in `src/rag/matryca_hooks.py` for spatial RAG and offline context assembly.
+- ~~Implement inline spatial parsing in `src/rag/matryca_hooks.py`~~ superseded by the modular **`logseq-matryca-parser`** dependency (see diary entry **Modular Architecture and PyPI Roadmap**).
 - Expand MCP tools beyond outline insertion (reads, moves, property-aware edits) as requirements stabilize.
 - Keep this diary updated when transport, auth, or persistence assumptions change.
+
+---
+
+## [2026-05-17] - Modular Architecture and PyPI Roadmap
+
+### Context
+
+Spatial parsing (indentation, block tree, ``id::`` UUIDs, references) is non-trivial and would duplicate effort if reimplemented inside **matryca-logseq-llm-wiki**. A separate codebase already owns the deterministic Logseq AST work; keeping two copies would drift and complicate a future **PyPI** distribution story.
+
+### Decisions Made
+
+- **Single source of truth:** Parsing logic is **not** maintained in this repository. It lives in **`logseq-matryca-parser`** ([MarcoPorcellato/logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)), declared in **`pyproject.toml`** as a **Git** dependency until the package is published on **PyPI**.
+- **Adapter boundary:** **`src/rag/matryca_hooks.py`** exposes **`get_spatial_context(file_path)`**, which delegates to the external library (lazy import inside the function so upstream API churn is localized). This repo focuses on **orchestration** (MCP, Logseq client, RAG hooks), not parser internals.
+- **Python baseline:** The parser declares **`requires-python >= 3.12`**, so this project’s interpreter floor was raised to **3.12** to stay compatible with that dependency.
+
+### Next Steps
+
+- When **`logseq-matryca-parser`** hits **PyPI**, replace the Git URL in **`pyproject.toml`** with a versioned PyPI spec for reproducible installs.
+- Wire **`get_spatial_context`** into concrete RAG or MCP read paths as those features land.
+- Keep **`docs/ARCHITECTURE.md`** in sync if the adapter’s public surface or return types change.
