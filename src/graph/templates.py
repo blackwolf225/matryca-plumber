@@ -60,4 +60,42 @@ def read_logseq_template(
     return (rel.as_posix(), text)
 
 
-__all__ = ["list_logseq_templates", "read_logseq_template"]
+def _edn_escape_string(value: str) -> str:
+    """Escape a user fragment for safe inclusion inside an EDN double-quoted string."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def advanced_query_preset_open_markers() -> str:
+    """Inner EDN for blocks whose marker is TODO, LATER, or WAITING (live dashboard)."""
+    return (
+        '{:title "Open markers (TODO / LATER / WAITING)"\n'
+        " :query [:find (pull ?b [*])\n"
+        "         :where\n"
+        "         [?b :block/marker ?m]\n"
+        '         [(contains? #{"TODO" "LATER" "WAITING"} ?m)]]}'
+    )
+
+
+def advanced_query_preset_pages_tagged(tag: str) -> str:
+    """Inner EDN: blocks whose content includes ``#tag`` (uses ``clojure.string/includes?``)."""
+    bare = tag.lstrip("#").strip()
+    safe_title = _edn_escape_string(bare)
+    needle = f"#{bare}"
+    needle_lit = _edn_escape_string(needle)
+    return (
+        f'{{:title "Blocks mentioning #{safe_title}"\n'
+        f' :inputs ["{needle_lit}"]\n'
+        " :query [:find (pull ?b [*])\n"
+        "         :in $ ?needle\n"
+        "         :where\n"
+        "         [?b :block/content ?c]\n"
+        "         [(clojure.string/includes? ?c ?needle)]]}"
+    )
+
+
+__all__ = [
+    "advanced_query_preset_open_markers",
+    "advanced_query_preset_pages_tagged",
+    "list_logseq_templates",
+    "read_logseq_template",
+]

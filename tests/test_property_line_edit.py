@@ -78,3 +78,31 @@ def test_regex_capture_replacement(tmp_path: Path) -> None:
     )
     assert out.ok
     assert "alpha-x" in "".join(out.previews)
+
+
+def test_append_page_alias_to_existing_line(tmp_path: Path) -> None:
+    from src.graph.property_line_edit import append_page_alias_line
+
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    (pages / "Topic.md").write_text(
+        "alias:: [[One]], Two\n",
+        encoding="utf-8",
+    )
+    out = append_page_alias_line(tmp_path, "Topic", "Three", dry_run=False)
+    assert out.ok and out.added
+    text = (pages / "Topic.md").read_text(encoding="utf-8")
+    assert "Three" in text
+    dup = append_page_alias_line(tmp_path, "Topic", "three", dry_run=True)
+    assert dup.code == "noop_duplicate"
+
+
+def test_append_page_alias_creates_line(tmp_path: Path) -> None:
+    from src.graph.property_line_edit import append_page_alias_line
+
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    (pages / "Empty.md").write_text("- root\n", encoding="utf-8")
+    out = append_page_alias_line(tmp_path, "Empty", "NewAlias", dry_run=False)
+    assert out.ok and out.added
+    assert "alias::" in (pages / "Empty.md").read_text(encoding="utf-8")

@@ -11,6 +11,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .alias_index import normalize_concept_key
+
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 _PROP = re.compile(r"^(\s*)([^\s#][^:]*?)::(\s*)(.*)\s*$")
 
@@ -363,4 +365,244 @@ def edit_block_property_lines(
     )
 
 
-__all__ = ["PropertyLineEditOutcome", "edit_block_property_lines"]
+_ALIAS_LINE_ANY = re.compile(r"(?im)^(\s*)alias::(\s*)(.+)\s*$")
+
+
+def _split_alias_csv(raw: str) -> list[str]:
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _alias_token_compare_key(token: str) -> str:
+    t = token.strip()
+    if t.startswith("[[") and t.endswith("]]"):
+        t = t[2:-2]
+    return normalize_concept_key(t)
+
+
+def _format_alias_token(display: str, use_wikilink: bool) -> str:
+    inner = display.strip().strip("[]").strip()
+    if use_wikilink:
+        return f"[[{inner}]]"
+    return inner
+
+
+@dataclass(frozen=True, slots=True)
+class PageAliasAppendResult:
+    """Result of appending to a page-level ``alias::`` line (or creating one)."""
+
+    ok: bool
+    code: str
+    hint: str
+    dry_run: bool
+    added: bool
+    line_before: str | None
+    line_after: str | None
+    previous_size_bytes: int
+    current_size_bytes: int
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "code": self.code,
+            "hint": self.hint,
+            "dry_run": self.dry_run,
+            "added": self.added,
+            "line_before": self.line_before,
+            "line_after": self.line_after,
+            "previous_size_bytes": self.previous_size_bytes,
+            "current_size_bytes": self.current_size_bytes,
+        }
+
+
+def append_page_alias_line(
+    graph_root: str | Path,
+    page_ref: str,
+    alias: str,
+    *,
+    dry_run: bool = True,
+) -> PageAliasAppendResult:
+    """Append ``alias`` to the first ``alias::`` line, or add a new line at EOF (idempotent).
+
+    Matching ignores case and wikilink brackets when checking duplicates.
+    """
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    try:
+        path = _graph_safe_page_path(root, page_ref)
+    except ValueError:
+        return PageAliasAppendResult(
+            ok=False,
+            code="path_forbidden",
+            hint="Resolved path would escape LOGSEQ_GRAPH_PATH.",
+            dry_run=dry_run,
+            added=False,
+            line_before=None,
+            line_after=None,
+            previous_size_bytes=0,
+            current_size_bytes=0,
+        )
+    if not path.is_file():
+        return PageAliasAppendResult(
+            ok=False,
+            code="page_not_found",
+            hint=f"No file at `{path}` under graph root.",
+            dry_run=dry_run,
+            added=False,
+            line_before=None,
+            line_after=None,
+            previous_size_bytes=0,
+            current_size_bytes=0,
+        )
+
+    raw = path.read_bytes()
+    previous_size = len(raw)
+    text = raw.decode("utf-8")
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        lines = [""]
+
+    stripped = [ln.rstrip("\n") for ln in lines]
+    target_idx: int | None = None
+    for i, line in enumerate(stripped):
+        if _ALIAS_LINE_ANY.match(line):
+            target_idx = i
+            break
+
+    new_key = _alias_token_compare_key(alias)
+    if not new_key:
+        return PageAliasAppendResult(
+            ok=False,
+            code="empty_alias",
+            hint="Alias value is empty after normalization.",
+            dry_run=dry_run,
+            added=False,
+            line_before=None,
+            line_after=None,
+            previous_size_bytes=previous_size,
+            current_size_bytes=previous_size,
+        )
+
+    if target_idx is not None:
+        line = stripped[target_idx]
+        m = _ALIAS_LINE_ANY.match(line)
+        if not m:
+            return PageAliasAppendResult(
+                ok=False,
+                code="internal",
+                hint="Lost alias line match.",
+                dry_run=dry_run,
+                added=False,
+                line_before=None,
+                line_after=None,
+                previous_size_bytes=previous_size,
+                current_size_bytes=previous_size,
+            )
+        indent, mid_space, payload = m.group(1), m.group(2), m.group(3)
+        tokens = _split_alias_csv(payload)
+        existing_keys = {_alias_token_compare_key(t) for t in tokens}
+        use_wiki = any("[[" in t for t in tokens) or " " in alias.strip()
+        if new_key in existing_keys:
+            return PageAliasAppendResult(
+                ok=True,
+                code="noop_duplicate",
+                hint="Alias already present on the page (case/bracket insensitive).",
+                dry_run=dry_run,
+                added=False,
+                line_before=line,
+                line_after=line,
+                previous_size_bytes=previous_size,
+                current_size_bytes=previous_size,
+            )
+        new_tok = _format_alias_token(alias, use_wikilink=use_wiki)
+        new_payload = f"{payload.rstrip()}, {new_tok}"
+        new_core = f"{indent}alias::{mid_space}{new_payload}"
+        new_line = new_core + lines[target_idx][len(stripped[target_idx]) :]
+        new_lines = list(lines)
+        new_lines[target_idx] = new_line
+    else:
+        use_wiki = " " in alias.strip()
+        new_tok = _format_alias_token(alias, use_wikilink=use_wiki)
+        suffix = f"alias:: {new_tok}\n"
+        sep = "" if not text.endswith("\n") and text.strip() else ("\n" if text.strip() else "")
+        new_text_body = text + sep + ("\n" if text.strip() else "") + suffix
+        new_bytes_preview = new_text_body.encode("utf-8")
+        if dry_run:
+            return PageAliasAppendResult(
+                ok=True,
+                code="dry_run_ok",
+                hint="No `alias::` line found; would append a new line at EOF.",
+                dry_run=True,
+                added=True,
+                line_before=None,
+                line_after=suffix.strip(),
+                previous_size_bytes=previous_size,
+                current_size_bytes=len(new_bytes_preview),
+            )
+        bak = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(path, bak)
+        fd, tmp = tempfile.mkstemp(prefix="matryca-alias-", suffix=".md", dir=str(path.parent))
+        try:
+            with open(fd, "wb", closefd=True) as fh:
+                fh.write(new_bytes_preview)
+            Path(tmp).replace(path)
+        except OSError:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        final = path.stat().st_size
+        return PageAliasAppendResult(
+            ok=True,
+            code="applied",
+            hint=f"New alias line appended; backup `{bak.name}`.",
+            dry_run=False,
+            added=True,
+            line_before=None,
+            line_after=suffix.strip(),
+            previous_size_bytes=previous_size,
+            current_size_bytes=final,
+        )
+
+    new_text = "".join(new_lines)
+    new_bytes = new_text.encode("utf-8")
+    if dry_run:
+        return PageAliasAppendResult(
+            ok=True,
+            code="dry_run_ok",
+            hint="Re-run with dry_run=false to apply (writes atomically with .bak).",
+            dry_run=True,
+            added=True,
+            line_before=stripped[target_idx],
+            line_after=new_core,
+            previous_size_bytes=previous_size,
+            current_size_bytes=len(new_bytes),
+        )
+
+    bak = path.with_suffix(path.suffix + ".bak")
+    shutil.copy2(path, bak)
+    fd, tmp = tempfile.mkstemp(prefix="matryca-alias-", suffix=".md", dir=str(path.parent))
+    try:
+        with open(fd, "wb", closefd=True) as fh:
+            fh.write(new_bytes)
+        Path(tmp).replace(path)
+    except OSError:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+    final_size = path.stat().st_size
+    return PageAliasAppendResult(
+        ok=True,
+        code="applied",
+        hint=f"Backup at `{bak.name}` next to the page.",
+        dry_run=False,
+        added=True,
+        line_before=stripped[target_idx],
+        line_after=new_core,
+        previous_size_bytes=previous_size,
+        current_size_bytes=final_size,
+    )
+
+
+__all__ = [
+    "PageAliasAppendResult",
+    "PropertyLineEditOutcome",
+    "append_page_alias_line",
+    "edit_block_property_lines",
+]

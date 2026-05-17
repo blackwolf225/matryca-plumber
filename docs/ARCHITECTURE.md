@@ -134,6 +134,14 @@ The MCP tool **`render_logseq_dashboard`** calls **`src/graph/dashboard.py`** to
 
 ---
 
+## 7. Phase 4 — Logseq native superpowers (queries, journals, aliases)
+
+- **Advanced queries (`inject_logseq_advanced_query`)** — **`src/graph/advanced_query_block.py`** validates inner **EDN** (bracket balance + required ``:query``) and wraps ``#+BEGIN_QUERY`` / ``#+END_QUERY``. Presets live in **`src/graph/templates.py`** (`advanced_query_preset_open_markers`, `advanced_query_preset_pages_tagged`). The MCP tool calls **`MatrycaMCPServer.inject_logseq_advanced_query_block`** → **`LogseqClient.append_block`** so dashboards stay live in Logseq.
+- **Journal task scan (`analyze_journal_tasks`, `append_logseq_journal_markdown`)** — **`src/graph/journal_task_scan.py`** line-scans ``journals/YYYY_MM_DD.md`` for ``TODO`` / ``LATER`` / ``WAITING`` and surfaces ``SCHEDULED:`` / ``DEADLINE:`` text; optional append uses atomic writes with ``.bak`` beside the journal file.
+- **Alias index (`resolve_logseq_entity`, `append_logseq_page_alias`)** — **`src/graph/alias_index.py`** indexes ``alias::`` across ``pages/**/*.md`` and ``journals/**/*.md``; **`append_page_alias_line`** in **`src/graph/property_line_edit.py`** appends idempotently to the first ``alias::`` line or creates one at EOF.
+
+---
+
 ## Related entry points
 
 - **`src/main.py`**: FastMCP application, **`app_lifespan`** wiring of **`LogseqClient`**, **`MatrycaWikiConfig`**, **`MatrycaMCPServer`**, and MCP tool registration (read/write/lint/query helpers in **`register_mcp_tools`**) for stdio transport.

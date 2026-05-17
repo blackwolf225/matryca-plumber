@@ -14,18 +14,39 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..bridge.logseq_client import LogseqClient
 from ..config import MatrycaWikiConfig
+from ..graph import templates as graph_templates
+from ..graph.advanced_query_block import (
+    resolve_advanced_query_preset,
+    wrap_logseq_advanced_query,
+)
+from ..graph.alias_index import build_alias_index
 from ..graph.block_ref_lint import lint_block_refs_in_graph
 from ..graph.dashboard import build_dashboard_markdown
 from ..graph.hubs import build_namespace_index_markdown
+from ..graph.journal_task_scan import (
+    append_journal_markdown_section,
+    format_journal_task_review_markdown,
+    scan_journal_tasks,
+)
 from ..graph.link_tag_hop import format_hop_report_markdown, format_hub_orphan_markdown
-from ..graph.property_line_edit import edit_block_property_lines
+from ..graph.property_line_edit import (
+    append_page_alias_line,
+    edit_block_property_lines,
+)
 from ..graph.wiki_lint import format_wiki_lint_report, lint_wiki_prefixed_pages
 from ..rag.local_query import format_keyword_query_markdown
 from ..rag.matryca_hooks import get_page_spatial_context
 from .git_snapshot import snapshot_git_working_tree
 from .l1_memory import read_l1_memory_async
-from .quality_gate import outline_security_violations
-from .routing_hint import append_read_page_routing_hint, routing_hint_for_write_outline
+from .quality_gate import (
+    advanced_query_security_violations,
+    outline_security_violations,
+)
+from .routing_hint import (
+    append_read_page_routing_hint,
+    routing_hint_for_entity_alias_preflight,
+    routing_hint_for_write_outline,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,11 +209,36 @@ class MatrycaMCPServer:
             blocks=len(created_ids),
             root_parent=parent_block_uuid,
         ).info("Applied Logseq outline with parent-chained UUIDs")
+        join_hint = routing_hint_for_write_outline()
+        if root.properties.get("type::") == "entity":
+            join_hint = f"{join_hint}\n{routing_hint_for_entity_alias_preflight()}"
         return {
             "uuids": created_ids,
-            "routing_hint": routing_hint_for_write_outline(),
+            "routing_hint": join_hint,
             "outline_block_count": outline_block_count(outline),
             "git_snapshot": git_snap,
+        }
+
+    async def inject_logseq_advanced_query_block(
+        self,
+        *,
+        parent_block_uuid: str,
+        query_edn: str,
+    ) -> dict[str, Any]:
+        """Append one advanced-query fence block under ``parent_block_uuid`` via Logseq API."""
+        client = self._client
+        if client is None:
+            msg = "inject_logseq_advanced_query_block requires a configured LogseqClient"
+            raise ValueError(msg)
+        sec = advanced_query_security_violations(query_edn)
+        if sec:
+            raise ValueError("; ".join(sec))
+        content = wrap_logseq_advanced_query(query_edn)
+        new_uuid = await client.append_block(parent_block_uuid, content, {})
+        return {
+            "uuid": new_uuid,
+            "markdown": content,
+            "routing_hint": routing_hint_for_write_outline(),
         }
 
 
@@ -294,6 +340,188 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         return await asyncio.to_thread(_run)
 
     @mcp.tool()
+    async def inject_logseq_advanced_query(
+        ctx: Context[ServerSession, AppContext],
+        parent_block_uuid: str,
+        query_edn: str = "",
+        dry_run: bool = True,
+        query_preset: str | None = None,
+        tag: str | None = None,
+    ) -> dict[str, Any]:
+        """Append a live Logseq **Advanced Query** block (``#+BEGIN_QUERY``) under a parent UUID.
+
+        Supply either ``query_preset`` (``open_markers`` or ``pages_tagged`` + ``tag``) **or**
+        raw inner **EDN** in ``query_edn`` (must include a ``:query`` clause). Prefer presets
+        for dashboards that refresh inside Logseq instead of static bullet dumps.
+
+        **Requires:** configured Logseq HTTP API client and ``dry_run=false`` to write.
+        """
+        bridge = ctx.request_context.lifespan_context.bridge
+
+        inner: str
+        if query_preset and query_preset.strip():
+            try:
+                inner = resolve_advanced_query_preset(query_preset.strip(), tag=tag)
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+        elif query_edn.strip():
+            inner = query_edn.strip()
+        else:
+            return {
+                "ok": False,
+                "error": "Provide `query_preset` or a non-empty `query_edn` (inner EDN map).",
+            }
+
+        sec = advanced_query_security_violations(inner)
+        if sec:
+            return {"ok": False, "error": "; ".join(sec)}
+
+        try:
+            markdown = wrap_logseq_advanced_query(inner)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        if dry_run:
+            return {
+                "ok": True,
+                "dry_run": True,
+                "markdown": markdown,
+                "uuid": None,
+                "routing_hint": routing_hint_for_write_outline(),
+            }
+
+        try:
+            out = await bridge.inject_logseq_advanced_query_block(
+                parent_block_uuid=parent_block_uuid,
+                query_edn=inner,
+            )
+        except (ValueError, RuntimeError) as exc:
+            return {"ok": False, "error": str(exc)}
+
+        return {"ok": True, "dry_run": False, **out}
+
+    @mcp.tool()
+    async def analyze_journal_tasks(
+        ctx: Context[ServerSession, AppContext],
+        days: int = 7,
+    ) -> dict[str, Any]:
+        """Scan ``journals/`` for the last ``days`` for ``TODO`` / ``LATER`` / ``WAITING`` bullets.
+
+        Parses ``SCHEDULED:`` / ``DEADLINE:`` markers inside each task cluster. Returns JSON
+        rows plus a ready-to-paste **Task review** Markdown section (disk scan only).
+
+        To **append** the review into today's journal file, call
+        :func:`append_logseq_journal_markdown` with ``markdown_body`` set to the returned
+        ``task_review_markdown`` (or a shortened variant you author).
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {
+                "ok": False,
+                "error": "LOGSEQ_GRAPH_PATH is not set.",
+                "items": [],
+                "task_review_markdown": "",
+            }
+
+        def _run() -> dict[str, Any]:
+            report = scan_journal_tasks(graph_path, days=days)
+            md = format_journal_task_review_markdown(report)
+            rows = [
+                {
+                    "source_iso_date": it.source_iso_date,
+                    "source_relpath": it.source_relpath,
+                    "marker": it.marker,
+                    "headline": it.headline,
+                    "scheduled": it.scheduled,
+                    "deadline": it.deadline,
+                    "block_text": it.block_text,
+                }
+                for it in report.items
+            ]
+            return {
+                "ok": True,
+                "days_scanned": report.days_scanned,
+                "files_scanned": report.files_scanned,
+                "open_item_count": len(report.items),
+                "notes": report.notes,
+                "items": rows,
+                "task_review_markdown": md,
+            }
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
+    async def append_logseq_journal_markdown(
+        ctx: Context[ServerSession, AppContext],
+        markdown_body: str,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Append Markdown to today's ``journals/YYYY_MM_DD.md`` (atomic write, ``.bak``).
+
+        Typical use: paste the ``task_review_markdown`` from :func:`analyze_journal_tasks`.
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {
+                "ok": False,
+                "code": "graph_missing",
+                "hint": "LOGSEQ_GRAPH_PATH is not set.",
+            }
+        return await asyncio.to_thread(
+            append_journal_markdown_section,
+            graph_path,
+            markdown_body,
+            dry_run=dry_run,
+        )
+
+    @mcp.tool()
+    async def resolve_logseq_entity(
+        ctx: Context[ServerSession, AppContext],
+        candidates: str,
+    ) -> dict[str, Any]:
+        """Resolve page titles / aliases before creating entities (``alias::`` graph scan).
+
+        ``candidates`` is a comma-separated list. Matching is normalization-only
+        (casefold, whitespace); no fuzzy edit distance.
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {"ok": False, "error": "LOGSEQ_GRAPH_PATH is not set.", "results": []}
+
+        def _run() -> dict[str, Any]:
+            index = build_alias_index(graph_path)
+            parts = [p.strip() for p in candidates.split(",") if p.strip()]
+            results = [index.resolve(p).as_dict() for p in parts]
+            return {
+                "ok": True,
+                "index_collision_notes": index.collision_notes[:25],
+                "results": results,
+            }
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
+    async def append_logseq_page_alias(
+        ctx: Context[ServerSession, AppContext],
+        page_ref: str,
+        alias: str,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Append to the first ``alias::`` line on a page (or create one); idempotent."""
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {
+                "ok": False,
+                "code": "graph_missing",
+                "hint": "LOGSEQ_GRAPH_PATH is not set.",
+            }
+
+        def _run() -> dict[str, Any]:
+            return append_page_alias_line(graph_path, page_ref, alias, dry_run=dry_run).as_dict()
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
     async def snapshot_logseq_graph_git(
         message: str = "matryca: AI manual snapshot",
     ) -> dict[str, object]:
@@ -320,7 +548,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         wiki = ctx.request_context.lifespan_context.wiki_config
 
         def _run() -> str:
-            names = list_logseq_templates(graph_path, subdir=wiki.templates_subdir)
+            names = graph_templates.list_logseq_templates(graph_path, subdir=wiki.templates_subdir)
             if not names:
                 return f"_No templates under `{wiki.templates_subdir}/`._"
             lines = ["# Logseq templates", "", f"- **Directory:** `{wiki.templates_subdir}/`", ""]
@@ -344,7 +572,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
         def _run() -> str:
             try:
-                rel, body = read_logseq_template(
+                rel, body = graph_templates.read_logseq_template(
                     graph_path,
                     template_name,
                     subdir=wiki.templates_subdir,

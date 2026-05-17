@@ -42,4 +42,13 @@ def routing_hint_for_write_outline() -> str:
     return "<!-- matryca_routing: hint=L2_graph_append -->"
 
 
-__all__ = ["append_read_page_routing_hint", "routing_hint_for_write_outline"]
+def routing_hint_for_entity_alias_preflight() -> str:
+    """Suggest alias index lookup before creating entity pages (duplicate avoidance)."""
+    return "<!-- matryca_routing: hint=call_resolve_logseq_entity_for_entities -->"
+
+
+__all__ = [
+    "append_read_page_routing_hint",
+    "routing_hint_for_entity_alias_preflight",
+    "routing_hint_for_write_outline",
+]

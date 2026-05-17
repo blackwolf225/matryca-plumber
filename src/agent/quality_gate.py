@@ -36,4 +36,14 @@ def outline_security_violations(outline: dict[str, Any]) -> list[str]:
     return issues
 
 
-__all__ = ["outline_security_violations"]
+def advanced_query_security_violations(query_edn: str) -> list[str]:
+    """Lightweight secret scan for raw advanced-query EDN strings."""
+    issues: list[str] = []
+    if _CRED_PROP.search(query_edn):
+        issues.append("credential-like token in advanced query body")
+    if _SK_OPENAI.search(query_edn):
+        issues.append("possible OpenAI-style API key material in advanced query body")
+    return issues
+
+
+__all__ = ["advanced_query_security_violations", "outline_security_violations"]
