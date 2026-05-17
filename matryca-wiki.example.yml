@@ -15,5 +15,11 @@ wiki_file_prefix: "Matryca___"
 # Maximum namespace depth for ingest planning (1 = top-level only).
 max_depth: 3
 
+# BFS structural hop traversal: max new neighbors per depth (see traverse_logseq_structural_hops).
+structural_hop_max_per_level: 20
+
+# Subfolder under the graph for template .md files (see read_logseq_template).
+templates_subdir: templates
+
 # Title for the dashboard page body (see render_logseq_dashboard).
 dashboard_page_title: "Matryca Dashboard"

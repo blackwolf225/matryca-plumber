@@ -89,6 +89,8 @@ async def test_write_logseq_outline_chains_parent_uuids(
     assert uuids["uuids"] == ["uuid-1", "uuid-2", "uuid-3"]
     assert "routing_hint" in uuids
     assert "L2" in uuids["routing_hint"]
+    assert uuids.get("outline_block_count") == 3
+    assert "git_snapshot" in uuids
     assert calls[0] == ("page-root", "Root")
     assert calls[1] == ("uuid-1", "Child")
     assert calls[2] == ("uuid-2", "Grandchild")

@@ -124,6 +124,16 @@ The MCP tool **`render_logseq_dashboard`** calls **`src/graph/dashboard.py`** to
 
 ---
 
+## 6. Phase 3 — structural hops, surgical properties, PKM safety (no Postgres / no vectors)
+
+- **Structural BFS (`traverse_logseq_structural_hops`, `report_structural_hubs_orphans`)** — **`src/graph/link_tag_hop.py`** builds an on-disk adjacency from wikilinks, shared tags, and sparse ``type::`` / ``domain::`` rings (pattern from **obsidian-graph** without embeddings). No second database.
+- **Surgical property edits (`patch_logseq_block_property_lines`)** — **`src/graph/property_line_edit.py`** limits search/replace to ``key::`` lines inside a block span anchored at ``id:: <uuid>``, with dry-run and ``.bak`` on apply (cyanheads-style safety). Does **not** replace the spatial parser for reads; it is a constrained line edit for properties only.
+- **Git snapshots (`MATRYCA_GIT_SNAPSHOT_ON_WRITE`)** — **`src/agent/git_snapshot.py`** runs an optional ``git add -A`` + ``git commit`` on **`LOGSEQ_GRAPH_PATH`** before **`write_logseq_outline`** (rollback-friendly; never changes git config; uses ``GIT_AUTHOR_*`` env defaults only when unset).
+- **Templates (`list_logseq_templates`, `read_logseq_template`)** — **`src/graph/templates.py`** reads ``templates/*.md`` under the graph (Templater-style discovery).
+- **BM25 local query** — **`src/rag/local_query.py`** ranks pages with in-memory Okapi BM25 (Omnisearch-style relevance) with a legacy ``substring`` mode.
+
+---
+
 ## Related entry points
 
 - **`src/main.py`**: FastMCP application, **`app_lifespan`** wiring of **`LogseqClient`**, **`MatrycaWikiConfig`**, **`MatrycaMCPServer`**, and MCP tool registration (read/write/lint/query helpers in **`register_mcp_tools`**) for stdio transport.

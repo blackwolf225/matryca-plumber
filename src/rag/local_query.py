@@ -1,8 +1,25 @@
-"""Lightweight keyword scan over on-disk Logseq pages (no vector DB)."""
+"""Lightweight relevance over on-disk Logseq pages (BM25 / substring; no vector DB)."""
 
 from __future__ import annotations
 
+import math
+import re
+from collections import Counter
 from pathlib import Path
+
+_TOKEN = re.compile(r"[0-9a-z]+", re.IGNORECASE)
+
+
+def _iter_page_files(graph_root: Path) -> list[Path]:
+    pages = graph_root / "pages"
+    if not pages.is_dir():
+        return []
+    return sorted(p for p in pages.rglob("*.md") if p.is_file())
+
+
+def tokenize(text: str) -> list[str]:
+    """Lowercase word tokens for lexical scoring."""
+    return [m.group(0).lower() for m in _TOKEN.finditer(text)]
 
 
 def rank_pages_by_keyword(
@@ -17,14 +34,8 @@ def rank_pages_by_keyword(
         return []
 
     root = Path(graph_root).expanduser().resolve(strict=False)
-    pages = root / "pages"
-    if not pages.is_dir():
-        return []
-
     scored: list[tuple[str, int]] = []
-    for path in pages.rglob("*.md"):
-        if not path.is_file():
-            continue
+    for path in _iter_page_files(root):
         try:
             text = path.read_text(encoding="utf-8", errors="replace").lower()
         except OSError:
@@ -38,32 +49,115 @@ def rank_pages_by_keyword(
     return scored[: max(1, min(limit, 100))]
 
 
+def rank_pages_by_bm25(
+    graph_root: str | Path,
+    query: str,
+    *,
+    limit: int = 15,
+    k1: float = 1.5,
+    b: float = 0.75,
+) -> list[tuple[str, float]]:
+    """Okapi BM25 over per-page token bags (in-memory, pure Python)."""
+    q_tokens = tokenize(query)
+    if not q_tokens:
+        return []
+
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    paths = _iter_page_files(root)
+    docs_tokens: list[list[str]] = []
+    rels: list[str] = []
+    for path in paths:
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        toks = tokenize(raw)
+        if not toks:
+            continue
+        docs_tokens.append(toks)
+        rels.append(path.relative_to(root).as_posix())
+
+    n_docs = len(docs_tokens)
+    if n_docs == 0:
+        return []
+
+    doc_lens = [len(d) for d in docs_tokens]
+    avgdl = sum(doc_lens) / n_docs
+
+    df: dict[str, int] = {}
+    for toks in docs_tokens:
+        for t in set(toks):
+            df[t] = df.get(t, 0) + 1
+
+    scores: list[tuple[str, float]] = []
+    for rel, toks, dl in zip(rels, docs_tokens, doc_lens, strict=True):
+        tf = Counter(toks)
+        score = 0.0
+        for t in q_tokens:
+            freq = tf.get(t, 0)
+            if freq == 0:
+                continue
+            idf = math.log((n_docs - df.get(t, 0) + 0.5) / (df.get(t, 0) + 0.5) + 1.0)
+            denom = freq + k1 * (1.0 - b + b * (dl / avgdl if avgdl else 1.0))
+            score += idf * ((freq * (k1 + 1.0)) / denom)
+        if score > 0.0:
+            scores.append((rel, score))
+
+    scores.sort(key=lambda item: (-item[1], item[0]))
+    return scores[: max(1, min(limit, 100))]
+
+
 def format_keyword_query_markdown(
     graph_root: str | Path,
     keyword: str,
     *,
     limit: int = 15,
+    mode: str = "bm25",
 ) -> str:
-    """Readable Markdown table-style list for MCP."""
-    rows = rank_pages_by_keyword(graph_root, keyword, limit=limit)
+    """Readable Markdown list for MCP ``query_logseq_pages_local``."""
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    m = mode.strip().lower()
     lines = [
-        "# Local keyword scan",
+        "# Local page query",
         "",
-        f"- **Graph:** `{Path(graph_root).expanduser().resolve(strict=False)}`",
-        f"- **Keyword:** `{keyword.strip()}`",
-        f"- **Matches:** {len(rows)}",
+        f"- **Graph:** `{root}`",
+        f"- **Query:** `{keyword.strip()}`",
+        f"- **Mode:** `{m}`",
         "",
     ]
-    if not rows:
+
+    if m in ("bm25", "tfidf", "relevance"):
+        bm_rows = rank_pages_by_bm25(root, keyword, limit=limit)
+        lines.append(f"- **Matches:** {len(bm_rows)}")
+        lines.append("")
+        lines.append("## Ranked pages (BM25)")
+        lines.append("")
+        if not bm_rows:
+            lines.append("_No lexical overlap in `pages/**/*.md`._")
+            return "\n".join(lines) + "\n"
+        for rel, score in bm_rows:
+            lines.append(f"- `{rel}` — **{score:.4f}**")
+        lines.append("")
+        return "\n".join(lines) + "\n"
+
+    sub_rows = rank_pages_by_keyword(root, keyword, limit=limit)
+    lines.append(f"- **Matches:** {len(sub_rows)}")
+    lines.append("")
+    lines.append("## Ranked pages (substring count)")
+    lines.append("")
+    if not sub_rows:
         lines.append("_No hits in `pages/**/*.md`._")
         return "\n".join(lines) + "\n"
 
-    lines.append("## Ranked pages (substring count)")
-    lines.append("")
-    for rel, score in rows:
+    for rel, score in sub_rows:
         lines.append(f"- `{rel}` — **{score}** hits")
     lines.append("")
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["format_keyword_query_markdown", "rank_pages_by_keyword"]
+__all__ = [
+    "format_keyword_query_markdown",
+    "rank_pages_by_bm25",
+    "rank_pages_by_keyword",
+    "tokenize",
+]

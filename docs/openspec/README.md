@@ -2,7 +2,7 @@
 
 Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com/MehmetGoekce/llm-wiki) openspec, mapped to this repository.
 
-**Canonical checklist:** [`ROADMAP_LLM_WIKI.md`](../../ROADMAP_LLM_WIKI.md) in the repo root.
+**Canonical checklists:** [`ROADMAP_LLM_WIKI.md`](../../ROADMAP_LLM_WIKI.md), [`ROADMAP_LLM_WIKI_PHASE_3.md`](../../ROADMAP_LLM_WIKI_PHASE_3.md) in the repo root.
 
 | Document | Scope |
 |----------|--------|

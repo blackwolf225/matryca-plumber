@@ -46,3 +46,5 @@ def test_matryca_wiki_config_defaults() -> None:
     cfg = MatrycaWikiConfig()
     assert cfg.namespaces == []
     assert cfg.max_depth == 3
+    assert cfg.structural_hop_max_per_level == 20
+    assert cfg.templates_subdir == "templates"

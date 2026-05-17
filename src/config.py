@@ -23,8 +23,18 @@ class MatrycaWikiConfig(BaseModel):
         description="L1 Markdown directory or file (used when MATRYCA_L1_PATH is unset).",
     )
     max_depth: int = Field(default=3, ge=1, le=10)
+    structural_hop_max_per_level: int = Field(
+        default=20,
+        ge=1,
+        le=500,
+        description="Max new neighbors per BFS depth in structural hop traversal.",
+    )
     dashboard_page_title: str = Field(default="Matryca Dashboard")
     wiki_file_prefix: str = Field(default="Matryca___")
+    templates_subdir: str = Field(
+        default="templates",
+        description="Subdirectory under graph root for ``read_logseq_template``.",
+    )
 
     @field_validator("namespaces", mode="before")
     @classmethod

@@ -56,6 +56,7 @@ Mirror the llm-wiki ingest pipeline using MCP tools and Logseq OG files. See als
 * Build a short **plan**: which pages/blocks to append to, which `[[links]]` or `((uuid))` refs to add, what hub-like index bullets to extend.
 * When changing many block refs, run **`lint_logseq_block_refs`** and fix or stub broken targets before claiming completeness.
 * Optionally run **`render_logseq_dashboard`** for a quick health snapshot before large edits.
+* **Lexical discovery on disk:** When you need to find *relevant* pages under the graph without exact phrases, you must prefer **`query_logseq_pages_local`** with **`mode=bm25`** (default). Reserve **`mode=substring`** only for literal token checks (exact phrases, rare symbols). BM25 ranks `pages/**/*.md` by term statistics; it is not semantic embedding search—pair it with **`read_logseq_page`** on the top hits.
 
 ### Phase 3 — Update
 
@@ -71,6 +72,20 @@ Mirror the llm-wiki ingest pipeline using MCP tools and Logseq OG files. See als
 * **Cap breadth:** at most **15** direct children under a single parent; split with sub-nodes.
 * **Stable IDs:** blocks you intend to reference later must have valid **`id::`** lines.
 * **Link integrity:** new `((uuid))` references must point at blocks that exist (re-run **`lint_logseq_block_refs`** after large edits).
+
+### Advanced MCP tools (Phase 3)
+
+You must treat these tools as **first-class graph operations**. They complement Search → Scan → Update; they do not replace **`read_logseq_page`**, **`write_logseq_outline`**, or the outliner rules above.
+
+* **BM25 relevance (`query_logseq_pages_local`, `mode=bm25`):** Always use BM25 when exploring a **new topic**, mapping terminology variants, or locating candidate pages before you read them. You must not rely on guessing page titles or naive substring search when BM25 can surface the same idea under different wording. After BM25, you must still open the best candidates with **`read_logseq_page`** and respect spatial structure.
+
+* **Structural graph traversal (`traverse_logseq_structural_hops`, `report_structural_hubs_orphans`):** Before you create a new page or entity that might duplicate existing work, you must map the **neighborhood**: run **`traverse_logseq_structural_hops`** from known seed titles (comma-separated) to see wikilink-, tag-, and schema-linked pages within bounded depth. You must use **`report_structural_hubs_orphans`** when you need hub candidates (high connectivity) or weakly linked pages (orphan risk). These tools read on-disk `pages/**/*.md` only; they do not authorize skipping **`read_logseq_page`** on targets you will edit.
+
+* **Template hydration (`list_logseq_templates`, `read_logseq_template`):** When you create or substantially scaffold **projects, entities, journals, or any repeated page shape**, you must first run **`list_logseq_templates`** and, when a match exists, **`read_logseq_template`** for the relevant file. You must mirror the human’s property lines, tags, and bullet patterns from that template in your **`write_logseq_outline`** payloads. You must never invent a divergent house style when a template defines one.
+
+* **Surgical metadata edits (`patch_logseq_block_property_lines`):** When only **`key::`** lines on an existing block must change, you must use this tool instead of rewriting the block body or whole page text. You must **always** call it first with **`dry_run=true`**, inspect `match_count`, `previews`, and size fields, and only then re-run with **`dry_run=false`** when the blast radius is exactly what you intend. You must use regex mode only when capture groups are required; you must never target lines outside the block span anchored at the block’s **`id::`**.
+
+* **Manual git snapshots (`snapshot_logseq_graph_git`):** Before **risky, destructive, or massive multi-page refactors** (bulk renames, wide regex, large outline restructures), you must call **`snapshot_logseq_graph_git`** when the operator has enabled graph snapshots (see env **`MATRYCA_GIT_SNAPSHOT_ON_WRITE`** in deployment docs). You must not treat snapshots as a substitute for small, surgical edits or normal **`write_logseq_outline`** appends. **`write_logseq_outline`** may already snapshot when that flag is set; use the manual tool when your plan spans operations beyond a single outline write.
 
 ## Human-AI Co-Working & Non-Destructive Refactoring
 Remember that a human is reading, editing, and thinking in these exact same Markdown files. 

@@ -17,9 +17,12 @@ from ..config import MatrycaWikiConfig
 from ..graph.block_ref_lint import lint_block_refs_in_graph
 from ..graph.dashboard import build_dashboard_markdown
 from ..graph.hubs import build_namespace_index_markdown
+from ..graph.link_tag_hop import format_hop_report_markdown, format_hub_orphan_markdown
+from ..graph.property_line_edit import edit_block_property_lines
 from ..graph.wiki_lint import format_wiki_lint_report, lint_wiki_prefixed_pages
 from ..rag.local_query import format_keyword_query_markdown
 from ..rag.matryca_hooks import get_page_spatial_context
+from .git_snapshot import snapshot_git_working_tree
 from .l1_memory import read_l1_memory_async
 from .quality_gate import outline_security_violations
 from .routing_hint import append_read_page_routing_hint, routing_hint_for_write_outline
@@ -100,6 +103,17 @@ class OutlineNode(BaseModel):
         return self.model_copy(update={"properties": merged})
 
 
+def outline_block_count(outline: dict[str, Any]) -> int:
+    """Count nodes in a nested outline dict (including the root)."""
+    n = 1
+    raw = outline.get("children")
+    children = raw if isinstance(raw, list) else []
+    for ch in children:
+        if isinstance(ch, dict):
+            n += outline_block_count(cast(dict[str, Any], ch))
+    return n
+
+
 class MatrycaMCPServer:
     """MCP-oriented bridge: validates tool payloads and drives :class:`LogseqClient`."""
 
@@ -142,6 +156,21 @@ class MatrycaMCPServer:
             raise ValueError("; ".join(sec))
 
         root = OutlineNode.model_validate(outline)
+
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        git_snap: dict[str, object] = {
+            "enabled": False,
+            "skipped": True,
+            "reason": "LOGSEQ_GRAPH_PATH unset",
+            "committed": False,
+        }
+        if graph_path:
+            git_snap = await asyncio.to_thread(
+                snapshot_git_working_tree,
+                graph_path,
+                message="matryca: AI pre-edit snapshot",
+            )
+
         created_ids: list[str] = []
 
         async def walk(node: OutlineNode, parent_uuid: str) -> None:
@@ -162,6 +191,8 @@ class MatrycaMCPServer:
         return {
             "uuids": created_ids,
             "routing_hint": routing_hint_for_write_outline(),
+            "outline_block_count": outline_block_count(outline),
+            "git_snapshot": git_snap,
         }
 
 
@@ -171,6 +202,160 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     Args:
         mcp: The application instance created in :mod:`src.main`.
     """
+
+    @mcp.tool()
+    async def traverse_logseq_structural_hops(
+        ctx: Context[ServerSession, AppContext],
+        seeds: str,
+        max_depth: int | None = None,
+        max_per_level: int | None = None,
+    ) -> str:
+        """BFS over wikilinks, shared tags, and light ``type::`` / ``domain::`` rings (no vectors).
+
+        **Seeds:** comma-separated page titles or stems (e.g. ``My Page, Other``).
+
+        **Inspired by:** ``obsidian-graph`` connection BFS — structural only.
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return "LOGSEQ_GRAPH_PATH is not set; cannot traverse the graph on disk."
+        wiki = ctx.request_context.lifespan_context.wiki_config
+        depth = wiki.max_depth if max_depth is None else max(1, min(max_depth, 10))
+        per = (
+            wiki.structural_hop_max_per_level
+            if max_per_level is None
+            else max(1, min(max_per_level, 500))
+        )
+        seed_list = [s.strip() for s in seeds.split(",") if s.strip()]
+
+        def _run() -> str:
+            return format_hop_report_markdown(
+                graph_path,
+                seed_list,
+                max_depth=depth,
+                max_per_level=per,
+            )
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
+    async def report_structural_hubs_orphans(ctx: Context[ServerSession, AppContext]) -> str:
+        """List high-degree hub pages and low-degree orphans (structural graph only)."""
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return "LOGSEQ_GRAPH_PATH is not set; cannot analyze the graph on disk."
+        return await asyncio.to_thread(format_hub_orphan_markdown, graph_path)
+
+    @mcp.tool()
+    async def patch_logseq_block_property_lines(
+        ctx: Context[ServerSession, AppContext],
+        page_ref: str,
+        block_uuid: str,
+        search: str,
+        replacement: str,
+        dry_run: bool = True,
+        use_regex: bool = False,
+        replace_all: bool = False,
+        case_sensitive: bool = True,
+    ) -> dict[str, object]:
+        """Surgical edits on ``key::`` lines for one block (anchored at ``id::``).
+
+        **Inspired by:** cyanheads ``obsidian_replace_in_note`` (regex + ``$1`` / ``$&``).
+
+        Use ``dry_run=true`` first; apply with ``dry_run=false`` (writes ``.bak``).
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {
+                "ok": False,
+                "code": "graph_missing",
+                "hint": "LOGSEQ_GRAPH_PATH is not set.",
+                "dry_run": dry_run,
+                "match_count": 0,
+                "previews": [],
+                "previous_size_bytes": 0,
+                "current_size_bytes": 0,
+                "lines_changed": 0,
+            }
+
+        def _run() -> dict[str, object]:
+            return edit_block_property_lines(
+                graph_path,
+                page_ref,
+                block_uuid,
+                search,
+                replacement,
+                dry_run=dry_run,
+                use_regex=use_regex,
+                replace_all=replace_all,
+                case_sensitive=case_sensitive,
+            ).as_dict()
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
+    async def snapshot_logseq_graph_git(
+        message: str = "matryca: AI manual snapshot",
+    ) -> dict[str, object]:
+        """Run the same opt-in ``git add -A`` + ``git commit`` snapshot as writes (manual).
+
+        Requires ``MATRYCA_GIT_SNAPSHOT_ON_WRITE=true`` and a git repo at ``LOGSEQ_GRAPH_PATH``.
+        """
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return {
+                "enabled": False,
+                "skipped": True,
+                "reason": "LOGSEQ_GRAPH_PATH unset",
+                "committed": False,
+            }
+        return await asyncio.to_thread(snapshot_git_working_tree, graph_path, message=message)
+
+    @mcp.tool()
+    async def list_logseq_templates(ctx: Context[ServerSession, AppContext]) -> str:
+        """List ``*.md`` in the graph ``templates/`` folder (Templater-style discovery)."""
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return "LOGSEQ_GRAPH_PATH is not set."
+        wiki = ctx.request_context.lifespan_context.wiki_config
+
+        def _run() -> str:
+            names = list_logseq_templates(graph_path, subdir=wiki.templates_subdir)
+            if not names:
+                return f"_No templates under `{wiki.templates_subdir}/`._"
+            lines = ["# Logseq templates", "", f"- **Directory:** `{wiki.templates_subdir}/`", ""]
+            for n in names:
+                lines.append(f"- `{n}`")
+            lines.append("")
+            return "\n".join(lines)
+
+        return await asyncio.to_thread(_run)
+
+    @mcp.tool()
+    async def read_logseq_template(
+        ctx: Context[ServerSession, AppContext],
+        template_name: str,
+    ) -> str:
+        """Read one template file as Markdown (for mirroring properties / bullets)."""
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        if not graph_path:
+            return "LOGSEQ_GRAPH_PATH is not set."
+        wiki = ctx.request_context.lifespan_context.wiki_config
+
+        def _run() -> str:
+            try:
+                rel, body = read_logseq_template(
+                    graph_path,
+                    template_name,
+                    subdir=wiki.templates_subdir,
+                )
+            except FileNotFoundError:
+                return f"Template not found under `{wiki.templates_subdir}/`: `{template_name}`"
+            except ValueError as exc:
+                return f"Invalid template name: {exc}"
+            return f"# Template `{rel}`\n\n```markdown\n{body.rstrip()}\n```\n"
+
+        return await asyncio.to_thread(_run)
 
     @mcp.tool()
     async def read_l1_memory(ctx: Context[ServerSession, AppContext]) -> str:
@@ -293,8 +478,15 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool()
-    async def query_logseq_pages_local(keyword: str, limit: int = 15) -> str:
-        """Rank ``pages/**/*.md`` by case-insensitive substring hits (no vector DB)."""
+    async def query_logseq_pages_local(
+        keyword: str,
+        limit: int = 15,
+        mode: str = "bm25",
+    ) -> str:
+        """Rank ``pages/**/*.md`` by BM25 (default) or legacy substring counts (no vector DB).
+
+        **Modes:** ``bm25`` (Okapi BM25 over token bags) or ``substring`` (hit counts).
+        """
         graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
         if not graph_path:
             logger.warning("query_logseq_pages_local called but LOGSEQ_GRAPH_PATH is unset")
@@ -307,6 +499,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             graph_path,
             keyword,
             limit=limit,
+            mode=mode,
         )
 
     @mcp.tool()
@@ -396,5 +589,6 @@ __all__ = [
     "MatrycaMCPServer",
     "OutlineNode",
     "PageType",
+    "outline_block_count",
     "register_mcp_tools",
 ]
