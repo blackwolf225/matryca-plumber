@@ -49,7 +49,13 @@ def test_split_large_blocks_skips_code_fence(tmp_path: Path) -> None:
         ],
     )
     (pages / "Fence.md").write_text(md, encoding="utf-8")
-    out = refactor_large_blocks(tmp_path, page_ref="Fence", min_chars=80, max_blocks=5, dry_run=True)
+    out = refactor_large_blocks(
+        tmp_path,
+        page_ref="Fence",
+        min_chars=80,
+        max_blocks=5,
+        dry_run=True,
+    )
     assert out.code == "noop"
 
 

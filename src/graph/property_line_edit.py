@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from .alias_index import normalize_concept_key
+from .global_fence_scanner import compute_page_protected_line_indices
+from .markdown_blocks import atomic_write_bytes
 from .mldoc_properties import is_logseq_block_property_line, split_logseq_property_list_values
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
@@ -50,7 +51,7 @@ def _property_span_end(lines: list[str], id_line_idx: int, bullet_idx: int) -> i
 
 
 def _property_line_indices(lines: list[str], start: int, end: int) -> list[int]:
-    """Indices in ``[start, end)`` that are Logseq ``key::`` block property lines (mldoc-aligned)."""
+    """Indices in ``[start, end)`` for Logseq ``key::`` block property lines (mldoc-aligned)."""
     out: list[int] = []
     for i in range(start, end):
         if is_logseq_block_property_line(lines[i]):
@@ -226,6 +227,8 @@ def edit_block_property_lines(
     if not lines:
         lines = [""]
 
+    protected = compute_page_protected_line_indices(text)
+
     id_idx = _find_id_line_index([ln.rstrip("\n") for ln in lines], block_uuid)
     if id_idx is None:
         return PropertyLineEditOutcome(
@@ -262,6 +265,24 @@ def edit_block_property_lines(
             ok=False,
             code="no_property_lines",
             hint="No property lines found in the resolved block span.",
+            dry_run=dry_run,
+            match_count=0,
+            previews=[],
+            previous_size_bytes=previous_size,
+            current_size_bytes=previous_size,
+            lines_changed=0,
+        )
+
+    blocked = [li for li in prop_indices if li in protected]
+    if blocked:
+        first = blocked[0] + 1
+        return PropertyLineEditOutcome(
+            ok=False,
+            code="protected_fence",
+            hint=(
+                "A property line in this block sits inside a global Markdown / query / HTML "
+                f"dead zone (first hit: line {first})."
+            ),
             dry_run=dry_run,
             match_count=0,
             previews=[],
@@ -339,14 +360,7 @@ def edit_block_property_lines(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    fd, tmp = tempfile.mkstemp(prefix="matryca-prop-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_bytes)
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_bytes)
 
     final_size = path.stat().st_size
     return PropertyLineEditOutcome(
@@ -458,6 +472,7 @@ def append_page_alias_line(
         lines = [""]
 
     stripped = [ln.rstrip("\n") for ln in lines]
+    protected = compute_page_protected_line_indices(text)
     target_idx: int | None = None
     for i, line in enumerate(stripped):
         if _ALIAS_LINE_ANY.match(line):
@@ -480,6 +495,18 @@ def append_page_alias_line(
 
     if target_idx is not None:
         line = stripped[target_idx]
+        if target_idx in protected:
+            return PageAliasAppendResult(
+                ok=False,
+                code="protected_fence",
+                hint="The existing `alias::` line sits inside a fenced / query / HTML dead zone.",
+                dry_run=dry_run,
+                added=False,
+                line_before=None,
+                line_after=None,
+                previous_size_bytes=previous_size,
+                current_size_bytes=previous_size,
+            )
         m = _ALIAS_LINE_ANY.match(line)
         if not m:
             return PageAliasAppendResult(
@@ -536,14 +563,7 @@ def append_page_alias_line(
             )
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        fd, tmp = tempfile.mkstemp(prefix="matryca-alias-", suffix=".md", dir=str(path.parent))
-        try:
-            with open(fd, "wb", closefd=True) as fh:
-                fh.write(new_bytes_preview)
-            Path(tmp).replace(path)
-        except OSError:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        atomic_write_bytes(path, new_bytes_preview)
         final = path.stat().st_size
         return PageAliasAppendResult(
             ok=True,
@@ -574,14 +594,7 @@ def append_page_alias_line(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    fd, tmp = tempfile.mkstemp(prefix="matryca-alias-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_bytes)
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_bytes)
 
     final_size = path.stat().st_size
     return PageAliasAppendResult(

@@ -1,0 +1,54 @@
+# ==============================================================================
+# .repomixignore - Configurazione d'Élite per Matryca Logseq LLM Wiki
+# ==============================================================================
+
+# --- Version Control ---
+.git/
+.github/
+.gitignore
+
+# --- Python & Ambienti Virtuali ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# --- Cache dei Linter, Formatter e Test (Ruff, MyPy, Pytest) ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- File di Configurazione Locali e Segreti (Sicurezza) ---
+.env
+.env.local
+.env.*.local
+# Escludi le impostazioni personali attive per non sporcare il prompt
+matryca-wiki.yml
+
+# --- File Temporanei e Backup (Generati dai nostri tool di Fase 3, 7 e 8) ---
+*.bak
+*.tmp
+*.md.tmp
+
+# --- Output di Repomix (CRITICO: Evita loop ricorsivi e file giganti) ---
+repomix-output.xml
+repomix-output.txt
+repomix-output.json
+
+# --- Roadmap Storiche Completate (Opzionale) ---
+# Scommenta le linee sotto se vuoi inviarmi SOLO il codice e la documentazione attiva,
+# risparmiando spazio prezioso per i file archiviati delle vecchie roadmap.
+# ROADMAP_LLM_WIKI.md
+# ROADMAP_LLM_WIKI_PHASE_3.md
+# ROADMAP_LOGSEQ_SUPERPOWERS.md
+# ROADMAP_PHASE_5_6.md
+# ROADMAP_MLDOC_COMPLIANCE.md
+# ROADMAP_IRONCLAD_SHIELD.md

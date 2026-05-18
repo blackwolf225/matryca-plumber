@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import math
 import re
-from collections import Counter
 from pathlib import Path
 
 _TOKEN = re.compile(r"[0-9a-z]+", re.IGNORECASE)
@@ -58,53 +56,11 @@ def rank_pages_by_bm25(
     b: float = 0.75,
 ) -> list[tuple[str, float]]:
     """Okapi BM25 over per-page token bags (in-memory, pure Python)."""
-    q_tokens = tokenize(query)
-    if not q_tokens:
-        return []
+    from src.graph.generational_cache import get_cached_bm25_corpus, score_bm25_query
 
     root = Path(graph_root).expanduser().resolve(strict=False)
-    paths = _iter_page_files(root)
-    docs_tokens: list[list[str]] = []
-    rels: list[str] = []
-    for path in paths:
-        try:
-            raw = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        toks = tokenize(raw)
-        if not toks:
-            continue
-        docs_tokens.append(toks)
-        rels.append(path.relative_to(root).as_posix())
-
-    n_docs = len(docs_tokens)
-    if n_docs == 0:
-        return []
-
-    doc_lens = [len(d) for d in docs_tokens]
-    avgdl = sum(doc_lens) / n_docs
-
-    df: dict[str, int] = {}
-    for toks in docs_tokens:
-        for t in set(toks):
-            df[t] = df.get(t, 0) + 1
-
-    scores: list[tuple[str, float]] = []
-    for rel, toks, dl in zip(rels, docs_tokens, doc_lens, strict=True):
-        tf = Counter(toks)
-        score = 0.0
-        for t in q_tokens:
-            freq = tf.get(t, 0)
-            if freq == 0:
-                continue
-            idf = math.log((n_docs - df.get(t, 0) + 0.5) / (df.get(t, 0) + 0.5) + 1.0)
-            denom = freq + k1 * (1.0 - b + b * (dl / avgdl if avgdl else 1.0))
-            score += idf * ((freq * (k1 + 1.0)) / denom)
-        if score > 0.0:
-            scores.append((rel, score))
-
-    scores.sort(key=lambda item: (-item[1], item[0]))
-    return scores[: max(1, min(limit, 100))]
+    corpus = get_cached_bm25_corpus(root)
+    return score_bm25_query(corpus, query, limit=limit, k1=k1, b=b)
 
 
 def format_keyword_query_markdown(

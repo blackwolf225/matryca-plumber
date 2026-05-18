@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
+
+from .markdown_blocks import atomic_write_bytes
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 # Logseq markers (uppercase) after bullet
@@ -254,14 +255,7 @@ def append_journal_markdown_section(
 
     if path.is_file():
         shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
-    fd, tmp = tempfile.mkstemp(prefix="matryca-journal-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_text.encode("utf-8"))
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_text.encode("utf-8"))
 
     return {
         "ok": True,

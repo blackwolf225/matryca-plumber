@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from .markdown_blocks import (
+    atomic_write_bytes,
     bullet_indent_unit,
     locate_block_by_uuid,
     read_page_lines,
 )
-
 from .mldoc_properties import is_logseq_block_property_line
 
 # Obsidian-style basic card: "question :: answer" in bullet body (not Logseq ``key::`` lines).
@@ -154,14 +153,7 @@ def append_logseq_flashcards_under_block(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    fd, tmp = tempfile.mkstemp(prefix="matryca-flash-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_text.encode("utf-8"))
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_text.encode("utf-8"))
 
     return FlashcardAppendResult(
         ok=True,

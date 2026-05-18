@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import shutil
-import tempfile
 from pathlib import Path
 
-from .markdown_blocks import graph_safe_page_path
+from .markdown_blocks import atomic_write_bytes, graph_safe_page_path
 
 
 def _safe_page_write_path(graph_root: Path, page_title: str) -> Path:
@@ -95,14 +94,7 @@ def write_moc_page(
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_file():
         shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
-    fd, tmp = tempfile.mkstemp(prefix="matryca-moc-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(md.encode("utf-8"))
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, md.encode("utf-8"))
 
     return {
         "ok": True,

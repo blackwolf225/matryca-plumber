@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .markdown_blocks import iter_graph_markdown_files
+from .global_fence_scanner import compute_page_protected_line_indices
+from .markdown_blocks import atomic_write_bytes, iter_graph_markdown_files
 from .mldoc_properties import double_quoted_spans_in_value, parse_logseq_property_line
 
 _TAG_RE = re.compile(r"#([\w./-]+)", re.UNICODE)
@@ -130,19 +130,33 @@ def _replacement_pattern_for_variant(variant: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![#\w/])#({body})(?![\w/-])")
 
 
-def unify_tags_in_text(text: str, mapping: dict[str, str]) -> tuple[str, int]:
+def unify_tags_in_text(
+    text: str,
+    mapping: dict[str, str],
+    *,
+    protected_line_indices: set[int] | None = None,
+) -> tuple[str, int]:
     """Replace raw tag spellings with canonical forms. Returns (new_text, replacements)."""
+    dead = protected_line_indices or set()
     total = 0
     chunks: list[str] = []
     pos = 0
+    line_idx = 0
     for m in re.finditer(r"\r\n|\n|\r", text):
         line = text[pos : m.start()]
         nl = m.group(0)
-        new_line, n = _unify_tags_single_line(line, mapping)
+        if line_idx in dead:
+            new_line, n = line, 0
+        else:
+            new_line, n = _unify_tags_single_line(line, mapping)
         total += n
         chunks.append(new_line + nl)
+        line_idx += 1
         pos = m.end()
-    tail, n = _unify_tags_single_line(text[pos:], mapping)
+    if line_idx in dead:
+        tail, n = text[pos:], 0
+    else:
+        tail, n = _unify_tags_single_line(text[pos:], mapping)
     total += n
     chunks.append(tail)
     return "".join(chunks), total
@@ -251,7 +265,8 @@ def lint_unify_logseq_tags(
                 ),
             )
             continue
-        new_text, n = unify_tags_in_text(raw, mapping)
+        protected = compute_page_protected_line_indices(raw)
+        new_text, n = unify_tags_in_text(raw, mapping, protected_line_indices=protected)
         if n == 0:
             continue
         rel = path.relative_to(root).as_posix()
@@ -264,14 +279,7 @@ def lint_unify_logseq_tags(
         if not dry_run:
             bak = path.with_suffix(path.suffix + ".bak")
             shutil.copy2(path, bak)
-            fd, tmp = tempfile.mkstemp(prefix="matryca-tags-", suffix=".md", dir=str(path.parent))
-            try:
-                with open(fd, "wb", closefd=True) as fh:
-                    fh.write(new_text.encode("utf-8"))
-                Path(tmp).replace(path)
-            except OSError:
-                Path(tmp).unlink(missing_ok=True)
-                raise
+            atomic_write_bytes(path, new_text.encode("utf-8"))
 
     if dry_run and total_rep == 0:
         return TagUnifyRunResult(

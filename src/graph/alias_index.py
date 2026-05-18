@@ -146,6 +146,11 @@ class ResolvedEntity:
         }
 
 
+def iter_alias_source_paths(graph_root: str | Path) -> list[Path]:
+    """Markdown paths scanned by :func:`build_alias_index` (stable sort)."""
+    return _iter_markdown_files(Path(graph_root).expanduser().resolve(strict=False))
+
+
 def build_alias_index(graph_root: str | Path) -> AliasIndex:
     """Walk ``pages/**/*.md`` and ``journals/**/*.md`` collecting ``alias::`` lines."""
     root = Path(graph_root).expanduser().resolve(strict=False)
@@ -186,6 +191,7 @@ __all__ = [
     "AliasIndex",
     "ResolvedEntity",
     "build_alias_index",
+    "iter_alias_source_paths",
     "normalize_concept_key",
     "page_title_from_path",
 ]

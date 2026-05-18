@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from .markdown_blocks import bullet_indent_unit, locate_block_by_uuid, read_page_lines
+from .global_fence_scanner import compute_page_protected_line_indices
+from .markdown_blocks import (
+    atomic_write_bytes,
+    bullet_indent_unit,
+    locate_block_by_uuid,
+    read_page_lines,
+)
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 
@@ -85,6 +90,7 @@ def refactor_logseq_blocks(
         )
 
     stripped = [ln.rstrip("\n") for ln in lines]
+    protected = compute_page_protected_line_indices("".join(lines))
     all_uuids: list[str] = []
     parsed_groups: list[tuple[str, list[str]]] = []
     for g in groups:
@@ -145,6 +151,15 @@ def refactor_logseq_blocks(
                 preview_lines=[],
             )
         b, _i, e = loc
+        if set(range(b, e)) & protected:
+            return ReparentResult(
+                ok=False,
+                code="protected_fence",
+                hint="A selected block overlaps a fenced / query / HTML dead zone.",
+                dry_run=dry_run,
+                path=str(path),
+                preview_lines=[],
+            )
         locs[u] = loc
         bm = _BULLET.match(stripped[b])
         base_indents.append(len(bm.group(1)) if bm else 0)
@@ -222,14 +237,7 @@ def refactor_logseq_blocks(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    fd, tmp = tempfile.mkstemp(prefix="matryca-reparent-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_text.encode("utf-8"))
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_text.encode("utf-8"))
 
     return ReparentResult(
         ok=True,

@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .global_fence_scanner import compute_page_protected_line_indices
 from .markdown_blocks import iter_graph_markdown_files
 
 
@@ -101,10 +102,13 @@ def resolve_unlinked_mentions(
         except OSError:
             continue
         rel = path.relative_to(root).as_posix()
+        protected = compute_page_protected_line_indices(text)
         per_file = 0
         for li, line in enumerate(text.splitlines(), start=1):
             if per_file >= max_hits_per_file:
                 break
+            if li - 1 in protected:
+                continue
             excl = _excluded_ranges(line)
             consumed = [False] * len(line)
             pos = 0

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 import shutil
-import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from .markdown_blocks import bullet_indent_unit, read_page_lines
+from .global_fence_scanner import compute_page_protected_line_indices
+from .markdown_blocks import atomic_write_bytes, bullet_indent_unit, read_page_lines
 from .mldoc_guards import bullet_first_line_refactor_blocked, pre_id_block_lines_protected
 
 _BULLET = re.compile(r"^(\s*)([-*+])\s+(.*)$")
@@ -64,6 +64,7 @@ def _collect_candidates(
     stripped: list[str],
     *,
     min_chars: int,
+    protected: set[int],
 ) -> list[tuple[int, int, str, list[str]]]:
     """``(bullet_idx, id_line_idx, uuid, sentences)`` sorted by ``bullet_idx`` descending."""
     found: list[tuple[int, int, str, list[str]]] = []
@@ -87,6 +88,8 @@ def _collect_candidates(
         if bullet_first_line_refactor_blocked(body):
             continue
         if pre_id_block_lines_protected(stripped, bullet_idx, i):
+            continue
+        if any(j in protected for j in range(bullet_idx, i + 1)):
             continue
         if len(body) < min_chars:
             continue
@@ -146,12 +149,13 @@ def _process_page(
         return [], err, []
 
     stripped = [ln.rstrip("\n") for ln in lines]
+    protected = compute_page_protected_line_indices("".join(lines))
     hits: list[SplitHit] = []
     cur_lines = list(lines)
     cur_stripped = stripped
 
     while len(hits) < max_blocks:
-        candidates = _collect_candidates(cur_stripped, min_chars=min_chars)
+        candidates = _collect_candidates(cur_stripped, min_chars=min_chars, protected=protected)
         if not candidates:
             break
         bullet_idx, id_line_idx, block_uuid, sents = candidates[0]
@@ -182,14 +186,7 @@ def _process_page(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    fd, tmp = tempfile.mkstemp(prefix="matryca-split-", suffix=".md", dir=str(path.parent))
-    try:
-        with open(fd, "wb", closefd=True) as fh:
-            fh.write(new_text.encode("utf-8"))
-        Path(tmp).replace(path)
-    except OSError:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    atomic_write_bytes(path, new_text.encode("utf-8"))
     return hits, None, [str(path)]
 
 

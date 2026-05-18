@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from pathlib import Path
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
@@ -100,6 +102,44 @@ def bullet_indent_unit(lines: list[str], bullet_idx: int) -> str:
     return "  "
 
 
+def atomic_write_bytes(file_path: str | Path, data: bytes) -> None:
+    """Write ``data`` to ``file_path`` via temp file, ``fsync``, and atomic ``os.replace``.
+
+    The temp file is created in the target directory so ``replace`` stays on one volume.
+    Parent directories are created when missing (same as typical journal append).
+    """
+    path = Path(file_path).expanduser().resolve(strict=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_file(
+    file_path: str | Path,
+    contents: str | bytes,
+    *,
+    encoding: str = "utf-8",
+) -> None:
+    """UTF-8 text or raw bytes; same durability guarantees as :func:`atomic_write_bytes`."""
+    if isinstance(contents, bytes):
+        atomic_write_bytes(file_path, contents)
+    else:
+        atomic_write_bytes(file_path, contents.encode(encoding))
+
+
 def iter_graph_markdown_files(graph_root: str | Path) -> list[Path]:
     """All ``*.md`` under ``pages/`` and ``journals/`` when present."""
     root = Path(graph_root).expanduser().resolve(strict=False)
@@ -112,6 +152,8 @@ def iter_graph_markdown_files(graph_root: str | Path) -> list[Path]:
 
 
 __all__ = [
+    "atomic_write_bytes",
+    "atomic_write_file",
     "block_body_start",
     "block_bullet_index",
     "block_subtree_end",

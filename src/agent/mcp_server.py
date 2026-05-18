@@ -19,10 +19,10 @@ from ..graph.advanced_query_block import (
     resolve_advanced_query_preset,
     wrap_logseq_advanced_query,
 )
-from ..graph.alias_index import build_alias_index
 from ..graph.block_ref_lint import lint_block_refs_in_graph
 from ..graph.dashboard import build_dashboard_markdown
 from ..graph.flashcards import append_logseq_flashcards_under_block
+from ..graph.generational_cache import cached_build_alias_index
 from ..graph.hubs import build_namespace_index_markdown
 from ..graph.journal_task_scan import (
     append_journal_markdown_section,
@@ -494,7 +494,7 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             return {"ok": False, "error": "LOGSEQ_GRAPH_PATH is not set.", "results": []}
 
         def _run() -> dict[str, Any]:
-            index = build_alias_index(graph_path)
+            index = cached_build_alias_index(graph_path)
             parts = [p.strip() for p in candidates.split(",") if p.strip()]
             results = [index.resolve(p).as_dict() for p in parts]
             return {

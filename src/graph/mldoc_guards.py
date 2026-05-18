@@ -17,13 +17,7 @@ def bullet_first_line_refactor_blocked(body: str) -> bool:
 
     Heuristics: fenced code marker, common Logseq drawer markers, ``{{`` macros.
     """
-    if "```" in body:
-        return True
-    if _MACRO_OPEN.search(body):
-        return True
-    if _DRAWER.search(body):
-        return True
-    return False
+    return "```" in body or bool(_MACRO_OPEN.search(body)) or bool(_DRAWER.search(body))
 
 
 def pre_id_block_lines_protected(lines: list[str], bullet_idx: int, id_line_idx: int) -> bool:
