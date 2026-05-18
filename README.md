@@ -1,137 +1,160 @@
 # Matryca Logseq LLM Wiki
 
-> **The ultimate agentic knowledge manager for Logseq OG** — MCP tools that respect the **atomic outliner**, not flat text blobs. **Local-only**, **database-free**, built for humans and agents co-editing the same Markdown graph.
+> **Agentic knowledge management for Logseq OG** — an MCP server that treats your vault as a **block graph**, not a flat document store. **Local-first**, **database-free**, and engineered for humans and agents co-editing the same Markdown outliner files.
 
 [![CI](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-[Logseq](https://logseq.com/) compiles a folder of Markdown into a **block graph**. [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) hosts connect LLMs to tools — **matryca-logseq-llm-wiki** is the bridge that speaks **Logseq’s language**: bullets, `id::` UUIDs, `[[wikilinks]]`, `((block refs))`, journals, and **Advanced Query** (Datalog) blocks.
+[Logseq](https://logseq.com/) materializes a folder of Markdown into a **typed block graph**. [Model Context Protocol](https://modelcontextprotocol.io/) connects LLMs to tools; **matryca-logseq-llm-wiki** is the bridge that speaks Logseq’s native semantics: nested bullets, `id::` UUIDs, `[[wikilinks]]`, `((block references))`, journals, **Advanced Query** (Datalog) blocks, and property lines shaped like `key:: value`.
 
-Inspired by Andrej Karpathy’s “LLM Wiki” vision and [llm-wiki](https://github.com/MehmetGoekce/llm-wiki)-style **L1/L2** routing, this server is **rebuilt for Logseq OG**: one graph on disk, **FastMCP** + **Pydantic** at the boundary, **no Postgres / Redis / SQLite / vector store** as system-of-record.
+The design follows an **L1 / L2** mental model (session rules versus vault depth), similar in spirit to Karpathy’s “LLM Wiki” lineage and [llm-wiki](https://github.com/MehmetGoekce/llm-wiki)-style routing — but **rebuilt for Logseq OG**: one graph on disk, **FastMCP** and **Pydantic** at the tool boundary, and **no** Postgres, Redis, SQLite, or hosted vector index as system-of-record.
 
 ---
 
-## Why Matryca (the value proposition)
+## Why Matryca
 
 | Typical “AI + notes” | Matryca |
-|----------------------|--------|
-| Treats each file as a blob of text | Treats the vault as a **tree of blocks** with stable `id::` |
-| Static bullet lists that go stale | **`#+BEGIN_QUERY` … `#+END_QUERY`** blocks that **refresh inside Logseq** |
-| Ignores journals and tasks | **`analyze_journal_tasks`** + **`append_logseq_journal_markdown`** for native `TODO` / `LATER` / `WAITING` + `SCHEDULED:` / `DEADLINE:` |
-| Rewrites whole pages | **Depth-first** **`write_logseq_outline`** via Logseq’s API; **scoped** **`patch_logseq_block_property_lines`** for `key::` lines only |
-| No rollback story | Optional **`MATRYCA_GIT_SNAPSHOT_ON_WRITE`**: **git commit** on your graph repo before risky writes |
+|----------------------|---------|
+| Treats each file as prose | Treats the vault as a **tree of blocks** with stable `id::` anchors |
+| Static lists that go stale | **`#+BEGIN_QUERY` … `#+END_QUERY`** blocks that **re-evaluate inside Logseq** |
+| Ignores journals and tasks | **`analyze_journal_tasks`** and **`append_logseq_journal_markdown`** for `TODO` / `LATER` / `WAITING` plus `SCHEDULED:` / `DEADLINE:` |
+| Rewrites whole pages blindly | **Depth-first** **`write_logseq_outline`** via Logseq’s API; **scoped** **`patch_logseq_block_property_lines`** for `key::` lines only |
+| No rollback story | Optional **`MATRYCA_GIT_SNAPSHOT_ON_WRITE`**: **git commit** on the graph repo before selected writes |
 
-### Zero-Corruption Transactional Architecture
+### Core engineering pillars
 
-Disk mutators do not open your page and shrink it in place. Every eligible write path funnels through **`atomic_write_bytes`** in **`src/graph/markdown_blocks.py`**: the new bytes land in a **hidden temp file in the same directory** as the target (so `os.replace` never crosses volumes), the handle is **flushed** and **`os.fsync`**’d to the storage device, and only then the kernel performs a **single atomic rename** (`os.replace`) onto the real `.md` path.
+**Strict localism and zero database footprint**  
+Every durable artifact lives under **`LOGSEQ_GRAPH_PATH`**. Lexical discovery uses an **in-process Okapi BM25** corpus over `pages/**/*.md`; structural navigation uses **line- and regex-bounded graph scans**; alias resolution builds an **in-memory index** with generational invalidation. Nothing maintains a competing queryable store: rankings and traversals are **ephemeral views** computed for the request and discarded, which eliminates sync, migration, and “two truths” failure modes while keeping latency predictable on large vaults.
 
-Until that swap succeeds, the original file remains **bit-for-bit intact**. There is no window where a crash or killed MCP process leaves a **half-written or truncated** page — the pattern is the same family of guarantees as **write-ahead logging** in SQLite or **safe ref updates** in Git: readers always see either the **previous** committed version or the **next** one, never garbage in between.
+**Zero-corruption transactional file engine**  
+Disk mutators do not shrink files in place. Payloads flow through **`atomic_write_bytes`** in **`src/graph/markdown_blocks.py`**: write to a **hidden sibling temp** (`.<basename>.XXXXXX.tmp` in the **same directory** as the target so `os.replace` never crosses filesystems), **`flush`** the handle, **`os.fsync`** to push bytes toward durable media, then a **single atomic `os.replace`** onto the live `.md` path. On failure before rename, the temp file is removed and the original inode remains intact — the same **write-ahead, commit-on-rename** family of guarantees as SQLite’s page journal or Git’s object store updates. Selected tools also write a **`.bak`** copy (e.g. property-line surgery) before swap for operator-visible rollback.
 
-### Compiler-grade markdown & property awareness
+**Compiler-grade AST and fence awareness**  
+Spatial reads delegate block boundaries and indentation to **[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)**. For mutators, **`mldoc_properties`** and **`mldoc_guards`** encode **Logseq / mldoc-aligned** rules: first `::` pair on property lines, wikilink-depth-aware CSV splitting, double-quoted spans, drawers (`:LOGBOOK:` … `:END:`), fenced code, `#+BEGIN_QUERY` regions, and `{{` macro opens. **`compute_page_protected_line_indices`** in **`global_fence_scanner.py`** performs a **streaming global fence pass** so code blocks, HTML comments, and query blocks become **dead zones** — mutators **fail closed** when a span would intersect protected lines.
 
-Matryca treats whole pages like a compiler treats a translation unit. A **streaming global fence scanner** marks **dead zones** where prose tools must not operate: **Markdown fenced code** (triple-backtick regions), **HTML block comments** (`<!-- … -->`), Logseq **Advanced Query** blocks (`#+BEGIN_QUERY` … `#+END_QUERY`), and **Org-style drawers** such as **`:LOGBOOK:`** (plus `{{` macro opens), aligned with how Logseq’s **mldoc** layer reasons about block structure. Property surgery and tag unify use **mldoc-aligned** `key:: value` parsing — first `::` pair only, wikilink-depth-aware CSV splitting, and **double-quoted spans** so `#tags` inside `"…"` literals are never “fixed” by mistake. Together, these layers block destructive AI writes that would otherwise shred queries, code samples, or fragile property values.
-
-**Strict localism:** Tools read **`LOGSEQ_GRAPH_PATH`** and call Logseq’s **localhost** JSON-RPC API. Lexical ranking (BM25), structural hops, and lint passes use **in-memory or line-scanned** data — nothing leaves your machine unless *you* send it.
-
-Spatial structure (“what is a block on this page?”) is delegated to **[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)**. Vault-wide chores (broken `((uuid))` refs, hashtag unification, property-line surgery) use **bounded, reviewable** text passes — by design, not by accident ([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)).
-
-Agent behavior is codified in **[`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md)** (outline-only output, Search → Scan → Update, dry-run-first mutators).
+**Agentic git safety snapshots**  
+When **`MATRYCA_GIT_SNAPSHOT_ON_WRITE=true`** and the graph root is a **git** checkout, **`snapshot_git_working_tree`** runs **`git add -A`** and **`git commit`** before **`write_logseq_outline`** and selected disk mutators (`refactor_logseq_blocks`, `refactor_large_blocks`, MOC writes). That yields a **reversible checkpoint** (`git revert` / `git log`) without any hosted snapshot product — entirely **local** and opt-in.
 
 ---
 
-## Architecture at a glance
-
-```mermaid
-flowchart LR
-  subgraph host["Your machine"]
-    IDE["MCP host\n(Claude Desktop, …)"]
-    LQ["Logseq\nHTTP API"]
-  end
-  subgraph proc["matryca-logseq-llm-wiki"]
-    MCP["FastMCP stdio"]
-    BR["MatrycaMCPServer\n+ Pydantic"]
-    MCP --> BR
-  end
-  FS[("LOGSEQ_GRAPH_PATH")]
-  IDE <-->|MCP| MCP
-  BR <-->|Bearer JSON-RPC| LQ
-  BR <-->|parser + disk tools| FS
-  LQ <-->|writes blocks| FS
-```
-
-### L1 vs L2 (two-layer context)
+## Architecture stack
 
 ```mermaid
 flowchart TB
-  subgraph L1["L1 — session rules"]
-    M1["MATRYCA_L1_PATH\nor matryca-l1/*.md"]
+  subgraph host["Host machine"]
+    IDE["MCP client\n(Claude Desktop, Cursor, …)"]
+    LQ["Logseq\nHTTP JSON-RPC"]
+  end
+  subgraph proc["matryca-logseq-llm-wiki process"]
+    MCP["FastMCP stdio"]
+    SRV["MatrycaMCPServer\n+ Pydantic validators"]
+    QG["quality_gate\n(credential / key scans)"]
+    MCP --> SRV
+    SRV --> QG
+  end
+  subgraph data["Data plane"]
+    FS[("LOGSEQ_GRAPH_PATH\npages/ · journals/ · templates/")]
+    PAR["logseq-matryca-parser\n(spatial read)"]
+    GFS["global_fence_scanner\n(dead-zone line index)"]
+    ATW["atomic_write_bytes\n(tmp + fsync + replace)"]
+    GC["generational_cache\n(mtime_ns signatures)"]
+  end
+  subgraph delivery["Delivery gates (repo)"]
+    CI["GitHub Actions\nRuff · Mypy · Pytest"]
+    DB["Dependabot\npip + Actions"]
+    REL["tag v* → uv build\ngh release create"]
+  end
+  IDE <-->|JSON-RPC MCP| MCP
+  SRV <-->|Bearer JSON-RPC| LQ
+  SRV <-->|read / mutate| FS
+  SRV --> PAR
+  SRV --> GFS
+  SRV --> ATW
+  SRV --> GC
+  LQ --> FS
+  CI -.->|enforces| proc
+  DB -.->|updates| delivery
+  REL -.->|artifacts| delivery
+```
+
+### L1 versus L2 (two-layer context)
+
+```mermaid
+flowchart TB
+  subgraph L1["L1 — session rules (small, capped)"]
+    M1["MATRYCA_L1_PATH\nor matryca-l1/*.md\nor matryca-wiki.yml memory_path"]
   end
   subgraph L2["L2 — the graph"]
     M2["pages/ · journals/ · templates/"]
   end
-  A[Agent] --> R{High-stakes before vault?}
+  A[Agent] --> R{High-stakes\nbefore vault?}
   R -->|yes| T[read_l1_memory]
-  R -->|no| Q[query_logseq_pages_local BM25]
+  R -->|no| Q[query_logseq_pages_local\nBM25 + generational cache]
   T --> M1
   Q --> M2
   M1 --> M2
 ```
 
----
-
-## MCP tools by phase (feature matrix)
-
-Each phase adds capabilities; newer phases assume you still use **read → plan → write** from the baseline.
-
-| Phase | Theme | MCP tools (implemented) |
-|:-----:|--------|-------------------------|
-| **1** | **Baseline** — bridge, hygiene, outline writes | `read_logseq_page`, `write_logseq_outline` (`OutlineNode` + validators + shared quality gate), `lint_logseq_block_refs`, `render_logseq_dashboard` |
-| **2** | **L1 / L2 cache** — fast rules vs deep vault | `read_l1_memory`; **routing hints** on relevant tool outputs (see `SYSTEM_PROMPT.md`) |
-| **3** | **PKM refinements** — discover, structure, surgical disk | `query_logseq_pages_local` (default **BM25**; legacy `substring`), `traverse_logseq_structural_hops`, `report_structural_hubs_orphans`, `patch_logseq_block_property_lines`, `list_logseq_templates`, `read_logseq_template`, `lint_matryca_wiki_pages`, `list_logseq_namespace_index`; **optional git snapshot** on outline write and eligible mutators (`MATRYCA_GIT_SNAPSHOT_ON_WRITE`) |
-| **4** | **Logseq superpowers** — Datalog queries, journals, entities | `inject_logseq_advanced_query`, `analyze_journal_tasks`, `append_logseq_journal_markdown`, `resolve_logseq_entity`, `append_logseq_page_alias` |
-| **5** | **Graph gardener** — cards, tags, reparent | `generate_logseq_flashcards`, `lint_unify_logseq_tags`, `refactor_logseq_blocks` |
-| **6** | **Synthesis engine** — linking, MOCs, atomic splits | `resolve_unlinked_mentions`, `generate_moc_page`, `refactor_large_blocks`, `snapshot_logseq_graph_git` |
-| **7** | **Mldoc AST parsing & structural guards** — compiler-aligned `key::` rules, quote / `[[wikilink]]`-aware CSV tokenization, drawer & fence macro shields | Same MCP surface; **hardened internals** in `patch_logseq_block_property_lines`, `lint_unify_logseq_tags`, `append_logseq_page_alias`, `refactor_large_blocks` (property lines, tag unify, alias append, long-bullet split) via **`mldoc_properties`** + **`mldoc_guards`** |
-| **8** | **Ironclad Shield** — global fence lexing, transactional atomic swaps, generational `mtime` caches | **Dead-zone lexing** (`compute_page_protected_line_indices`) wired into property edits, tag unify, reparent, unlinked mentions, large-block split; **ACID-style disk commits** (`atomic_write_bytes` / `atomic_write_file`) across graph mutators; **incremental BM25 + alias** rebuilds only when `st_mtime_ns` signatures change |
-
-**Roadmaps:** [`ROADMAP_LLM_WIKI.md`](ROADMAP_LLM_WIKI.md), [`ROADMAP_LLM_WIKI_PHASE_3.md`](ROADMAP_LLM_WIKI_PHASE_3.md), [`ROADMAP_LOGSEQ_SUPERPOWERS.md`](ROADMAP_LOGSEQ_SUPERPOWERS.md), [`ROADMAP_PHASE_5_6.md`](ROADMAP_PHASE_5_6.md), [`ROADMAP_MLDOC_COMPLIANCE.md`](ROADMAP_MLDOC_COMPLIANCE.md), [`ROADMAP_IRONCLAD_SHIELD.md`](ROADMAP_IRONCLAD_SHIELD.md).
-
-### Phases stacked (evolution)
-
-```mermaid
-flowchart BT
-  P1["1 Baseline"]
-  P2["2 L1/L2"]
-  P3["3 PKM refinements"]
-  P4["4 Superpowers"]
-  P5["5 Gardener"]
-  P6["6 Synthesis"]
-  P7["7 Mldoc guards"]
-  P8["8 Ironclad Shield"]
-  P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
-```
-
-### Agent loop (Search → quality gate)
+### Runtime agent loop (search → gate)
 
 ```mermaid
 flowchart LR
-  S[Search] --> C[Scan]
-  C --> U[Refactor / Update]
-  U --> G[Garden]
-  G --> Q[Quality gate]
+  S[Search\nBM25 / hops] --> C[Scan\nread_logseq_page · lint]
+  C --> U[Refactor\nAPI + disk mutators]
+  U --> G[Garden\nMOC · tags · split]
+  G --> Q[Quality gate\nsecrets · fan-out · routing_hint]
+  subgraph iron["Ironclad sub-loop"]
+    F[fence scanner] --> A2[atomic swap]
+    A2 --> I[incremental cache]
+  end
+  U -.-> iron
+  G -.-> iron
 ```
 
 ---
 
-## Quickstart
+## Feature matrix: ten architectural phases
+
+Each phase adds capabilities; later phases **harden** earlier tools without necessarily renaming the MCP surface. **Phase** is the product narrative; **modules** are what you grep in `src/`.
+
+| Phase | Core capabilities | MCP tools (exposed names) |
+|:-----:|-------------------|---------------------------|
+| **1 — Baseline bridge** | FastMCP server, async Logseq JSON-RPC client, **`OutlineNode`** validation, DFS **`write_logseq_outline`**, spatial **`read_logseq_page`**, block-ref integrity scan, dashboard aggregation | `read_logseq_page`, `write_logseq_outline`, `lint_logseq_block_refs`, `render_logseq_dashboard` |
+| **2 — L1 / L2 routing** | Capped **`read_l1_memory`** from configurable paths; **routing hints** on read/write responses for traceability (`routing_hint.py`) | `read_l1_memory` *(hints on other tools’ payloads)* |
+| **3 — PKM refinements** | BM25 and substring local query; structural BFS hops and hub/orphan reports; surgical **`key::`** property edits; templates; wiki-prefix lint; namespace index; optional **git snapshot** on outline and heavy mutators | `query_logseq_pages_local`, `traverse_logseq_structural_hops`, `report_structural_hubs_orphans`, `patch_logseq_block_property_lines`, `list_logseq_templates`, `read_logseq_template`, `lint_matryca_wiki_pages`, `list_logseq_namespace_index`, `snapshot_logseq_graph_git` |
+| **4 — Logseq superpowers** | Advanced Query injection with preset or raw EDN; journal task mining; entity resolution via alias index; page alias append | `inject_logseq_advanced_query`, `analyze_journal_tasks`, `append_logseq_journal_markdown`, `resolve_logseq_entity`, `append_logseq_page_alias` |
+| **5 — Graph gardener** | SRS-style flashcards from `::` pairs; vault-wide tag unify; same-page reparent refactor | `generate_logseq_flashcards`, `lint_unify_logseq_tags`, `refactor_logseq_blocks` |
+| **6 — Synthesis engine** | Unlinked mention discovery; MOC generation; long-bullet split; manual git snapshot | `resolve_unlinked_mentions`, `generate_moc_page`, `refactor_large_blocks`, `snapshot_logseq_graph_git` |
+| **7 — Mldoc guards** | **`mldoc_properties`** (property grammar, CSV / wikilink / quote semantics); **`mldoc_guards`** (drawers, fences, macros) wired into property edit, tag unify, alias append, large-block split | *Same tool names as phases 3–6; strengthened internals* |
+| **8 — Ironclad data plane** | **`compute_page_protected_line_indices`** (global fence lexer); **`atomic_write_bytes`** on mutators; **`generational_cache`** (`st_mtime_ns` keyed alias + BM25 corpus reuse, Salsa-style invalidation) | *Same tool names; dead-zone and cache behavior upgraded* |
+| **9 — Trust and policy plane** | **`quality_gate`**: blocks credential-like outline properties and raw query EDN; **`lint_matryca_wiki_pages`** for configurable wiki discipline; structured dry-run / apply responses | Enforcement inside `write_logseq_outline`, `inject_logseq_advanced_query`; governance tools listed in phase 3 |
+| **10 — Delivery and community** | **GitHub Actions** (`ci.yml`): `uv sync --locked`, Ruff lint + format check, **Mypy** on `src` and `tests`, Pytest; **Dependabot** (pip + Actions); **`release.yml`** on `v*` tags (`uv build`, `gh release create`); **`SECURITY.md`**; **Contributor Covenant** (`CODE_OF_CONDUCT.md`); issue and PR templates | *Repository operations — no additional MCP tools* |
+
+**Roadmaps and design history:** [`docs/roadmaps/`](docs/roadmaps/) (LLM Wiki, Phase 3, Logseq superpowers, Phase 5–6, mldoc compliance, Ironclad Shield).
+
+---
+
+## Zero-install execution (`uvx`)
+
+You do **not** need to clone this repository to run the published console script. **[uv](https://docs.astral.sh/uv/)** can materialize an ephemeral environment from the Git VCS URL (the package depends on **`logseq-matryca-parser`** via `git+https` in `pyproject.toml`, so the practical install path remains VCS-backed).
+
+```bash
+uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git matryca-logseq-llm-wiki
+```
+
+Configure **`LOGSEQ_API_TOKEN`**, **`LOGSEQ_GRAPH_PATH`**, and related variables in your MCP host’s server definition alongside this command. For **responsible vulnerability disclosure**, see [`SECURITY.md`](SECURITY.md).
+
+---
+
+## Quickstart (clone and develop)
 
 ### Prerequisites
 
-- **Python 3.12+** (`.python-version`)
+- **Python 3.12+**
 - **[uv](https://docs.astral.sh/uv/)**
-- **Logseq** with the **HTTP API** enabled and a **token** (see Logseq’s API / plugin docs)
+- **Logseq** with the **HTTP API** enabled and a **Bearer token**
 
 ### Install
 
@@ -141,57 +164,32 @@ cd matryca-logseq-llm-wiki
 make install
 ```
 
-### Zero-Install Execution (uvx)
+### Environment
 
-Thanks to **[uv](https://docs.astral.sh/uv/)** integration, you do **not** need to clone this repository to run the MCP server entrypoint. **`uvx`** can install and run the published console script in an ephemeral environment.
+Copy **`.env.example`** to **`.env`** and set at minimum:
 
-Because the package currently declares a **direct `git+https` dependency** on [`logseq-matryca-parser`](https://github.com/MarcoPorcellato/logseq-matryca-parser) in `pyproject.toml`, the practical way to run the latest Matryca from source is still a **Git VCS URL** (not only PyPI). Use:
-
-```bash
-uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git matryca-logseq-llm-wiki
-```
-
-That pattern lets hosts such as **Claude Desktop** pull and run the latest revision with a single command (plus your usual `LOGSEQ_*` / `MATRYCA_*` environment variables in the MCP server block).
-
-For **responsible disclosure** of security issues, see [`SECURITY.md`](SECURITY.md).
-
-### Configure `.env`
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Purpose |
-|----------|---------|
-| `LOGSEQ_API_TOKEN` | **Required.** Bearer token for the Logseq API |
+| Variable | Role |
+|----------|------|
+| `LOGSEQ_API_TOKEN` | **Required.** Bearer token for Logseq’s HTTP API |
 | `LOGSEQ_API_URL` | Default `http://localhost:12315` |
-| `LOGSEQ_GRAPH_PATH` | **Required for disk tools.** Absolute path to graph root (directory containing `pages/`) |
+| `LOGSEQ_GRAPH_PATH` | **Required for disk tools.** Absolute graph root (directory containing `pages/`) |
 | `MATRYCA_L1_PATH` | Optional: file or directory of small Markdown “L1” session rules |
 | `MATRYCA_WIKI_CONFIG` | Optional: path to `matryca-wiki.yml` (else `$LOGSEQ_GRAPH_PATH/matryca-wiki.yml`) |
-| `MATRYCA_GIT_SNAPSHOT_ON_WRITE` | `true` or `false` — see below |
+| `MATRYCA_GIT_SNAPSHOT_ON_WRITE` | `true` or `false` — opt-in automatic **`git add -A` + `git commit`** before selected writes when the graph is a git checkout |
 
-Optional graph orchestration: copy [`matryca-wiki.example.yml`](matryca-wiki.example.yml) to your graph as `matryca-wiki.yml` for namespaces, template subdir, wiki lint prefix, dashboard title.
+Optional graph orchestration: copy [`matryca-wiki.example.yml`](matryca-wiki.example.yml) to your graph as **`matryca-wiki.yml`** for namespaces, template subdirectory, wiki lint prefix, and dashboard title.
 
-#### Git snapshots (`MATRYCA_GIT_SNAPSHOT_ON_WRITE`) — safety first
-
-When set to **`true`** and **`LOGSEQ_GRAPH_PATH`** is a **git repository**, Matryca can run **`git add -A` + `git commit`** before **`write_logseq_outline`** and before selected **on-disk** mutators (large refactors, tag unify apply, etc.). That gives you a **reversible checkpoint** (`git log` / `git revert`) without any proprietary snapshot service.
-
-- **`false` (default):** No automatic commits; lowest surprise for graphs that are not under git.
-- **`true`:** Best for operators who **intentionally** version the graph with git and want an AI safety net. Still **local** — commits stay on your repo.
-
-Use **`snapshot_logseq_graph_git`** for a **manual** checkpoint before a big multi-step refactor (same opt-in flag applies).
-
-### Verify the codebase
+### Verify
 
 ```bash
 make check
 ```
 
-Runs Ruff (format + lint), strict **mypy** on `src/` and `tests/`, and **pytest** (92 tests). CI on `main` enforces the same bar (see `.github/workflows/ci.yml`).
+Runs Ruff (format + lint), **strict Mypy** on `src/` and `tests/`, and **pytest** (92 tests). The same bar is enforced on **`main`** in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-### Claude Desktop (MCP over stdio)
+### Claude Desktop (stdio MCP)
 
-Add a server block with your **absolute** paths and secrets. Example fragment for **`claude_desktop_config.json`**:
+Example fragment for **`claude_desktop_config.json`**:
 
 ```json
 {
@@ -211,19 +209,19 @@ Add a server block with your **absolute** paths and secrets. Example fragment fo
 }
 ```
 
-Restart the MCP host after editing config. Keep **Logseq running** when tools need live **`insertBlock`** / query injection.
+Restart the MCP host after edits. Keep **Logseq running** when tools call live **`insertBlock`** or query injection.
 
 ---
 
-## Docs & contributing
+## Documentation map
 
-| Doc | Audience |
-|-----|----------|
-| [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Anyone configuring an agent on this graph |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Engineers — philosophy, pipeline, modules |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributors — `uv`, `make check`, testing MCP tools |
+| Document | Audience |
+|----------|----------|
+| [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent operators — outline discipline, Search → Scan → Update, dry-run-first mutators |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Engineers — bounded-work parsing, Ironclad data plane, phase history |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributors — `uv`, `make check`, MCP testing notes |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards (Contributor Covenant 2.1) |
-| [`SECURITY.md`](SECURITY.md) | Responsible disclosure and security reporting |
+| [`SECURITY.md`](SECURITY.md) | Private reporting via GitHub Security Advisories |
 
 ---
 
