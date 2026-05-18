@@ -6,25 +6,38 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  GIT_AUTHOR_NAME: Matryca CI
+  GIT_AUTHOR_EMAIL: ci@matryca.local
+  GIT_COMMITTER_NAME: Matryca CI
+  GIT_COMMITTER_EMAIL: ci@matryca.local
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Install uv and Python
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.12"
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
 
       - name: Sync dependencies (dev)
         run: uv sync --locked --extra dev
 
-      - name: Ruff
-        run: uv run ruff check .
+      - name: Ruff (lint)
+        run: uv run ruff check src tests
+
+      - name: Ruff (format)
+        run: uv run ruff format --check src tests
 
       - name: Mypy
-        run: uv run mypy src/
+        run: uv run mypy src
 
       - name: Pytest
-        run: uv run pytest -q
+        run: uv run pytest

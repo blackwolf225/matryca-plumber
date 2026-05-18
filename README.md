@@ -141,6 +141,20 @@ cd matryca-logseq-llm-wiki
 make install
 ```
 
+### Zero-Install Execution (uvx)
+
+Thanks to **[uv](https://docs.astral.sh/uv/)** integration, you do **not** need to clone this repository to run the MCP server entrypoint. **`uvx`** can install and run the published console script in an ephemeral environment.
+
+Because the package currently declares a **direct `git+https` dependency** on [`logseq-matryca-parser`](https://github.com/MarcoPorcellato/logseq-matryca-parser) in `pyproject.toml`, the practical way to run the latest Matryca from source is still a **Git VCS URL** (not only PyPI). Use:
+
+```bash
+uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git matryca-logseq-llm-wiki
+```
+
+That pattern lets hosts such as **Claude Desktop** pull and run the latest revision with a single command (plus your usual `LOGSEQ_*` / `MATRYCA_*` environment variables in the MCP server block).
+
+For **responsible disclosure** of security issues, see [`SECURITY.md`](SECURITY.md).
+
 ### Configure `.env`
 
 ```bash
@@ -208,6 +222,8 @@ Restart the MCP host after editing config. Keep **Logseq running** when tools ne
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Anyone configuring an agent on this graph |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Engineers — philosophy, pipeline, modules |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributors — `uv`, `make check`, testing MCP tools |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards (Contributor Covenant 2.1) |
+| [`SECURITY.md`](SECURITY.md) | Responsible disclosure and security reporting |
 
 ---
 
