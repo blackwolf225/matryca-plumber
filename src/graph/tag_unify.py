@@ -283,7 +283,7 @@ def lint_unify_logseq_tags(
             if not dry_run:
                 bak = path.with_suffix(path.suffix + ".bak")
                 shutil.copy2(path, bak)
-                atomic_write_bytes(path, new_text.encode("utf-8"))
+                atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=root)
 
     if dry_run and total_rep == 0:
         return TagUnifyRunResult(

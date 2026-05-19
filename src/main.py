@@ -16,6 +16,7 @@ from .agent.mcp_telemetry import install_loguru_mcp_bridge
 from .bridge.logseq_client import LogseqClient
 from .config import load_matryca_wiki_config
 from .graph.markdown_blocks import sweep_dangling_atomic_tmp_files
+from .graph.page_write_lock import clear_page_write_locks
 
 install_loguru_mcp_bridge()
 
@@ -60,6 +61,7 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[AppContext]:
         yield AppContext(bridge=bridge, wiki_config=wiki_config)
     finally:
         await client.aclose()
+        clear_page_write_locks()
         logger.info("Matryca MCP lifespan stopped")
 
 

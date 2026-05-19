@@ -17,6 +17,8 @@ from urllib.parse import quote
 
 from loguru import logger
 
+from ..graph.path_sandbox import assert_path_within_graph
+
 try:
     from logseq_matryca_parser import LogosParser as _LogosParser
 except ImportError:  # pragma: no cover - exercised when optional dep missing
@@ -100,6 +102,7 @@ def resolve_logseq_page_md(graph_root: str | Path, page_name: str) -> Path:
         raise FileNotFoundError(msg)
 
     for candidate in _page_md_candidates(pages_dir, page_name):
+        assert_path_within_graph(candidate, root)
         if candidate.is_file():
             return candidate
 

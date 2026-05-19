@@ -39,6 +39,14 @@ async def run_in_thread_with_mcp_context[R](
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
+def _log_bridge_task_done(task: asyncio.Task[object]) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.debug("MCP log bridge task failed during shutdown: {}", exc)
+
+
 def _loguru_mcp_sink(message: Any) -> None:
     """Forward INFO+ loguru records to ``Context.info`` when a tool session is active."""
     record = message.record
@@ -52,7 +60,8 @@ def _loguru_mcp_sink(message: Any) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(ctx.info(text), name="matryca-mcp-log-bridge")
+    task = loop.create_task(ctx.info(text), name="matryca-mcp-log-bridge")
+    task.add_done_callback(_log_bridge_task_done)
 
 
 def install_loguru_mcp_bridge() -> None:

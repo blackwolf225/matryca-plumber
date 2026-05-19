@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .path_sandbox import SECURITY_VIOLATION_MSG, assert_path_within_graph, resolved_graph_root
+
 
 def _safe_templates_dir(graph_root: Path, subdir: str) -> Path:
-    root = graph_root.expanduser().resolve(strict=False)
-    td = (root / subdir.strip().replace("\\", "/").strip("/")).resolve()
-    try:
-        td.relative_to(root.resolve())
-    except ValueError as exc:
-        msg = "template_dir_escapes_graph"
-        raise ValueError(msg) from exc
+    root = resolved_graph_root(graph_root)
+    td = (root / subdir.strip().replace("\\", "/").strip("/")).resolve(strict=False)
+    if not td.is_relative_to(root):
+        raise ValueError(SECURITY_VIOLATION_MSG)
     return td
 
 
@@ -44,12 +43,9 @@ def read_logseq_template(
         name = f"{name}.md"
 
     td = _safe_templates_dir(Path(graph_root), subdir)
-    path = (td / name).resolve()
-    try:
-        path.relative_to(td)
-    except ValueError as exc:
-        msg = "template_path_invalid"
-        raise ValueError(msg) from exc
+    path = assert_path_within_graph((td / name).resolve(strict=False), graph_root)
+    if not path.is_relative_to(td):
+        raise ValueError(SECURITY_VIOLATION_MSG)
 
     if not path.is_file():
         msg = f"template not found: {path}"

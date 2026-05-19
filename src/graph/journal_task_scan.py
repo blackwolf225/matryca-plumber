@@ -258,7 +258,7 @@ def append_journal_markdown_section(
 
         if path.is_file():
             shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
-        atomic_write_bytes(path, new_text.encode("utf-8"))
+        atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=root)
 
         return {
             "ok": True,

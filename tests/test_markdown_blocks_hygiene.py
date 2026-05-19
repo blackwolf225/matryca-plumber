@@ -21,7 +21,7 @@ def test_atomic_write_unlinks_temp_when_replace_fails(tmp_path: Path) -> None:
         patch("src.graph.markdown_blocks.os.replace", side_effect=boom),
         pytest.raises(OSError, match="simulated replace failure"),
     ):
-        atomic_write_bytes(target, b"payload")
+        atomic_write_bytes(target, b"payload", graph_root=tmp_path)
 
     assert not target.exists()
     assert list(tmp_path.glob(".page.md.*.tmp")) == []

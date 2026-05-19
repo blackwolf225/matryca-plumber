@@ -65,9 +65,9 @@ def test_empty_fence_opener_and_closer_lines_protected() -> None:
 
 def test_atomic_write_roundtrip(tmp_path: Path) -> None:
     p = tmp_path / "sub" / "page.md"
-    atomic_write_bytes(p, b"hello")
+    atomic_write_bytes(p, b"hello", graph_root=tmp_path)
     assert p.read_bytes() == b"hello"
-    atomic_write_bytes(p, b"world")
+    atomic_write_bytes(p, b"world", graph_root=tmp_path)
     assert p.read_bytes() == b"world"
 
 

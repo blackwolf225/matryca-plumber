@@ -42,4 +42,4 @@ def test_atomic_write_bytes_rejects_malformed_block_ref(tmp_path: Path) -> None:
     path = tmp_path / "pages" / "x.md"
     path.parent.mkdir(parents=True)
     with pytest.raises(ValueError, match="Malformed UUID"):
-        atomic_write_bytes(path, f"- ref (({bad}))\n".encode())
+        atomic_write_bytes(path, f"- ref (({bad}))\n".encode(), graph_root=tmp_path)

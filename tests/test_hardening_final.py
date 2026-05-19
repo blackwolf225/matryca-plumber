@@ -75,7 +75,7 @@ def test_atomic_write_respects_existing_page_lock(tmp_path: Path) -> None:
     target = tmp_path / "Locked.md"
     target.write_text("old", encoding="utf-8")
     with page_rmw_lock(target):
-        atomic_write_bytes(target, b"new")
+        atomic_write_bytes(target, b"new", graph_root=tmp_path)
     assert target.read_bytes() == b"new"
 
 

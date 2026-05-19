@@ -155,7 +155,7 @@ def append_logseq_flashcards_under_block(
 
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        atomic_write_bytes(path, new_text.encode("utf-8"))
+        atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=graph_root)
 
         return FlashcardAppendResult(
             ok=True,

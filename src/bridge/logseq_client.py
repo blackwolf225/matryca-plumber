@@ -10,7 +10,8 @@ import httpx
 from loguru import logger
 from pydantic import BaseModel, Field
 
-_DEFAULT_TIMEOUT = httpx.Timeout(30.0)
+_LOGSEQ_UNRESPONSIVE = "Logseq API is unresponsive"
+_DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=15.0, pool=5.0)
 
 
 class JsonRpcRequest(BaseModel):
@@ -41,7 +42,7 @@ class LogseqClient:
         Args:
             api_url: Base URL of the Logseq HTTP API (no trailing slash required).
             token: API token used as ``Bearer`` credentials.
-            timeout: Optional HTTP client timeout. Defaults to 30 seconds.
+            timeout: Optional HTTP client timeout. Defaults to 5s connect / 15s read-write.
         """
         base = api_url.rstrip("/") + "/"
         self._timeout = timeout or _DEFAULT_TIMEOUT
@@ -74,7 +75,11 @@ class LogseqClient:
             ValueError: When the response body is not a JSON object.
         """
         body = payload.model_dump()
-        response = await self._client.post("", json=body)
+        try:
+            response = await self._client.post("", json=body)
+        except httpx.TimeoutException as exc:
+            msg = f"{_LOGSEQ_UNRESPONSIVE} (request timed out)"
+            raise RuntimeError(msg) from exc
         response.raise_for_status()
         data = response.json()
         if not isinstance(data, dict):

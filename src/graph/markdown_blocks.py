@@ -8,26 +8,17 @@ import tempfile
 from pathlib import Path
 
 from .logseq_uuid import assert_valid_block_refs_in_markdown
+from .path_sandbox import assert_path_within_graph
+from .path_sandbox import graph_safe_page_path as _graph_safe_page_path
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 # mkstemp(prefix=f".{basename}.", suffix=".tmp") → ``.{name}.{token}.tmp``
 _ATOMIC_TMP_NAME = re.compile(r"^\.[^/\\]+\..+\.tmp$")
 
 
-# Same resolution rules as :mod:`src.graph.property_line_edit`.
-def graph_safe_page_path(graph_root: Path, page_ref: str) -> Path:
-    root = graph_root.expanduser().resolve(strict=False)
-    raw = page_ref.strip().replace("\\", "/")
-    if raw.startswith("pages/"):
-        candidate = (root / raw).resolve()
-    else:
-        candidate = (root / "pages" / (raw if raw.endswith(".md") else f"{raw}.md")).resolve()
-    try:
-        candidate.relative_to(root.resolve())
-    except ValueError as exc:
-        msg = "path_escapes_graph"
-        raise ValueError(msg) from exc
-    return candidate
+# Re-exported from :mod:`src.graph.path_sandbox` (single sandbox implementation).
+def graph_safe_page_path(graph_root: Path | str, page_ref: str) -> Path:
+    return _graph_safe_page_path(graph_root, page_ref)
 
 
 def find_id_line_index(lines: list[str], block_uuid: str) -> int | None:
@@ -106,14 +97,20 @@ def bullet_indent_unit(lines: list[str], bullet_idx: int) -> str:
     return "  "
 
 
-def atomic_write_bytes(file_path: str | Path, data: bytes) -> None:
+def atomic_write_bytes(
+    file_path: str | Path,
+    data: bytes,
+    *,
+    graph_root: str | Path,
+) -> None:
     """Write ``data`` to ``file_path`` via temp file, ``fsync``, and atomic ``os.replace``.
 
     The temp file is created in the target directory so ``replace`` stays on one volume.
     Parent directories are created when missing (same as typical journal append).
 
     Raises:
-        ValueError: When UTF-8 markdown contains a malformed ``((uuid))`` block reference.
+        ValueError: When ``file_path`` escapes ``graph_root`` or UTF-8 markdown contains a
+            malformed ``((uuid))`` block reference.
     """
     if b"((" in data:
         try:
@@ -123,7 +120,7 @@ def atomic_write_bytes(file_path: str | Path, data: bytes) -> None:
         else:
             assert_valid_block_refs_in_markdown(text)
 
-    path = Path(file_path).expanduser().resolve(strict=False)
+    path = assert_path_within_graph(file_path, graph_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
@@ -148,13 +145,14 @@ def atomic_write_file(
     file_path: str | Path,
     contents: str | bytes,
     *,
+    graph_root: str | Path,
     encoding: str = "utf-8",
 ) -> None:
     """UTF-8 text or raw bytes; same durability guarantees as :func:`atomic_write_bytes`."""
     if isinstance(contents, bytes):
-        atomic_write_bytes(file_path, contents)
+        atomic_write_bytes(file_path, contents, graph_root=graph_root)
     else:
-        atomic_write_bytes(file_path, contents.encode(encoding))
+        atomic_write_bytes(file_path, contents.encode(encoding), graph_root=graph_root)
 
 
 def sweep_dangling_atomic_tmp_files(graph_root: str | Path) -> int:
@@ -171,6 +169,10 @@ def sweep_dangling_atomic_tmp_files(graph_root: str | Path) -> int:
             continue
         for candidate in base.rglob("*"):
             if not candidate.is_file():
+                continue
+            try:
+                assert_path_within_graph(candidate, root)
+            except ValueError:
                 continue
             if _ATOMIC_TMP_NAME.match(candidate.name):
                 candidate.unlink(missing_ok=True)

@@ -96,7 +96,7 @@ def write_moc_page(
     with page_rmw_lock(path):
         if path.is_file():
             shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
-        atomic_write_bytes(path, md.encode("utf-8"))
+        atomic_write_bytes(path, md.encode("utf-8"), graph_root=root)
 
     return {
         "ok": True,

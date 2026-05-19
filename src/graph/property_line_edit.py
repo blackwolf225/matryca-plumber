@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .alias_index import normalize_concept_key
 from .global_fence_scanner import compute_page_protected_line_indices
-from .markdown_blocks import atomic_write_bytes
+from .markdown_blocks import atomic_write_bytes, graph_safe_page_path
 from .mldoc_properties import is_logseq_block_property_line, split_logseq_property_list_values
 from .page_write_lock import page_rmw_lock
 
@@ -147,22 +147,6 @@ class PropertyLineEditOutcome:
         }
 
 
-def _graph_safe_page_path(graph_root: Path, page_ref: str) -> Path:
-    """Resolve ``page_ref`` (``pages/Foo.md`` or ``Foo``) to an absolute path under graph."""
-    root = graph_root.expanduser().resolve(strict=False)
-    raw = page_ref.strip().replace("\\", "/")
-    if raw.startswith("pages/"):
-        candidate = (root / raw).resolve()
-    else:
-        candidate = (root / "pages" / (raw if raw.endswith(".md") else f"{raw}.md")).resolve()
-    try:
-        candidate.relative_to(root.resolve())
-    except ValueError as exc:
-        msg = "path_escapes_graph"
-        raise ValueError(msg) from exc
-    return candidate
-
-
 def edit_block_property_lines(
     graph_root: str | Path,
     page_ref: str,
@@ -178,7 +162,7 @@ def edit_block_property_lines(
     """Edit only ``key::`` property lines for the block identified by ``id::``."""
     root = Path(graph_root).expanduser().resolve(strict=False)
     try:
-        path = _graph_safe_page_path(root, page_ref)
+        path = graph_safe_page_path(root, page_ref)
     except ValueError:
         return PropertyLineEditOutcome(
             ok=False,
@@ -363,7 +347,7 @@ def edit_block_property_lines(
 
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        atomic_write_bytes(path, new_bytes)
+        atomic_write_bytes(path, new_bytes, graph_root=root)
 
         final_size = path.stat().st_size
         return PropertyLineEditOutcome(
@@ -441,7 +425,7 @@ def append_page_alias_line(
     """
     root = Path(graph_root).expanduser().resolve(strict=False)
     try:
-        path = _graph_safe_page_path(root, page_ref)
+        path = graph_safe_page_path(root, page_ref)
     except ValueError:
         return PageAliasAppendResult(
             ok=False,
@@ -566,7 +550,7 @@ def append_page_alias_line(
             )
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        atomic_write_bytes(path, new_bytes_preview)
+        atomic_write_bytes(path, new_bytes_preview, graph_root=root)
         final = path.stat().st_size
         return PageAliasAppendResult(
             ok=True,
@@ -597,7 +581,7 @@ def append_page_alias_line(
 
     bak = path.with_suffix(path.suffix + ".bak")
     shutil.copy2(path, bak)
-    atomic_write_bytes(path, new_bytes)
+    atomic_write_bytes(path, new_bytes, graph_root=root)
 
     final_size = path.stat().st_size
     return PageAliasAppendResult(
