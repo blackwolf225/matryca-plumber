@@ -30,9 +30,6 @@ dev = [
     "mypy>=1.13.0,<2.0.0",
 ]
 
-[tool.uv.sources]
-logseq-matryca-parser = { path = "../logseq-matryca-parser", editable = true }
-
 [tool.setuptools.packages.find]
 where = ["."]
 

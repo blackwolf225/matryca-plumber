@@ -340,36 +340,15 @@ wheels = [
 [[package]]
 name = "logseq-matryca-parser"
 version = "0.3.3"
-source = { editable = "../logseq-matryca-parser" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "langchain-core", marker = "extra == 'ai'" },
-    { name = "langchain-core", marker = "extra == 'all'" },
-    { name = "llama-index-core", marker = "extra == 'ai'" },
-    { name = "llama-index-core", marker = "extra == 'all'" },
-    { name = "networkx", marker = "extra == 'all'", specifier = ">=3.0.0" },
-    { name = "networkx", marker = "extra == 'viz'", specifier = ">=3.0.0" },
-    { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pyvis", marker = "extra == 'all'", specifier = ">=0.3.2" },
-    { name = "pyvis", marker = "extra == 'viz'", specifier = ">=0.3.2" },
-    { name = "rich", specifier = ">=13.7.1" },
-    { name = "typer", specifier = ">=0.12.0" },
-    { name = "watchdog", marker = "extra == 'watch'", specifier = ">=4.0.0" },
-]
-provides-extras = ["viz", "ai", "all", "watch"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "logseq-matryca-parser", extras = ["all", "watch"] },
-    { name = "mypy", specifier = ">=1.20.2" },
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "ruff", specifier = ">=0.15.12" },
+sdist = { url = "https://files.pythonhosted.org/packages/8a/78/0ace9faf1509f9fee41d81078efd40e8090db212aab345513edfa9a6027a/logseq_matryca_parser-0.3.3.tar.gz", hash = "sha256:0e2e952c4beab272a5d273f5eff3fdd5b1f530dc3e64940ecbbc7c342cafad83", size = 495441, upload-time = "2026-05-19T16:41:44.182Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/9d/3ba0cf69a100606ee77a309521628f513d920a6b241b77b8e1a9a8c2dbdc/logseq_matryca_parser-0.3.3-py3-none-any.whl", hash = "sha256:5dc0487d8891b448a1147d8b128d3aabaf8f1216e98a64a2dbfc3e89faf8f5bc", size = 53290, upload-time = "2026-05-19T16:41:42.486Z" },
 ]
 
 [[package]]
@@ -399,7 +378,7 @@ wheels = [
 
 [[package]]
 name = "matryca-logseq-llm-wiki"
-version = "0.1.0"
+version = "1.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "logseq-matryca-parser" },
@@ -420,7 +399,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "logseq-matryca-parser", editable = "../logseq-matryca-parser" },
+    { name = "logseq-matryca-parser", specifier = "==0.3.3" },
     { name = "loguru", specifier = ">=0.7.0,<1.0.0" },
     { name = "mcp", specifier = ">=1.0.0,<2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0,<2.0.0" },
