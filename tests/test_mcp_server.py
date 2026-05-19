@@ -8,12 +8,14 @@ from typing import Any
 import pytest
 from mcp.server.fastmcp import FastMCP
 from pydantic import ValidationError
+from src.agent.graph_tool_helpers import (
+    format_regex_search_markdown,
+    parse_optional_json_query,
+    read_block_ast_markdown,
+)
 from src.agent.mcp_server import (
     MatrycaMCPServer,
     OutlineNode,
-    _format_regex_search_markdown,
-    _parse_optional_json_query,
-    _read_block_ast_markdown,
     register_mcp_tools,
 )
 from src.bridge.logseq_client import LogseqClient
@@ -34,9 +36,9 @@ def test_mcp_registers_five_mega_tools() -> None:
 
 
 def test_parse_optional_json_query_accepts_plain_or_json() -> None:
-    assert _parse_optional_json_query("") == {}
-    assert _parse_optional_json_query("alpha") == {}
-    assert _parse_optional_json_query('{"days": 3}') == {"days": 3}
+    assert parse_optional_json_query("") == {}
+    assert parse_optional_json_query("alpha") == {}
+    assert parse_optional_json_query('{"days": 3}') == {"days": 3}
 
 
 def test_read_block_ast_markdown_returns_subtree(
@@ -51,7 +53,7 @@ def test_read_block_ast_markdown_returns_subtree(
         encoding="utf-8",
     )
     monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(tmp_path))
-    md = _read_block_ast_markdown(str(tmp_path), f"Demo|{block_id}")
+    md = read_block_ast_markdown(str(tmp_path), f"Demo|{block_id}")
     assert "Child bullet" in md
     assert block_id in md
 
@@ -60,7 +62,7 @@ def test_format_regex_search_markdown_finds_line(tmp_path: Path) -> None:
     pages = tmp_path / "pages"
     pages.mkdir()
     (pages / "Hit.md").write_text("- TODO fix parser\n", encoding="utf-8")
-    report = _format_regex_search_markdown(str(tmp_path), r"TODO", limit=10)
+    report = format_regex_search_markdown(str(tmp_path), r"TODO", limit=10)
     assert "Hit.md" in report
     assert "TODO" in report
 

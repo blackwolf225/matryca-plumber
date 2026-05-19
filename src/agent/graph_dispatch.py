@@ -1,0 +1,525 @@
+"""Shared async dispatch for MCP mega-tools and the agent-native CLI."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from typing import TYPE_CHECKING, Any, cast
+
+from loguru import logger
+
+from ..config import MatrycaWikiConfig
+from ..graph.advanced_query_block import (
+    resolve_advanced_query_preset,
+    wrap_logseq_advanced_query,
+)
+from ..graph.block_ref_lint import lint_block_refs_in_graph
+from ..graph.dashboard import build_dashboard_markdown
+from ..graph.flashcards import append_logseq_flashcards_under_block
+from ..graph.journal_task_scan import (
+    append_journal_markdown_section,
+    format_journal_task_review_markdown,
+    scan_journal_tasks,
+)
+from ..graph.link_tag_hop import format_hop_report_markdown
+from ..graph.property_line_edit import edit_block_property_lines
+from ..graph.reparent_blocks import refactor_logseq_blocks as run_reparent_logseq_blocks
+from ..graph.split_large_blocks import refactor_large_blocks as run_refactor_large_blocks
+from ..graph.tag_unify import lint_unify_logseq_tags as core_lint_unify_logseq_tags
+from ..graph.unlinked_mentions import resolve_unlinked_mentions as scan_unlinked_mentions
+from ..graph.wiki_lint import format_wiki_lint_report, lint_wiki_prefixed_pages
+from ..rag.local_query import format_keyword_query_markdown
+from ..rag.matryca_hooks import get_page_spatial_context
+from .git_snapshot import snapshot_git_working_tree
+from .graph_tool_helpers import (
+    MutateGraphAction,
+    ReadGraphTarget,
+    RefactorBlocksAction,
+    RunLinterName,
+    SearchGraphMethod,
+    format_regex_search_markdown,
+    graph_missing_dict,
+    graph_missing_text,
+    graph_path_from_env,
+    parse_json_object,
+    parse_optional_json_query,
+    read_block_ast_markdown,
+)
+from .l1_memory import read_l1_memory_async
+from .quality_gate import advanced_query_security_violations, markdown_append_bounds_violations
+from .routing_hint import append_read_page_routing_hint, routing_hint_for_write_outline
+
+if TYPE_CHECKING:
+    from .mcp_server import MatrycaMCPServer
+
+
+async def dispatch_read(
+    wiki_config: MatrycaWikiConfig,
+    target_type: ReadGraphTarget,
+    query: str = "",
+) -> str:
+    """Route ``read_graph_data`` by ``target_type``."""
+    if target_type == "memory":
+        _labels, body = await read_l1_memory_async(wiki_config)
+        if not _labels:
+            return (
+                "No L1 memory loaded. Set **MATRYCA_L1_PATH**, or **memory_path** in "
+                "**matryca-wiki.yml**, or create **matryca-l1/*.md** next to your graph. "
+                "See `SYSTEM_PROMPT.md` for L1 vs L2 routing."
+            )
+        logger.bind(files=len(_labels)).info("read_graph_data(memory) loaded L1 context")
+        return body
+
+    graph_path = graph_path_from_env()
+    if not graph_path:
+        logger.warning("read_graph_data(%s) but LOGSEQ_GRAPH_PATH unset", target_type)
+        return graph_missing_text()
+
+    if target_type == "page":
+        page_name = query.strip()
+        if not page_name:
+            return "For `target_type=page`, set `query` to the Logseq page title."
+        try:
+            markdown = await get_page_spatial_context(page_name, graph_path)
+        except FileNotFoundError as exc:
+            logger.bind(page=page_name, graph=graph_path).info(
+                "read_graph_data page miss: {}",
+                exc,
+            )
+            return "Page not found, you can create it."
+        except ImportError as exc:
+            logger.error("read_graph_data parser missing: {}", exc)
+            return (
+                f"Spatial parser is not available (install `logseq-matryca-parser`). Detail: {exc}"
+            )
+        except OSError as exc:
+            logger.bind(page=page_name).exception("read_graph_data OS error")
+            return f"Could not read the page file from disk: {exc}"
+        return append_read_page_routing_hint(markdown)
+
+    if target_type == "block_ast":
+        block_query = query.strip()
+        if not block_query:
+            return "For `target_type=block_ast`, set `query` to `Page Title|block-uuid`."
+        return await asyncio.to_thread(read_block_ast_markdown, graph_path, block_query)
+
+    if target_type == "structural_hops":
+        hop_opts = parse_optional_json_query(query)
+        seeds_raw = str(hop_opts.get("seeds", query)).strip()
+        seed_list = [s.strip() for s in seeds_raw.split(",") if s.strip()]
+        if not seed_list:
+            return (
+                "For `target_type=structural_hops`, provide seed page titles in `query` "
+                "(comma-separated) or JSON with `seeds`."
+            )
+        depth = wiki_config.max_depth
+        if hop_opts.get("max_depth") is not None:
+            depth = max(1, min(int(hop_opts["max_depth"]), 10))
+        per = wiki_config.structural_hop_max_per_level
+        if hop_opts.get("max_per_level") is not None:
+            per = max(1, min(int(hop_opts["max_per_level"]), 500))
+
+        def _hops() -> str:
+            return format_hop_report_markdown(
+                graph_path,
+                seed_list,
+                max_depth=depth,
+                max_per_level=per,
+            )
+
+        return await asyncio.to_thread(_hops)
+
+    dashboard_md: str = await asyncio.to_thread(
+        build_dashboard_markdown,
+        graph_path,
+        wiki_config,
+    )
+    logger.bind(graph=graph_path).info("read_graph_data(dashboard) completed")
+    return dashboard_md
+
+
+async def dispatch_search(
+    method: SearchGraphMethod,
+    query: str = "",
+) -> str | dict[str, Any]:
+    """Route ``search_graph`` by ``method``."""
+    graph_path = graph_path_from_env()
+    if not graph_path:
+        if method == "journal_tasks":
+            return {
+                "ok": False,
+                "error": graph_missing_text(),
+                "items": [],
+                "task_review_markdown": "",
+            }
+        return graph_missing_text()
+
+    if method == "bm25":
+        bm_opts = parse_optional_json_query(query)
+        keyword = str(bm_opts.get("keyword", query)).strip()
+        if not keyword:
+            return "For `method=bm25`, set `query` to search keywords or JSON with `keyword`."
+        limit = max(1, min(int(bm_opts.get("limit", 15)), 100))
+        return await asyncio.to_thread(
+            format_keyword_query_markdown,
+            graph_path,
+            keyword,
+            limit=limit,
+            mode="bm25",
+        )
+
+    if method == "regex":
+        rx_opts = parse_optional_json_query(query)
+        pattern = str(rx_opts.get("pattern", query)).strip()
+        if not pattern:
+            return "For `method=regex`, set `query` to a regex pattern or JSON with `pattern`."
+        rx_limit = max(1, min(int(rx_opts.get("limit", 50)), 200))
+        return await asyncio.to_thread(
+            format_regex_search_markdown,
+            graph_path,
+            pattern,
+            limit=rx_limit,
+        )
+
+    if method == "unlinked_mentions":
+        um_opts = parse_optional_json_query(query)
+        max_hits = max(1, min(int(um_opts.get("max_hits_per_file", 80)), 500))
+        max_titles = max(1, min(int(um_opts.get("max_titles", 500)), 2000))
+
+        def _unlinked() -> dict[str, Any]:
+            return scan_unlinked_mentions(
+                graph_path,
+                max_hits_per_file=max_hits,
+                max_titles=max_titles,
+            )
+
+        return await asyncio.to_thread(_unlinked)
+
+    j_opts = parse_optional_json_query(query)
+    days_raw = j_opts.get("days", query.strip() or 7)
+    days = max(1, min(int(days_raw), 90))
+
+    def _journal() -> dict[str, Any]:
+        report = scan_journal_tasks(graph_path, days=days)
+        md = format_journal_task_review_markdown(report)
+        rows = [
+            {
+                "source_iso_date": it.source_iso_date,
+                "source_relpath": it.source_relpath,
+                "marker": it.marker,
+                "headline": it.headline,
+                "scheduled": it.scheduled,
+                "deadline": it.deadline,
+                "block_text": it.block_text,
+            }
+            for it in report.items
+        ]
+        return {
+            "ok": True,
+            "days_scanned": report.days_scanned,
+            "files_scanned": report.files_scanned,
+            "open_item_count": len(report.items),
+            "notes": report.notes,
+            "items": rows,
+            "task_review_markdown": md,
+        }
+
+    return await asyncio.to_thread(_journal)
+
+
+async def dispatch_mutate(
+    bridge: MatrycaMCPServer,
+    action: MutateGraphAction,
+    target: str,
+    payload: str,
+) -> dict[str, Any]:
+    """Route ``mutate_graph`` by ``action``."""
+    graph_path = graph_path_from_env()
+
+    if action == "write_outline":
+        parent_uuid = target.strip()
+        if not parent_uuid:
+            return {"ok": False, "error": "`target` must be the parent block UUID."}
+        outline = parse_json_object(payload, field_name="payload")
+        return await bridge.write_logseq_outline(
+            outline,
+            parent_block_uuid=parent_uuid,
+        )
+
+    if action == "edit_property":
+        if not graph_path:
+            return {
+                **graph_missing_dict(),
+                "dry_run": True,
+                "match_count": 0,
+                "previews": [],
+                "previous_size_bytes": 0,
+                "current_size_bytes": 0,
+                "lines_changed": 0,
+            }
+        target_parts = [p.strip() for p in target.split("|", 1)]
+        if len(target_parts) != 2 or not target_parts[0] or not target_parts[1]:
+            return {
+                "ok": False,
+                "error": "For edit_property, `target` must be `Page Title|block-uuid`.",
+            }
+        page_ref, block_uuid = target_parts[0], target_parts[1]
+        prop_opts = parse_json_object(payload, field_name="payload")
+        search = str(prop_opts.get("search", ""))
+        replacement = str(prop_opts.get("replacement", ""))
+        if not search:
+            return {"ok": False, "error": "payload must include non-empty `search`."}
+
+        def _edit() -> dict[str, object]:
+            return edit_block_property_lines(
+                graph_path,
+                page_ref,
+                block_uuid,
+                search,
+                replacement,
+                dry_run=bool(prop_opts.get("dry_run", True)),
+                use_regex=bool(prop_opts.get("use_regex", False)),
+                replace_all=bool(prop_opts.get("replace_all", False)),
+                case_sensitive=bool(prop_opts.get("case_sensitive", True)),
+            ).as_dict()
+
+        return cast(dict[str, Any], await asyncio.to_thread(_edit))
+
+    if action == "append_journal":
+        if not graph_path:
+            return graph_missing_dict()
+        body = payload
+        dry_run = True
+        if payload.strip().startswith("{"):
+            journal_opts = parse_json_object(payload, field_name="payload")
+            body = str(journal_opts.get("markdown_body", ""))
+            dry_run = bool(journal_opts.get("dry_run", True))
+        bounds = markdown_append_bounds_violations(body)
+        if bounds:
+            return {
+                "ok": False,
+                "code": "payload_too_large",
+                "error": "; ".join(bounds),
+            }
+        return await asyncio.to_thread(
+            append_journal_markdown_section,
+            graph_path,
+            body,
+            dry_run=dry_run,
+        )
+
+    parent_block = target.strip()
+    if not parent_block:
+        return {
+            "ok": False,
+            "error": "For inject_query, `target` must be the parent block UUID.",
+        }
+    inject_opts = parse_json_object(payload, field_name="payload")
+    query_preset = inject_opts.get("query_preset")
+    tag = inject_opts.get("tag")
+    query_edn = str(inject_opts.get("query_edn", ""))
+    dry_run = bool(inject_opts.get("dry_run", True))
+
+    inner: str
+    if query_preset and str(query_preset).strip():
+        try:
+            inner = resolve_advanced_query_preset(str(query_preset).strip(), tag=tag)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+    elif query_edn.strip():
+        inner = query_edn.strip()
+    else:
+        return {
+            "ok": False,
+            "error": "payload must include `query_preset` or non-empty `query_edn`.",
+        }
+
+    sec = advanced_query_security_violations(inner)
+    if sec:
+        return {"ok": False, "error": "; ".join(sec)}
+
+    try:
+        markdown = wrap_logseq_advanced_query(inner)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if dry_run:
+        return {
+            "ok": True,
+            "dry_run": True,
+            "markdown": markdown,
+            "uuid": None,
+            "routing_hint": routing_hint_for_write_outline(),
+        }
+
+    try:
+        out = await bridge.inject_logseq_advanced_query_block(
+            parent_block_uuid=parent_block,
+            query_edn=inner,
+        )
+    except (ValueError, RuntimeError) as exc:
+        return {"ok": False, "error": str(exc)}
+
+    return {"ok": True, "dry_run": False, **out}
+
+
+async def dispatch_refactor(
+    action: RefactorBlocksAction,
+    target_uuid: str,
+    payload: str = "",
+) -> dict[str, Any]:
+    """Route ``refactor_blocks`` by ``action``."""
+    graph_path = graph_path_from_env()
+    if not graph_path:
+        return graph_missing_dict()
+
+    refactor_opts = parse_optional_json_query(payload)
+    dry_run = bool(refactor_opts.get("dry_run", True))
+
+    if action == "split_large":
+        page_ref = target_uuid.strip() or None
+        min_chars = max(50, int(refactor_opts.get("min_chars", 400)))
+        max_blocks = max(1, min(int(refactor_opts.get("max_blocks", 25)), 100))
+        git_snap: dict[str, object] = {"skipped": True, "reason": "dry_run"}
+        if not dry_run:
+            git_snap = await asyncio.to_thread(
+                snapshot_git_working_tree,
+                graph_path,
+                message="matryca: pre refactor_blocks split_large",
+            )
+
+        def _split() -> dict[str, Any]:
+            return run_refactor_large_blocks(
+                graph_path,
+                page_ref=page_ref,
+                min_chars=min_chars,
+                max_blocks=max_blocks,
+                dry_run=dry_run,
+            ).as_dict()
+
+        split_out = await asyncio.to_thread(_split)
+        split_out["git_snapshot"] = git_snap
+        return split_out
+
+    if action == "reparent":
+        reparent_page = target_uuid.strip()
+        if not reparent_page:
+            return {"ok": False, "error": "For reparent, `target_uuid` must be the page title."}
+        groups_raw = refactor_opts.get("groups")
+        if groups_raw is None and payload.strip().startswith("["):
+            groups_raw = json.loads(payload)
+        if not isinstance(groups_raw, list):
+            return {
+                "ok": False,
+                "error": "For reparent, `payload` must be a JSON array of reparent groups.",
+            }
+        groups = cast(list[dict[str, Any]], groups_raw)
+        reparent_git: dict[str, object] = {"skipped": True, "reason": "dry_run"}
+        if not dry_run:
+            reparent_git = await asyncio.to_thread(
+                snapshot_git_working_tree,
+                graph_path,
+                message="matryca: pre refactor_blocks reparent",
+            )
+
+        def _reparent() -> dict[str, Any]:
+            return run_reparent_logseq_blocks(
+                graph_path,
+                reparent_page,
+                groups,
+                dry_run=dry_run,
+            ).as_dict()
+
+        reparent_out = await asyncio.to_thread(_reparent)
+        reparent_out["git_snapshot"] = reparent_git
+        return reparent_out
+
+    flash_parts = [p.strip() for p in target_uuid.split("|", 1)]
+    if len(flash_parts) != 2 or not flash_parts[0] or not flash_parts[1]:
+        return {
+            "ok": False,
+            "error": (
+                "For generate_flashcards, `target_uuid` must be `Page Title|source-block-uuid`."
+            ),
+        }
+    page_ref, source_uuid = flash_parts[0], flash_parts[1]
+    max_cards = max(1, min(int(refactor_opts.get("max_cards", 30)), 200))
+
+    def _flash() -> dict[str, Any]:
+        return append_logseq_flashcards_under_block(
+            graph_path,
+            page_ref,
+            source_uuid,
+            max_cards=max_cards,
+            dry_run=dry_run,
+        ).as_dict()
+
+    return await asyncio.to_thread(_flash)
+
+
+async def dispatch_lint(
+    wiki_config: MatrycaWikiConfig,
+    linter_name: RunLinterName,
+) -> str | dict[str, Any]:
+    """Route ``run_linter`` by ``linter_name``."""
+    graph_path = graph_path_from_env()
+    if not graph_path:
+        if linter_name == "unify_tags":
+            return graph_missing_dict()
+        return graph_missing_text()
+
+    if linter_name == "unify_tags":
+
+        def _tags() -> dict[str, Any]:
+            raw = core_lint_unify_logseq_tags(graph_path, dry_run=True).as_dict()
+            return cast(dict[str, Any], raw)
+
+        return await asyncio.to_thread(_tags)
+
+    if linter_name == "block_refs":
+
+        def _refs() -> str:
+            result = lint_block_refs_in_graph(graph_path)
+            logger.bind(
+                pages=result.pages_scanned,
+                issues=len(result.broken),
+            ).info("run_linter(block_refs) completed")
+            return result.format_report()
+
+        return await asyncio.to_thread(_refs)
+
+    def _wiki() -> str:
+        findings = lint_wiki_prefixed_pages(graph_path, wiki_config)
+        return format_wiki_lint_report(findings, prefix=wiki_config.wiki_file_prefix)
+
+    wiki_report: str = await asyncio.to_thread(_wiki)
+    logger.bind(graph=graph_path).info("run_linter(full_wiki_scan) completed")
+    return wiki_report
+
+
+def build_logseq_bridge() -> MatrycaMCPServer:
+    """Construct :class:`MatrycaMCPServer` from ``LOGSEQ_API_*`` environment variables."""
+    from ..bridge.logseq_client import LogseqClient
+    from .mcp_server import MatrycaMCPServer
+
+    api_url = os.environ.get("LOGSEQ_API_URL", "http://localhost:12315").rstrip("/")
+    token = os.environ.get("LOGSEQ_API_TOKEN", "").strip()
+    if not token:
+        msg = (
+            "LOGSEQ_API_TOKEN is not set. Add it to your environment or `.env` file "
+            "before running mutate commands that use the Logseq API."
+        )
+        raise ValueError(msg)
+    client = LogseqClient(api_url=api_url, token=token)
+    return MatrycaMCPServer(client=client)
+
+
+__all__ = [
+    "build_logseq_bridge",
+    "dispatch_lint",
+    "dispatch_mutate",
+    "dispatch_read",
+    "dispatch_refactor",
+    "dispatch_search",
+]

@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 matryca-logseq-llm-wiki = "src.main:main"
+matryca = "src.cli:main"
 
 [project.optional-dependencies]
 dev = [
