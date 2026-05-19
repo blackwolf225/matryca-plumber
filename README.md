@@ -148,6 +148,41 @@ Configure **`LOGSEQ_API_TOKEN`**, **`LOGSEQ_GRAPH_PATH`**, and related variables
 
 ---
 
+## ⚠️ CRITICAL SAFETY WARNING: The Sandbox Rule
+
+Matryca uses **two different paths** to reach your vault:
+
+| Path | Mechanism | What it controls |
+|------|-----------|------------------|
+| **Reads** (search, spatial reads, disk mutators) | Direct filesystem access via **`LOGSEQ_GRAPH_PATH`** | Whatever folder you point at in `.env` |
+| **Writes** (outline insert, block API, query injection) | Logseq’s **local HTTP API** | **Only the graph currently open in the Logseq app** |
+
+This creates a **Split-Brain** hazard. If you set `LOGSEQ_GRAPH_PATH` to a test folder but leave your **real** vault open in Logseq, the AI will **read** from the sandbox and **write** destructive changes to your production graph. There is no server-side guard: Logseq’s API always targets the active UI graph, not the path in your `.env`.
+
+**Before dogfooding, testing, or pointing Matryca at any non-production folder, follow all four steps below. Skipping step 2 is the most common way to corrupt real data.**
+
+### Safe test environment (4 steps)
+
+1. **Clone the graph.** Copy your real Logseq folder to a dedicated location (for example `Logseq_Matryca_Test`). Use a full copy, not a symlink, so reads and writes stay isolated.
+
+2. **Isolate the Logseq UI (CRITICAL).** Open the Logseq app. Click your **current graph name** in the sidebar, choose **Add new graph**, and open the **`Logseq_Matryca_Test`** folder. ⚠️ **The Logseq window MUST be focused on the test folder** — not your daily driver vault. If the title bar or graph picker still shows your real graph, **stop** and switch graphs before running any MCP tools. Writes always land on whatever graph Logseq has open, regardless of `LOGSEQ_GRAPH_PATH`.
+
+3. **Enable API and get token.** In Logseq: **Settings → Advanced → Enable HTTP APIs server**. Copy the **Authorization** token shown there.
+
+4. **Align the `.env`.** Ensure your project `.env` (or MCP host `env` block) matches the **same** test folder and token:
+
+   ```env
+   LOGSEQ_GRAPH_PATH=/absolute/path/to/Logseq_Matryca_Test
+   LOGSEQ_API_TOKEN=your_token_here
+   MATRYCA_GIT_SNAPSHOT_ON_WRITE=true
+   ```
+
+   Use an **absolute** path. With `MATRYCA_GIT_SNAPSHOT_ON_WRITE=true`, selected writes also create a local **git commit** on the test graph so you can revert experiments.
+
+**Sanity check:** After setup, change one harmless block via the API (or a single MCP write) and confirm the edit appears **only** under `Logseq_Matryca_Test` on disk — not in your production vault.
+
+---
+
 ## Quickstart (clone and develop)
 
 ### Prerequisites
