@@ -971,9 +971,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             page_name: Page title as in Logseq (e.g. ``My Topic``), not a file path.
 
         Returns:
-            Markdown summary of the parsed spatial tree, or a short human-readable
-            message if the graph path is missing, the page file is absent, or the
-            parser is not installed.
+            Markdown summary of the parsed spatial tree (includes per-block
+            ``synthetic_id``, ``source_uuid``, and ``uuid`` from the parser AST),
+            or a short human-readable message if the graph path is missing, the page
+            is absent, or the parser is not installed.
         """
         graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
         if not graph_path:

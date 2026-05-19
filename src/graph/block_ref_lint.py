@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from .logseq_uuid import is_logseq_block_uuid
 
 # Logseq block references: ((xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx))
 _BLOCK_REF_RE = re.compile(
@@ -17,30 +18,22 @@ _ID_DECL_RE = re.compile(
 )
 
 
-def _is_uuid_v4(value: str) -> bool:
-    try:
-        parsed = uuid.UUID(value)
-    except ValueError:
-        return False
-    return parsed.version == 4
-
-
 def collect_id_declarations(text: str) -> set[str]:
-    """Return lowercase UUID v4 strings declared via ``id::`` properties."""
+    """Return lowercase UUID v4/v5 strings declared via ``id::`` properties."""
     found: set[str] = set()
     for match in _ID_DECL_RE.finditer(text):
         raw = match.group(1).strip()
-        if _is_uuid_v4(raw):
+        if is_logseq_block_uuid(raw):
             found.add(raw.lower())
     return found
 
 
 def collect_block_ref_targets(text: str) -> list[tuple[str, bool]]:
-    """Return each ``((uuid))`` target with whether the bracketed string is UUID v4."""
+    """Return each ``((uuid))`` target with whether the bracketed string is UUID v4/v5."""
     out: list[tuple[str, bool]] = []
     for match in _BLOCK_REF_RE.finditer(text):
         raw = match.group(1)
-        out.append((raw.lower(), _is_uuid_v4(raw)))
+        out.append((raw.lower(), is_logseq_block_uuid(raw)))
     return out
 
 
@@ -50,7 +43,7 @@ class BrokenBlockRef:
 
     file_path: str
     ref_uuid: str
-    reason: str  # "invalid_uuid_v4" | "unresolved"
+    reason: str  # "invalid_uuid" | "unresolved"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +61,7 @@ class BlockRefLintResult:
             "# Block reference lint (`((uuid))`)",
             "",
             f"- **Pages scanned:** {self.pages_scanned}",
-            f"- **Distinct `id::` (v4) seen:** {self.defined_ids}",
+            f"- **Distinct `id::` (v4/v5) seen:** {self.defined_ids}",
             f"- **Block refs parsed:** {self.refs_checked}",
             f"- **Issues:** {len(self.broken)}",
             "",
@@ -97,7 +90,7 @@ class BlockRefLintResult:
 
 
 def lint_block_refs_in_graph(graph_root: str | Path) -> BlockRefLintResult:
-    """Two-pass scan: collect all ``id::`` v4 ids, then flag ``((uuid))`` refs not in that set.
+    """Two-pass scan: collect all ``id::`` v4/v5 ids, then flag ``((uuid))`` refs not in that set.
 
     Args:
         graph_root: Logseq graph directory (must contain ``pages/``).
@@ -141,14 +134,14 @@ def lint_block_refs_in_graph(graph_root: str | Path) -> BlockRefLintResult:
 
     for path, text in file_texts:
         rel = str(path.relative_to(root))
-        for ref_lower, is_v4 in collect_block_ref_targets(text):
+        for ref_lower, is_valid in collect_block_ref_targets(text):
             refs_checked += 1
-            if not is_v4:
+            if not is_valid:
                 broken.append(
                     BrokenBlockRef(
                         file_path=rel,
                         ref_uuid=ref_lower,
-                        reason="invalid_uuid_v4",
+                        reason="invalid_uuid",
                     ),
                 )
                 continue

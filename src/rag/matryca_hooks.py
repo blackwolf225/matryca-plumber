@@ -108,19 +108,46 @@ def resolve_logseq_page_md(graph_root: str | Path, page_name: str) -> Path:
     raise FileNotFoundError(msg)
 
 
+def _block_identity_header_bits(
+    *,
+    uuid_val: str | None,
+    source_uuid: str | None,
+    synthetic_id: bool | None,
+) -> list[str]:
+    """Build parser identity fields for spatial Markdown (``synthetic_id``, ``source_uuid``)."""
+    bits: list[str] = []
+    parser_uuid = str(uuid_val).strip() if uuid_val else None
+    on_disk = str(source_uuid).strip() if source_uuid else None
+
+    if synthetic_id is not None:
+        bits.append(f"`synthetic_id` {str(synthetic_id).lower()}")
+
+    if on_disk:
+        bits.append(f"`source_uuid` {on_disk} (persisted `id::` on disk)")
+        if parser_uuid and parser_uuid.lower() != on_disk.lower():
+            bits.append(f"`uuid` {parser_uuid}")
+    elif parser_uuid:
+        bits.append(f"`uuid` {parser_uuid}")
+        if synthetic_id:
+            bits.append("**not on disk** — persist `id::` before `((uuid))`")
+
+    return bits
+
+
 def _format_node_markdown(node: Any, depth: int) -> list[str]:
     """Format a single parsed node subtree as readable Markdown lines."""
     indent = "  " * depth
     lines: list[str] = []
 
-    uuid_val = getattr(node, "uuid", None) or getattr(node, "source_uuid", None)
     clean = (getattr(node, "clean_text", None) or "").strip()
     raw_content = (getattr(node, "content", None) or "").strip()
     body = clean if clean else raw_content
 
-    header_bits: list[str] = []
-    if uuid_val:
-        header_bits.append(f"`id::` {uuid_val}")
+    header_bits = _block_identity_header_bits(
+        uuid_val=getattr(node, "uuid", None),
+        source_uuid=getattr(node, "source_uuid", None),
+        synthetic_id=getattr(node, "synthetic_id", None),
+    )
     task = getattr(node, "task_status", None)
     if task:
         header_bits.append(f"task: {task}")
@@ -161,14 +188,17 @@ def _format_dict_node(node: dict[str, Any], depth: int) -> list[str]:
     indent = "  " * depth
     lines: list[str] = []
 
-    uuid_val = node.get("uuid") or node.get("source_uuid")
     clean = str(node.get("clean_text") or "").strip()
     raw_content = str(node.get("content") or "").strip()
     body = clean if clean else raw_content
 
-    header_bits: list[str] = []
-    if uuid_val:
-        header_bits.append(f"`id::` {uuid_val}")
+    synthetic_raw = node.get("synthetic_id")
+    synthetic_id = synthetic_raw if isinstance(synthetic_raw, bool) else None
+    header_bits = _block_identity_header_bits(
+        uuid_val=cast(str | None, node.get("uuid")),
+        source_uuid=cast(str | None, node.get("source_uuid")),
+        synthetic_id=synthetic_id,
+    )
     task = node.get("task_status")
     if task:
         header_bits.append(f"task: {task}")

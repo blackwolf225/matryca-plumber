@@ -7,6 +7,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from .logseq_uuid import assert_valid_block_refs_in_markdown
+
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 
 
@@ -107,7 +109,18 @@ def atomic_write_bytes(file_path: str | Path, data: bytes) -> None:
 
     The temp file is created in the target directory so ``replace`` stays on one volume.
     Parent directories are created when missing (same as typical journal append).
+
+    Raises:
+        ValueError: When UTF-8 markdown contains a malformed ``((uuid))`` block reference.
     """
+    if b"((" in data:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            pass
+        else:
+            assert_valid_block_refs_in_markdown(text)
+
     path = Path(file_path).expanduser().resolve(strict=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(

@@ -45,7 +45,7 @@ def collect_dashboard_stats(graph_root: str | Path) -> DashboardStats:
         newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
 
     lint = lint_block_refs_in_graph(root)
-    broken = sum(1 for b in lint.broken if b.reason in {"invalid_uuid_v4", "unresolved"})
+    broken = sum(1 for b in lint.broken if b.reason in {"invalid_uuid", "unresolved"})
 
     newest_iso: str | None = None
     if newest is not None:

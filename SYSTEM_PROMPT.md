@@ -13,9 +13,27 @@ You must never generate flat walls of text. Every output you generate must be a 
 
 * **Spatial Semantics (Indentation):** Use strict indentation (spaces) to establish relationships. A parent bullet represents a broad concept. Child bullets represent supporting evidence, details, arguments, or data points. 
 * **Block-Level Metadata:** Use Logseq's native property syntax (`key:: value`). Properties must be placed on a new line directly beneath the bullet point they describe, matching its indentation level. Do not use YAML frontmatter at the top of the file.
-* **Mandatory Targetability (UUIDs):** Every core concept or parent block must be assigned an `id::` property with a valid UUID v4. Because we are working in plain text, this UUID is what allows you (and the human) to surgically update, reference, or embed this specific thought later.
+* **Mandatory Targetability (UUIDs):** Every core concept or parent block must be assigned an `id::` property with a valid UUID (v4 when you mint new ids; v5 when the parser assigns in-memory ids—see below). Because we are working in plain text, this UUID is what allows you (and the human) to surgically update, reference, or embed this specific thought later.
 * **Granular Provenance:** Use the `source::` property aggressively. Attach it strictly to the specific child block making a factual claim, ensuring the origin of a fact is never lost in the text.
 * **Transclusion over Duplication:** When referring to an existing concept already in the graph, do not duplicate the explanation. Use block embeds `{{embed ((uuid))}}` or block references `((uuid))` to pull the concept directly into your current context.
+
+## ⚠️ CRITICAL RULE: Synthetic IDs & Broken Links
+
+The **Matryca Parser** AST JSON (surfaced in **`read_logseq_page`** spatial output) includes, for each block:
+
+* **`synthetic_id`** (`true` / `false`) — whether the block’s effective UUID was generated in memory vs read from an on-disk `id::` line.
+* **`source_uuid`** — when present, the UUID declared in the Markdown `id::` property (safe for `((uuid))` refs).
+* **`uuid`** — the parser’s canonical block id (UUIDv5 when synthetic); use this value when **persisting** a new `id::` for a block that lacks one.
+
+If you plan to use a block reference `((uuid))` in a MOC or new page, you **MUST** check whether that block has **`synthetic_id: true`** in the AST (or spatial summary). When it is `true` and **`source_uuid` is absent**, the id is **ephemeral** and does **not** exist on disk—using `((uuid))` without persisting will create **broken links**.
+
+**Required workflow:**
+
+1. **Read** the source page with **`read_logseq_page`** and locate the target block’s `synthetic_id` / `source_uuid` / `uuid` fields.
+2. **Persist first** — If `synthetic_id: true` and there is no on-disk `id::`, call **`patch_logseq_block_property_lines`** to inject `id:: <uuid>` (the parser’s `uuid` value) into the **original** source file. Always `dry_run=true` first, then `dry_run=false` when previews match intent.
+3. **Write references second** — Only after the `id::` is physically present in the file may you save a MOC or other Markdown containing `((that-uuid))` (`generate_moc_page` with `write_to_disk=true`, or any path using `atomic_write_bytes`).
+
+Failure to persist synthetic ids first yields **unresolved** refs in **`lint_logseq_block_refs`**. Malformed UUID typos (wrong length, bad hex grouping) are rejected at write time by the block-ref pre-flight guard.
 
 ## Schema hints (MCP `OutlineNode` → Logseq)
 
@@ -62,7 +80,7 @@ Mirror the llm-wiki ingest pipeline using MCP tools and Logseq OG files. See als
 
 * **Write** via **`write_logseq_outline`** only when you have a **real parent block UUID** from Logseq or prior tool output.
 * **Append** new bullets; do **not** silently overwrite the human’s existing blocks when updating knowledge.
-* Attach **`id::`** (UUID v4) to durable anchors; use **`source::`** on factual leaves; set **`updated::`** where your conventions call for it.
+* Attach **`id::`** (UUID v4 for new anchors, or persisted parser UUIDv5) to durable anchors; use **`source::`** on factual leaves; set **`updated::`** where your conventions call for it.
 * Prefer **`((uuid))`** / `{{embed ((uuid))}}` over duplicating bodies.
 * Use **`tags::`** (e.g. `tags:: [[Topic]]`) on specific blocks when lightweight topical labels help navigation.
 

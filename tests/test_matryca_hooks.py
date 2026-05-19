@@ -23,6 +23,20 @@ async def test_get_page_spatial_context_returns_markdown(tmp_path: Path) -> None
     md = await get_page_spatial_context("DemoPage", str(graph))
     assert "DemoPage" in md or "Spatial view" in md
     assert "Root block" in md or "Child idea" in md
+    assert "source_uuid" in md
+    assert "550e8400-e29b-41d4-a716-446655440000" in md
+
+
+@pytest.mark.asyncio
+async def test_spatial_context_marks_synthetic_blocks_without_id(tmp_path: Path) -> None:
+    graph = tmp_path / "graph"
+    pages = graph / "pages"
+    pages.mkdir(parents=True)
+    (pages / "Ephemeral.md").write_text("- No id yet\n", encoding="utf-8")
+
+    md = await get_page_spatial_context("Ephemeral", str(graph))
+    assert "synthetic_id` true" in md
+    assert "not on disk" in md
 
 
 def test_resolve_logseq_page_md_raises_when_pages_missing(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from src.graph.block_ref_lint import (
@@ -52,13 +53,50 @@ def test_lint_flags_unresolved_ref(tmp_path: Path) -> None:
     assert result.broken[0].reason == "unresolved"
 
 
-def test_collect_block_ref_targets_flags_non_v4_uuid() -> None:
-    """UUID v1 shape inside (()) is matched but marked non-v4."""
+def test_collect_block_ref_targets_accepts_uuid_v5() -> None:
+    u5 = str(uuid.uuid5(uuid.NAMESPACE_DNS, "matryca-test-block"))
+    targets = collect_block_ref_targets(f"x (({u5})) y")
+    assert len(targets) == 1
+    assert targets[0][0] == u5.lower()
+    assert targets[0][1] is True
+
+
+def test_lint_resolves_uuid_v5_id_and_ref(tmp_path: Path) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    known = str(uuid.uuid5(uuid.NAMESPACE_DNS, "ephemeral-block"))
+    (pages / "a.md").write_text(
+        f"- Block A\n  id:: {known}\n",
+        encoding="utf-8",
+    )
+    (pages / "b.md").write_text(
+        f"- Ref\n  - See (({known}))\n",
+        encoding="utf-8",
+    )
+    result = lint_block_refs_in_graph(tmp_path)
+    assert not result.broken
+
+
+def test_collect_block_ref_targets_flags_non_v4_v5_uuid() -> None:
+    """UUID v1 shape inside (()) is matched but marked invalid for Logseq."""
     u1 = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
     targets = collect_block_ref_targets(f"x (({u1})) y")
     assert len(targets) == 1
     assert targets[0][0] == u1.lower()
     assert targets[0][1] is False
+
+
+def test_lint_flags_invalid_uuid_version(tmp_path: Path) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    u1 = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    (pages / "x.md").write_text(
+        f"- Broken\n  - (({u1}))\n",
+        encoding="utf-8",
+    )
+    result = lint_block_refs_in_graph(tmp_path)
+    assert len(result.broken) == 1
+    assert result.broken[0].reason == "invalid_uuid"
 
 
 def test_lint_missing_pages_directory(tmp_path: Path) -> None:
