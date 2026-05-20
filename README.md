@@ -38,10 +38,9 @@ Add this block to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "matryca-logseq-llm-wiki": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "src.main"],
-      "cwd": "/absolute/path/to/matryca-logseq-llm-wiki",
+    "matryca-logseq": {
+      "command": "uvx",
+      "args": ["--from", "matryca-logseq", "matryca-logseq-llm-wiki"],
       "env": {
         "LOGSEQ_GRAPH_PATH": "/absolute/path/to/your/Logseq/graph"
       }
@@ -49,6 +48,8 @@ Add this block to `claude_desktop_config.json`:
   }
 }
 ```
+
+Requires [uv](https://docs.astral.sh/uv/) on your `PATH`. No clone and no `cwd` — `uvx` pulls **`matryca-logseq`** from PyPI and runs the `matryca-logseq-llm-wiki` console script.
 
 Restart the MCP host after edits. Optional: `MATRYCA_GIT_SNAPSHOT_ON_WRITE=true` for automatic commits before writes on git-backed graphs.
 
@@ -168,7 +169,13 @@ Each phase adds capabilities; later phases **harden** earlier tools without nece
 
 ## Zero-install execution (`uvx`)
 
-You do **not** need to clone this repository to run the published console script. **[uv](https://docs.astral.sh/uv/)** can materialize an ephemeral environment from the Git VCS URL (the package depends on **`logseq-matryca-parser`** via `git+https` in `pyproject.toml`, so the practical install path remains VCS-backed).
+You do **not** need to clone this repository. **[uv](https://docs.astral.sh/uv/)** can run the published PyPI package in an ephemeral environment:
+
+```bash
+uvx --from matryca-logseq matryca-logseq-llm-wiki
+```
+
+For a bleeding-edge build from `main`, use the Git URL instead:
 
 ```bash
 uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git matryca-logseq-llm-wiki
