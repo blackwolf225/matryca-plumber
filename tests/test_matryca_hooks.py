@@ -39,6 +39,27 @@ async def test_spatial_context_marks_synthetic_blocks_without_id(tmp_path: Path)
     assert "not on disk" in md
 
 
+def test_resolve_logseq_page_md_namespace_slash_to_triple_underscore(tmp_path: Path) -> None:
+    """Logseq page titles use ``/``; on disk namespaces are ``___`` in the filename stem."""
+    graph = tmp_path / "graph"
+    pages = graph / "pages"
+    pages.mkdir(parents=True)
+    (pages / "progetti___Leonardo Brunetta MG.md").write_text("- hub\n", encoding="utf-8")
+
+    path = resolve_logseq_page_md(graph, "progetti/Leonardo Brunetta MG")
+    assert path.name == "progetti___Leonardo Brunetta MG.md"
+
+
+def test_resolve_logseq_page_md_nested_namespace(tmp_path: Path) -> None:
+    graph = tmp_path / "graph"
+    pages = graph / "pages"
+    pages.mkdir(parents=True)
+    (pages / "a___b___c.md").write_text("- leaf\n", encoding="utf-8")
+
+    path = resolve_logseq_page_md(graph, "a/b/c")
+    assert path.name == "a___b___c.md"
+
+
 def test_resolve_logseq_page_md_raises_when_pages_missing(tmp_path: Path) -> None:
     """Missing ``pages/`` should surface as :class:`FileNotFoundError`."""
     empty = tmp_path / "nogpages"

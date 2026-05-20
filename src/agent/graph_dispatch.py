@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import tempfile
 import uuid as uuid_module
 from pathlib import Path
 from typing import Any, cast
 
-from logseq_matryca_parser.agent_writer import _deepest_line_end, append_child_to_node
+from logseq_matryca_parser.agent_writer import _deepest_line_end
 from logseq_matryca_parser.graph import LogseqGraph
 from logseq_matryca_parser.logos_core import LogseqNode
 from loguru import logger
@@ -29,6 +27,7 @@ from ..graph.journal_task_scan import (
     scan_journal_tasks,
 )
 from ..graph.link_tag_hop import format_hop_report_markdown
+from ..graph.markdown_blocks import atomic_write_bytes
 from ..graph.page_write_lock import page_rmw_lock
 from ..graph.property_line_edit import edit_block_property_lines
 from ..graph.reparent_blocks import refactor_logseq_blocks as run_reparent_logseq_blocks
@@ -90,16 +89,31 @@ def _resolve_chain_parent_uuid(
 ) -> str:
     """Return a parent key the parser registry accepts for the next append."""
     graph_root = Path(graph_path).expanduser().resolve()
-    graph = LogseqGraph.load_directory(graph_root)
-    by_id = graph.get_node_by_embed_ref(written_id)
-    if by_id is not None:
-        return written_id
-    parent = _resolve_graph_node(graph, parent_uuid)
-    if parent is not None:
-        for child in reversed(parent.children):
-            if child.clean_text.strip() == block_text.strip():
+    graph: LogseqGraph | None = None
+    for attempt in range(2):
+        graph = LogseqGraph.load_directory(graph_root)
+        by_id = graph.get_node_by_embed_ref(written_id)
+        if by_id is not None:
+            return written_id
+        if attempt == 0:
+            continue
+
+    if graph is not None:
+        parent = _resolve_graph_node(graph, parent_uuid)
+        if parent is not None:
+            for child in reversed(parent.children):
+                if child.clean_text.strip() != block_text.strip():
+                    continue
+                source_uuid = getattr(child, "source_uuid", None)
+                if isinstance(source_uuid, str) and source_uuid.strip():
+                    return source_uuid.strip()
                 return str(child.uuid)
-    return written_id
+
+    msg = (
+        f"New block id::{written_id} was not indexed after write; "
+        "cannot chain nested outline children."
+    )
+    raise ValueError(msg)
 
 
 def _headless_append_child(
@@ -135,10 +149,6 @@ def _headless_append_child(
             raise ValueError(msg)
         parent_uuid_resolved = parent.uuid
 
-        if not props and not tail:
-            append_child_to_node(graph, parent_uuid_resolved, content)
-            return new_uuid
-
         target_node = graph.get_node_by_uuid(parent_uuid_resolved)
         if target_node is None:
             msg = f"No node registered for uuid={parent_uuid_resolved}"
@@ -160,19 +170,7 @@ def _headless_append_child(
             file_lines.insert(insert_index + offset, line)
 
         updated = "".join(file_lines)
-        fd, temp_path = tempfile.mkstemp(
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(updated)
-            os.replace(temp_path, path)
-        except OSError:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-            raise
+        atomic_write_bytes(path, updated.encode("utf-8"), graph_root=graph_root)
 
     return new_uuid
 
@@ -424,6 +422,10 @@ async def dispatch_search(
     return await asyncio.to_thread(_journal)
 
 
+def _mutate_error(message: str) -> dict[str, Any]:
+    return {"ok": False, "error": message}
+
+
 async def dispatch_mutate(
     action: MutateGraphAction,
     target: str,
@@ -431,9 +433,14 @@ async def dispatch_mutate(
 ) -> dict[str, Any]:
     """Route ``mutate_graph`` by ``action`` (headless on-disk writes)."""
     graph_path = graph_path_from_env()
-    resolved_target = (
-        resolve_target(graph_path, target) if graph_path and action != "append_journal" else target
-    )
+    try:
+        resolved_target = (
+            resolve_target(graph_path, target)
+            if graph_path and action != "append_journal"
+            else target
+        )
+    except ValueError as exc:
+        return _mutate_error(str(exc))
 
     if action == "write_outline":
         if not graph_path:
@@ -449,8 +456,8 @@ async def dispatch_mutate(
                 parent_uuid,
                 outline,
             )
-        except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+        except (ValueError, OSError) as exc:
+            return _mutate_error(str(exc))
 
     if action == "edit_property":
         if not graph_path:
@@ -463,7 +470,10 @@ async def dispatch_mutate(
                 "current_size_bytes": 0,
                 "lines_changed": 0,
             }
-        pipe_target = resolve_pipe_target(graph_path, target)
+        try:
+            pipe_target = resolve_pipe_target(graph_path, target)
+        except ValueError as exc:
+            return _mutate_error(str(exc))
         target_parts = [p.strip() for p in pipe_target.split("|", 1)]
         if len(target_parts) != 2 or not target_parts[0] or not target_parts[1]:
             return {
@@ -569,8 +579,8 @@ async def dispatch_mutate(
             parent_block,
             markdown,
         )
-    except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
+    except (ValueError, OSError) as exc:
+        return _mutate_error(str(exc))
 
     return {
         "ok": True,
@@ -593,11 +603,14 @@ async def dispatch_refactor(
 
     refactor_opts = parse_optional_json_query(payload)
     dry_run = bool(refactor_opts.get("dry_run", True))
-    resolved_uuid = target_uuid
-    if "|" in target_uuid:
-        resolved_uuid = resolve_pipe_target(graph_path, target_uuid)
-    elif target_uuid.strip():
-        resolved_uuid = resolve_target(graph_path, target_uuid)
+    try:
+        resolved_uuid = target_uuid
+        if "|" in target_uuid:
+            resolved_uuid = resolve_pipe_target(graph_path, target_uuid)
+        elif target_uuid.strip():
+            resolved_uuid = resolve_target(graph_path, target_uuid)
+    except ValueError as exc:
+        return _mutate_error(str(exc))
 
     if action == "split_large":
         page_ref = resolved_uuid.strip() or None

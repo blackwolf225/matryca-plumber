@@ -57,3 +57,15 @@ def test_resolve_pipe_target(tmp_path: Path) -> None:
     save_alias_registry(tmp_path, _registry_with({0: BLOCK_UUID}))
     resolved = resolve_pipe_target(tmp_path, "Demo Page|[0]")
     assert resolved == f"Demo Page|{BLOCK_UUID}"
+
+
+def test_load_alias_registry_rejects_corrupt_json(tmp_path: Path) -> None:
+    path = alias_file_path(tmp_path)
+    path.write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(ValueError, match="Corrupt"):
+        load_alias_registry(tmp_path)
+
+
+def test_resolve_target_unknown_alias_with_empty_state(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"\[99\]"):
+        resolve_target(tmp_path, "[99]")

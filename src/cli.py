@@ -211,7 +211,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     try:
         exit_code = asyncio.run(run_cli(args))
-    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+    except (ValueError, TypeError, json.JSONDecodeError, OSError) as exc:
         _emit_error(str(exc))
         raise SystemExit(1) from exc
     except KeyboardInterrupt:
