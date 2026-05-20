@@ -5,12 +5,13 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,3 +32,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${GITHUB_REF_NAME}" dist/* --generate-notes
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
