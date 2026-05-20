@@ -1,13 +1,13 @@
 # ==============================================================================
-# .repomixignore - Configurazione d'Élite per Matryca Logseq LLM Wiki
+# .repomixignore - Configurazione d'Élite per Matryca Brain OS
 # ==============================================================================
 
-# --- Version Control ---
+# --- Version Control & GitHub ---
 .git/
 .github/
 .gitignore
 
-# --- Python & Ambienti Virtuali ---
+# --- Python & Virtual Environments ---
 __pycache__/
 *.pyc
 *.pyo
@@ -19,36 +19,44 @@ build/
 dist/
 *.egg-info/
 
-# --- Cache dei Linter, Formatter e Test (Ruff, MyPy, Pytest) ---
+# --- Linter, Formatter & Test Caches (Ruff, MyPy, Pytest) ---
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .coverage
 htmlcov/
 
+# --- Matryca Brain Daemon & State (CRITICO: Esclude i file di runtime del Demone) ---
+*.pid
+.matryca_brain_daemon.pid
+.matryca_daemon_state.json
+.matryca_xray_state.json
+logs/
+logs/*
+logs/matryca_brain_ops.log
+
 # --- File di Configurazione Locali e Segreti (Sicurezza) ---
 .env
 .env.local
 .env.*.local
-# Escludi le impostazioni personali attive per non sporcare il prompt
 matryca-wiki.yml
 
-# --- Logseq (graph locali / test) ---
+# --- Logseq (Graph locali di test ed esperimenti testuali) ---
+journals/
+pages/
 LOGSEQ copy test LLM/
 
-# --- File Temporanei e Backup (Generati dai nostri tool di Fase 3, 7 e 8) ---
+# --- File Temporanei e Backup Atomici (Surgical editors di Fase 8) ---
 *.bak
 *.tmp
 *.md.tmp
 
-# --- Output di Repomix (CRITICO: Evita loop ricorsivi e file giganti) ---
+# --- Output di Repomix (Evita loop ricorsivi infiniti dello strumento) ---
 repomix-output.xml
 repomix-output.txt
 repomix-output.json
 
-# --- Roadmap Storiche Completate (Opzionale) ---
-# Scommenta le linee sotto se vuoi inviarmi SOLO il codice e la documentazione attiva,
-# risparmiando spazio prezioso per i file archiviati delle vecchie roadmap.
+# --- Roadmap d'Archivio ---
 # ROADMAP_LLM_WIKI.md
 # ROADMAP_LLM_WIKI_PHASE_3.md
 # ROADMAP_LOGSEQ_SUPERPOWERS.md

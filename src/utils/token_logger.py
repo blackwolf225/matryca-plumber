@@ -1,0 +1,155 @@
+"""Token-accurate JSONL logger for local LLM operations (Matryca Brain)."""
+
+from __future__ import annotations
+
+import json
+import os
+import threading
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal
+
+OperationType = Literal[
+    "Concept Indexing",
+    "Semantic Linting",
+    "Structural Refactoring",
+    "Health Check",
+    "Daemon Lifecycle",
+]
+
+DEFAULT_LOG_PATH = Path("logs") / "matryca_brain_ops.log"
+_MAX_PROMPT_CHARS = 12_000
+_MAX_RESPONSE_CHARS = 12_000
+
+_write_guard = threading.Lock()
+
+
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"... [truncated {len(text) - limit} chars]"
+
+
+def _default_log_path() -> Path:
+    override = os.environ.get("MATRYCA_BRAIN_LOG_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return DEFAULT_LOG_PATH
+
+
+@dataclass
+class TokenLogEntry:
+    """One LLM transaction record."""
+
+    timestamp: str
+    target_file: str
+    operation: OperationType
+    prompt_tokens: int
+    completion_tokens: int
+    prompt: str
+    response: str
+    latency_seconds: float
+    model: str = ""
+    ok: bool = True
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "target_file": self.target_file,
+            "operation": self.operation,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.prompt_tokens + self.completion_tokens,
+            "prompt": self.prompt,
+            "response": self.response,
+            "latency_seconds": round(self.latency_seconds, 4),
+            "model": self.model,
+            "ok": self.ok,
+            "error": self.error,
+        }
+
+
+@dataclass
+class TokenLogger:
+    """Append-only JSONL logger with in-memory session counters."""
+
+    log_path: Path = field(default_factory=_default_log_path)
+    session_prompt_tokens: int = 0
+    session_completion_tokens: int = 0
+
+    def log_turn(
+        self,
+        *,
+        target_file: str | Path,
+        operation: OperationType,
+        prompt_tokens: int,
+        completion_tokens: int,
+        prompt: str,
+        response: str,
+        latency_seconds: float,
+        model: str = "",
+        ok: bool = True,
+        error: str | None = None,
+    ) -> TokenLogEntry:
+        """Persist one LLM turn and update session token totals."""
+        entry = TokenLogEntry(
+            timestamp=datetime.now(tz=UTC).isoformat(),
+            target_file=str(target_file),
+            operation=operation,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            prompt=_truncate(prompt, _MAX_PROMPT_CHARS),
+            response=_truncate(response, _MAX_RESPONSE_CHARS),
+            latency_seconds=latency_seconds,
+            model=model,
+            ok=ok,
+            error=error,
+        )
+        self.session_prompt_tokens += prompt_tokens
+        self.session_completion_tokens += completion_tokens
+        self._append(entry)
+        return entry
+
+    def _append(self, entry: TokenLogEntry) -> None:
+        line = json.dumps(entry.to_dict(), ensure_ascii=False) + "\n"
+        with _write_guard:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
+                handle.flush()
+                os.fsync(handle.fileno())
+
+    def tail_lines(self, count: int = 5) -> list[str]:
+        """Return the last ``count`` non-empty log lines (raw JSONL)."""
+        if not self.log_path.is_file():
+            return []
+        text = self.log_path.read_text(encoding="utf-8", errors="replace")
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        return lines[-count:]
+
+    def tail_summaries(self, count: int = 5) -> list[str]:
+        """Human-readable summaries for the TUI activity feed."""
+        summaries: list[str] = []
+        for raw in self.tail_lines(count):
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                summaries.append(raw[:120])
+                continue
+            op = payload.get("operation", "?")
+            target = Path(str(payload.get("target_file", "?"))).name
+            pt = payload.get("prompt_tokens", 0)
+            ct = payload.get("completion_tokens", 0)
+            lat = payload.get("latency_seconds", 0)
+            summaries.append(f"{op} · {target} · p={pt} c={ct} · {lat}s")
+        return summaries
+
+
+__all__ = [
+    "DEFAULT_LOG_PATH",
+    "OperationType",
+    "TokenLogEntry",
+    "TokenLogger",
+]

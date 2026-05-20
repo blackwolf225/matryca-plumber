@@ -10,6 +10,7 @@ from src.graph.generational_cache import (
     cached_build_alias_index,
     clear_generational_caches,
     get_cached_bm25_corpus,
+    patch_generational_caches_for_paths,
     score_bm25_query,
 )
 from src.graph.global_fence_scanner import compute_page_protected_line_indices
@@ -97,6 +98,48 @@ def test_bm25_corpus_cache_and_score(tmp_path: Path) -> None:
     assert c1.n_docs == c2.n_docs
     rows = score_bm25_query(c1, "cat", limit=5)
     assert rows and rows[0][0].endswith("a.md")
+
+
+def test_patch_generational_cache_avoids_full_alias_rebuild(tmp_path: Path) -> None:
+    clear_generational_caches()
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    page_a = pages / "A.md"
+    page_b = pages / "B.md"
+    page_a.write_text("alias:: Alpha\n", encoding="utf-8")
+    page_b.write_text("alias:: Beta\n", encoding="utf-8")
+    idx_before = cached_build_alias_index(tmp_path)
+    assert idx_before.resolve("Alpha").matched
+    assert idx_before.resolve("Beta").matched
+
+    page_a.write_text("alias:: AlphaPrime\n", encoding="utf-8")
+    assert patch_generational_caches_for_paths(tmp_path, [page_a]) is True
+    idx_after = cached_build_alias_index(tmp_path)
+    assert idx_after is idx_before
+    assert idx_after.resolve("AlphaPrime").matched
+    assert idx_after.resolve("Beta").matched
+    assert not idx_after.resolve("Alpha").matched
+
+
+def test_patch_generational_cache_avoids_full_bm25_rebuild(tmp_path: Path) -> None:
+    clear_generational_caches()
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    page_a = pages / "a.md"
+    page_b = pages / "b.md"
+    page_a.write_text("cat dog", encoding="utf-8")
+    page_b.write_text("bird fish", encoding="utf-8")
+    corpus_before = get_cached_bm25_corpus(tmp_path)
+    assert corpus_before.n_docs == 2
+
+    page_a.write_text("cat dog elephant", encoding="utf-8")
+    assert patch_generational_caches_for_paths(tmp_path, [page_a]) is True
+    corpus_after = get_cached_bm25_corpus(tmp_path)
+    assert corpus_after is corpus_before
+    rows = score_bm25_query(corpus_after, "elephant", limit=5)
+    assert rows and rows[0][0].endswith("a.md")
+    bird_rows = score_bm25_query(corpus_after, "bird", limit=5)
+    assert bird_rows and bird_rows[0][0].endswith("b.md")
 
 
 def test_property_edit_rejects_protected_line(tmp_path: Path) -> None:

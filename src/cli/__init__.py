@@ -13,22 +13,29 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from .agent.graph_dispatch import (
+from ..agent.graph_dispatch import (
     dispatch_lint,
     dispatch_mutate,
     dispatch_read,
     dispatch_refactor,
     dispatch_search,
 )
-from .agent.graph_tool_helpers import (
+from ..agent.graph_tool_helpers import (
     MutateGraphAction,
     ReadGraphTarget,
     RefactorBlocksAction,
     RunLinterName,
     SearchGraphMethod,
 )
-from .config import load_matryca_wiki_config
-from .graph.service_manager import manage_matryca_service
+from ..agent.maintenance_daemon import (
+    resolve_graph_root,
+    start_daemon_detached,
+    start_daemon_foreground,
+    stop_daemon,
+)
+from ..config import load_matryca_wiki_config
+from ..graph.service_manager import manage_matryca_service
+from .tui_dashboard import run_dashboard
 
 READ_TARGETS: tuple[ReadGraphTarget, ...] = (
     "page",
@@ -64,7 +71,7 @@ LINTER_NAMES: tuple[RunLinterName, ...] = (
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Construct the top-level CLI parser and six domain subcommands."""
+    """Construct the top-level CLI parser and domain subcommands."""
     parser = argparse.ArgumentParser(prog="matryca", description="Agent-native Logseq graph CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -147,6 +154,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Install or remove the per-user background service unit",
     )
 
+    brain_p = sub.add_parser(
+        "brain",
+        help="Matryca Brain maintenance daemon (local LLM graph indexing)",
+    )
+    brain_sub = brain_p.add_subparsers(dest="brain_action", required=True)
+    brain_start = brain_sub.add_parser("start", help="Start the maintenance daemon")
+    brain_start.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run in the current terminal instead of detaching",
+    )
+    brain_sub.add_parser("status", help="Open the live TUI dashboard")
+    brain_sub.add_parser("stop", help="Gracefully stop the running daemon")
+
     return parser
 
 
@@ -218,6 +239,26 @@ async def run_cli(args: argparse.Namespace) -> int:
         if service_out.get("ok") is False:
             return 1
         return 0
+
+    if command == "brain":
+        graph_root = resolve_graph_root()
+        brain_action = args.brain_action
+        if brain_action == "start":
+            if args.foreground:
+                start_daemon_foreground(graph_root)
+                return 0
+            start_out = start_daemon_detached(graph_root)
+            _emit_result(start_out)
+            return 0 if start_out.get("ok") is not False else 1
+        if brain_action == "status":
+            run_dashboard(graph_root=graph_root)
+            return 0
+        if brain_action == "stop":
+            stop_out = stop_daemon(graph_root)
+            _emit_result(stop_out)
+            return 0
+        _emit_error(f"unknown brain action: {brain_action}")
+        return 2
 
     _emit_error(f"unknown command: {command}")
     return 2

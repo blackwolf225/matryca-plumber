@@ -8,7 +8,14 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from .alias_index import AliasIndex, build_alias_index, iter_alias_source_paths
+from .alias_index import (
+    AliasIndex,
+    build_alias_index,
+    index_aliases_from_file,
+    iter_alias_source_paths,
+    page_title_from_path,
+    remove_page_from_alias_index,
+)
 
 _lock = threading.Lock()
 _alias_cache: dict[str, tuple[frozenset[tuple[str, int]], AliasIndex]] = {}
@@ -39,6 +46,134 @@ def _signature(paths: list[Path], root: Path) -> frozenset[tuple[str, int]]:
         rel = p.relative_to(root).as_posix()
         pairs.append((rel, mt))
     return frozenset(pairs)
+
+
+def _patch_signature(
+    sig: frozenset[tuple[str, int]],
+    root: Path,
+    *,
+    updated_paths: list[Path] | None = None,
+    removed_rels: list[str] | None = None,
+) -> frozenset[tuple[str, int]]:
+    """Return a copy of ``sig`` with updated mtimes or removed paths."""
+    merged = dict(sig)
+    for rel in removed_rels or []:
+        merged.pop(rel, None)
+    for path in updated_paths or []:
+        try:
+            rel = path.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        mt = _mtime_ns(path)
+        if mt is None:
+            merged.pop(rel, None)
+        else:
+            merged[rel] = mt
+    return frozenset(merged.items())
+
+
+def _page_title_from_rel(rel: str) -> str:
+    return rel.removesuffix(".md").replace("pages/", "").replace("journals/", "")
+
+
+def _remove_bm25_doc(corpus: Bm25Corpus, rel: str) -> None:
+    if rel not in corpus.rels:
+        return
+    idx = corpus.rels.index(rel)
+    old_tokens = corpus.docs_tokens[idx]
+    for token in set(old_tokens):
+        count = corpus.df.get(token, 0) - 1
+        if count <= 0:
+            corpus.df.pop(token, None)
+        else:
+            corpus.df[token] = count
+    del corpus.rels[idx]
+    del corpus.docs_tokens[idx]
+    del corpus.doc_lens[idx]
+    corpus.n_docs = max(0, corpus.n_docs - 1)
+    corpus.avgdl = sum(corpus.doc_lens) / corpus.n_docs if corpus.n_docs else 1.0
+
+
+def _replace_bm25_doc(corpus: Bm25Corpus, rel: str, tokens: list[str]) -> None:
+    _remove_bm25_doc(corpus, rel)
+    if not tokens:
+        return
+    corpus.rels.append(rel)
+    corpus.docs_tokens.append(tokens)
+    corpus.doc_lens.append(len(tokens))
+    for token in set(tokens):
+        corpus.df[token] = corpus.df.get(token, 0) + 1
+    corpus.n_docs += 1
+    corpus.avgdl = sum(corpus.doc_lens) / corpus.n_docs if corpus.n_docs else 1.0
+
+
+def patch_generational_caches_for_paths(
+    graph_root: str | Path,
+    changed_paths: list[Path],
+    *,
+    removed_rels: list[str] | None = None,
+) -> bool:
+    """Incrementally refresh alias + BM25 caches for touched paths (no full rebuild).
+
+    Call after the Brain daemon writes a page so MCP sessions keep warm caches.
+    Returns ``True`` when at least one in-memory cache was patched.
+    """
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    key = str(root)
+    resolved = [p.expanduser().resolve(strict=False) for p in changed_paths]
+    patched = False
+
+    with _lock:
+        alias_hit = _alias_cache.get(key)
+        if alias_hit is not None:
+            sig, idx = alias_hit
+            for rel in removed_rels or []:
+                remove_page_from_alias_index(idx, _page_title_from_rel(rel))
+            for path in resolved:
+                if path.is_file():
+                    title = page_title_from_path(root, path)
+                    remove_page_from_alias_index(idx, title)
+                    index_aliases_from_file(idx, root, path)
+            new_sig = _patch_signature(
+                sig,
+                root,
+                updated_paths=[p for p in resolved if p.is_file()],
+                removed_rels=removed_rels,
+            )
+            _alias_cache[key] = (new_sig, idx)
+            patched = True
+
+        bm25_hit = _bm25_cache.get(key)
+        if bm25_hit is not None:
+            sig, corpus = bm25_hit
+            from src.rag.local_query import tokenize
+
+            for rel in removed_rels or []:
+                _remove_bm25_doc(corpus, rel)
+            for path in resolved:
+                if not path.is_file():
+                    continue
+                try:
+                    rel = path.relative_to(root).as_posix()
+                except ValueError:
+                    continue
+                try:
+                    raw = path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    _remove_bm25_doc(corpus, rel)
+                    continue
+                toks = tokenize(raw)
+                _replace_bm25_doc(corpus, rel, toks)
+            new_sig = _patch_signature(
+                sig,
+                root,
+                updated_paths=[p for p in resolved if p.is_file()],
+                removed_rels=removed_rels,
+            )
+            _bm25_cache[key] = (new_sig, corpus)
+            patched = True
+
+    return patched
 
 
 def cached_build_alias_index(graph_root: str | Path) -> AliasIndex:
@@ -169,5 +304,6 @@ __all__ = [
     "cached_build_alias_index",
     "clear_generational_caches",
     "get_cached_bm25_corpus",
+    "patch_generational_caches_for_paths",
     "score_bm25_query",
 ]

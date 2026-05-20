@@ -37,10 +37,31 @@ def _iter_markdown_files(graph_root: Path) -> list[Path]:
     journals = graph_root / "journals"
     files: list[Path] = []
     if pages.is_dir():
-        files.extend(sorted(pages.rglob("*.md")))
+        files.extend(
+            p for p in sorted(pages.rglob("*.md")) if is_scannable_graph_markdown(p, graph_root)
+        )
     if journals.is_dir():
-        files.extend(sorted(journals.rglob("*.md")))
+        files.extend(
+            p for p in sorted(journals.rglob("*.md")) if is_scannable_graph_markdown(p, graph_root)
+        )
     return files
+
+
+MATRYCA_INTERNAL_DIR_NAMES = frozenset({".matryca_semantic_cache"})
+
+
+def is_scannable_graph_markdown(path: Path, graph_root: Path) -> bool:
+    """Return False for hidden path segments and Matryca-internal directories."""
+    try:
+        rel = path.relative_to(graph_root)
+    except ValueError:
+        return False
+    for part in rel.parts:
+        if part.startswith("."):
+            return False
+        if part in MATRYCA_INTERNAL_DIR_NAMES:
+            return False
+    return True
 
 
 def page_title_from_path(graph_root: Path, path: Path) -> str:
@@ -187,11 +208,56 @@ def build_alias_index(graph_root: str | Path) -> AliasIndex:
     return idx
 
 
+def remove_page_from_alias_index(idx: AliasIndex, page_title: str) -> None:
+    """Drop all alias entries owned by ``page_title`` (for incremental cache refresh)."""
+    stale_keys = [key for key, title in idx.alias_to_page.items() if title == page_title]
+    for key in stale_keys:
+        del idx.alias_to_page[key]
+    idx.page_to_aliases.pop(page_title, None)
+    idx.page_to_relpath.pop(page_title, None)
+
+
+def index_aliases_from_file(idx: AliasIndex, graph_root: Path, path: Path) -> None:
+    """Merge ``alias::`` lines from one markdown file into an existing index."""
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        idx.collision_notes.append(f"unreadable {path}: {exc}")
+        return
+    rel = path.relative_to(root).as_posix()
+    title = page_title_from_path(root, path)
+    idx.page_to_relpath[title] = rel
+
+    aliases_found: list[str] = []
+    for match in _ALIAS_LINE.finditer(text):
+        segments = _split_alias_segments(match.group(1))
+        for seg in segments:
+            aliases_found.append(seg)
+            nk = normalize_concept_key(seg)
+            if not nk:
+                continue
+            existing = idx.alias_to_page.get(nk)
+            if existing and existing != title:
+                idx.collision_notes.append(
+                    f"alias `{seg}` ({nk!r}) maps to both `{existing}` and `{title}`; "
+                    f"keeping `{existing}`",
+                )
+                continue
+            if nk not in idx.alias_to_page:
+                idx.alias_to_page[nk] = title
+    if aliases_found:
+        idx.page_to_aliases[title] = aliases_found
+
+
 __all__ = [
     "AliasIndex",
     "ResolvedEntity",
     "build_alias_index",
+    "index_aliases_from_file",
+    "is_scannable_graph_markdown",
     "iter_alias_source_paths",
     "normalize_concept_key",
     "page_title_from_path",
+    "remove_page_from_alias_index",
 ]

@@ -17,7 +17,7 @@ from src.cli import build_parser, main, run_cli
 BLOCK_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 
-def test_parser_exposes_six_subcommands() -> None:
+def test_parser_exposes_seven_subcommands() -> None:
     parser = build_parser()
     sub_action = next(
         action
@@ -25,6 +25,7 @@ def test_parser_exposes_six_subcommands() -> None:
         if isinstance(action, argparse._SubParsersAction)  # noqa: SLF001
     )
     assert sorted(sub_action.choices) == [
+        "brain",
         "lint",
         "mutate",
         "read",
