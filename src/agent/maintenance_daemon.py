@@ -1666,6 +1666,8 @@ class MaintenanceDaemon:
                     lint_config,
                     reset_history_after=not cluster_cycle,
                 )
+                if lint_config.thermal_delay_cognitive > 0:
+                    time.sleep(lint_config.thermal_delay_cognitive)
 
         self._prune_stale_catalog_entries()
         state.session_prompt_tokens = self.token_logger.session_prompt_tokens

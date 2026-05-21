@@ -109,6 +109,8 @@ def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> N
         "MATRYCA_LINT_PROPERTY_HYGIENE",
         "MATRYCA_LINT_BACKPROPAGATE_LINKS",
         "MATRYCA_LINT_SEMANTIC_ROUTING",
+        "MATRYCA_THERMAL_DELAY_BOOTSTRAP",
+        "MATRYCA_THERMAL_DELAY_COGNITIVE",
     ):
         monkeypatch.delenv(key, raising=False)
     cfg = load_plumber_lint_config()
@@ -116,6 +118,8 @@ def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> N
     assert cfg.marpa_framework is False
     assert cfg.dangling_max_words == 50
     assert cfg.any_enabled is False
+    assert cfg.thermal_delay_bootstrap == 2.0
+    assert cfg.thermal_delay_cognitive == 2.0
 
 
 def test_dangling_healer_creates_seed_page(graph_root: Path) -> None:

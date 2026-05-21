@@ -23,6 +23,24 @@ Phases **9–13** (Trust plane, delivery, Fortress, Headless Revolution, operati
 
 ---
 
+## [2026-05-21] Phase 14b: Thermal Pacing & Hardware Protection Shield
+
+### Context
+
+Phase 1 stateless bootstrap reduced per-page latency from ~25 s to ~2 s, but back-to-back local inference still saturates consumer GPU/NPU heatsinks during long harvest runs — causing fan ramp, battery drain, and thermal throttling on MacBook-class hardware.
+
+### Decisions made
+
+1. **Dual-parameter duty-cycle modulation** — Introduced `MATRYCA_THERMAL_DELAY_BOOTSTRAP` (Phase 1 catalog harvest) and `MATRYCA_THERMAL_DELAY_COGNITIVE` (Phase 2 indexing + cognitive lint), both defaulting to **2.0 seconds** and parsed as floats via `load_plumber_lint_config()`.
+2. **Phase-aware injection sites** — Bootstrap pacing fires after each successful LLM page summary in `run_bootstrap_harvest()`; cognitive pacing fires at the end of each file iteration in `MaintenanceDaemon.run_cycle()`.
+3. **Zero-cost disable path** — Setting either env var to **`0`** skips the corresponding sleep block with no other behavioral change.
+
+### Status
+
+Shipped. Operators tune delays independently per phase without touching code.
+
+---
+
 ## [2026-05-21] Phase 14: Consolidamento Ingegneristico e Architettura GraphRAG Locale
 
 ### Contesto e Problema Rilevato

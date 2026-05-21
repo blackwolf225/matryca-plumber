@@ -89,6 +89,8 @@ class PlumberLintConfig:
     context_compression: bool = False
     compression_trigger: int = 100_000
     compression_target: int = 30_000
+    thermal_delay_bootstrap: float = 2.0
+    thermal_delay_cognitive: float = 2.0
 
     @property
     def any_enabled(self) -> bool:
@@ -137,6 +139,8 @@ def load_plumber_lint_config() -> PlumberLintConfig:
         context_compression=_env_bool("MATRYCA_PLUMBER_CONTEXT_COMPRESSION"),
         compression_trigger=_env_int("MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", 100_000),
         compression_target=_env_int("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
+        thermal_delay_bootstrap=_env_float("MATRYCA_THERMAL_DELAY_BOOTSTRAP", 2.0),
+        thermal_delay_cognitive=_env_float("MATRYCA_THERMAL_DELAY_COGNITIVE", 2.0),
     )
 
 

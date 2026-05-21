@@ -531,6 +531,17 @@ Compact local weights (Gemma 4, Qwen 7B/9B) waste tokens on conversational JSON 
 
 Long multi-turn maintenance loops inflate the local **KV cache** and degrade attention (“needle in a haystack”). When estimated history tokens exceed **`MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS`** (default **100,000**), **`condense_messages`** collapses intermediate turns into a dense **`## Consolidated Epistemic State`** summary targeting **`MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS`** (default **30,000**). The system prompt and trailing user turn are preserved; compression LLM failures fall back to truncation — the daemon never exits.
 
+#### Thermal pacing & hardware protection shield
+
+Continuous local inference on consumer laptops saturates GPU/NPU heatsinks and triggers thermal throttling. **Thermal Pacing** (duty-cycle modulation) inserts configurable cooling delays after each LLM inference event:
+
+| Phase | Env var | Default | Injection site |
+|-------|---------|---------|----------------|
+| **Phase 1 — bootstrap harvest** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` | **2.0 s** | After each successful page summary in `run_bootstrap_harvest()` |
+| **Phase 2 — cognitive cycle** | `MATRYCA_THERMAL_DELAY_COGNITIVE` | **2.0 s** | After each file iteration in `MaintenanceDaemon.run_cycle()` |
+
+Set either variable to **`0`** to disable pacing for that phase. Defaults preserve battery longevity and zero-throttling execution on Apple Silicon and discrete-GPU workstations without sacrificing data quality.
+
 #### Fault-tolerant block reference quarantine
 
 Human typo'd `((uuid))` tokens must not crash the daemon. **`run_cycle()`** preflights each page with **`find_malformed_block_refs`**. On failure:
@@ -562,7 +573,10 @@ flowchart TD
   APPLY --> PATCH["patch_generational_caches_for_paths"]
   PATCH --> STATE["Update .matryca_daemon_state.json"]
   QUAR --> STATE
-  STATE --> SLEEP["sleep MATRYCA_PLUMBER_POLL_SECONDS"]
+  STATE --> THERMAL{"thermal_delay_cognitive\n> 0?"}
+  THERMAL -->|yes| COOL["sleep MATRYCA_THERMAL_DELAY_COGNITIVE"]
+  THERMAL -->|no| SLEEP
+  COOL --> SLEEP["sleep MATRYCA_PLUMBER_POLL_SECONDS"]
   SLEEP --> SCAN
 ```
 
@@ -574,6 +588,7 @@ flowchart TD
 | **HTTP / compression fallbacks** | `condense_messages` try/except → truncation; compression warnings logged as `[COMPRESSION WARN]` | LM Studio offline must not kill the child process |
 | **Idempotent backlink deduplication** | `run_backlink_backpropagator` + semantic lint skip reasons (`no_change`, `uuid_not_found`) | Prevents duplicate wikilink injection on re-runs |
 | **Token estimate safety buffer** | `TOKEN_ESTIMATE_SAFETY_MULTIPLIER = 1.12` on Qwen/Gemma heuristic | Triggers compression before VRAM cliff on code/CJK-heavy pages |
+| **Thermal pacing shield** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` / `MATRYCA_THERMAL_DELAY_COGNITIVE` (default **2.0 s** each; **0** disables) | Breaks continuous heat curves during bootstrap and Phase 2 cognitive cycles |
 
 ### Plumber index artifacts (on-disk)
 

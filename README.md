@@ -142,6 +142,15 @@ Copy **`.env.example`** → **`.env`**. The only **required** variable for MCP +
 | `MATRYCA_PLUMBER_POLL_SECONDS` | `30` | Seconds between graph scan cycles |
 | `MATRYCA_PLUMBER_LOG_PATH` | `logs/matryca_plumber_ops.log` | JSONL ops log path |
 
+### Thermal pacing (hardware protection)
+
+Duty-cycle modulation after each local LLM inference event. Set to **`0`** to disable. Loaded by `load_plumber_lint_config()` in `src/agent/plumber_config.py`:
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `MATRYCA_THERMAL_DELAY_BOOTSTRAP` | `2.0` | Cooling pause (seconds) after each Phase 1 bootstrap page summary |
+| `MATRYCA_THERMAL_DELAY_COGNITIVE` | `2.0` | Cooling pause (seconds) after each Phase 2 file iteration (indexing + cognitive lint) |
+
 ### Context compression (Ermes mode)
 
 Loaded by `load_plumber_lint_config()` in `src/agent/plumber_config.py`:

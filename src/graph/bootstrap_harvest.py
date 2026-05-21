@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
@@ -230,9 +232,11 @@ def run_bootstrap_harvest(
     incremental: bool = False,
     rebuild_index: bool = True,
     phase1_strict: bool = False,
+    config: PlumberLintConfig | None = None,
 ) -> HarvestMetrics:
     """Scan the graph, populate the master catalog, and compile the master index."""
     root = graph_root.expanduser().resolve(strict=False)
+    lint_config = config or load_plumber_lint_config()
     catalog = load_master_catalog(root, force_reload=True)
     metrics = HarvestMetrics()
     incoming = _compute_incoming_backlinks(root)
@@ -267,6 +271,8 @@ def run_bootstrap_harvest(
             metrics.regex_harvested += 1
         elif status == "llm":
             metrics.llm_harvested += 1
+            if lint_config.thermal_delay_bootstrap > 0:
+                time.sleep(lint_config.thermal_delay_bootstrap)
         elif status == "skipped_empty":
             metrics.skipped_empty += 1
         changed = changed or page_changed
