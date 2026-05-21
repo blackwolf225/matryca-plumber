@@ -31,6 +31,7 @@ from src.agent.maintenance_daemon import (
     stop_daemon,
     write_pid_file,
 )
+from src.agent.plumber_llm import BootstrapSummaryResult, GraphInsightsLLMResult
 from src.cli import build_parser
 from src.cli.tui_dashboard import collect_snapshot
 from src.graph.page_write_lock import clear_page_write_locks, page_rmw_lock
@@ -77,6 +78,29 @@ class StubLLM:
                 semantic_corrections=corrections,
             ),
             {"prompt_tokens": 42, "completion_tokens": 17},
+        )
+
+    def harvest_page_summary(
+        self,
+        page_title: str,
+        content: str,
+        *,
+        page_path: Path | None = None,
+        graph_root: Path | None = None,
+    ) -> BootstrapSummaryResult:
+        _ = (content, page_path, graph_root)
+        return BootstrapSummaryResult(summary=f"Summary for {page_title}", suggested_tags=["test"])
+
+    def generate_graph_insights(
+        self,
+        *,
+        metrics_json: str,
+        graph_root: Path,
+    ) -> GraphInsightsLLMResult:
+        _ = (metrics_json, graph_root)
+        return GraphInsightsLLMResult(
+            ontology_report="Stub ontology report.",
+            cleanup_suggestions=["Stub cleanup suggestion."],
         )
 
 
@@ -331,6 +355,8 @@ def test_parser_exposes_plumber_subcommands() -> None:
     assert args_status.plumber_action == "status"
     args_stop = parser.parse_args(["plumber", "stop"])
     assert args_stop.plumber_action == "stop"
+    args_audit = parser.parse_args(["plumber", "audit"])
+    assert args_audit.plumber_action == "audit"
 
 
 def test_semantic_correction_applies_wikilink(graph_root: Path) -> None:

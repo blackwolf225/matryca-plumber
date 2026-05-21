@@ -18,7 +18,15 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from ..graph.alias_index import iter_alias_source_paths
+from ..graph.bootstrap_harvest import (
+    run_bootstrap_harvest,
+    run_incremental_catalog_refresh,
+)
 from ..graph.generational_cache import patch_generational_caches_for_paths
+from ..graph.insights_engine import (
+    INSIGHTS_SYSTEM_PROMPT,
+    run_graph_insights_engine,
+)
 from ..graph.logseq_uuid import find_malformed_block_refs, is_malformed_block_ref_error
 from ..graph.markdown_blocks import atomic_write_bytes, locate_block_by_uuid
 from ..graph.page_write_lock import page_rmw_lock
@@ -38,8 +46,10 @@ from .plumber_config import (
     resolve_lm_model,
 )
 from .plumber_llm import (
+    BootstrapSummaryResult,
     ContextualSeedResult,
     EntityOverlapResult,
+    GraphInsightsLLMResult,
     InferredPropertiesResult,
     MarpaClassificationResult,
 )
@@ -62,6 +72,9 @@ SEMANTIC_INDEX_HEADER = "### Matryca Semantic Index"
 STRUCTURAL_LINT_HEADER = "### Matryca Structural Lint"
 DEFAULT_MODEL = DEFAULT_LM_MODEL  # backward-compatible alias for CLI/TUI
 DEFAULT_POLL_SECONDS = 30.0
+MATRYCA_GENERATED_PAGE_TITLES = frozenset(
+    {"Matryca Master Index", "Matryca Graph Insights"},
+)
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
 _ID_LINE = re.compile(r"^\s*id::\s*(.+?)\s*$", re.IGNORECASE)
@@ -116,6 +129,26 @@ class LLMClient(Protocol):
         graph_root: Path | None = None,
     ) -> tuple[SemanticIndexResult, dict[str, int]]:
         """Return structured index and token usage dict with prompt/completion keys."""
+        ...
+
+    def harvest_page_summary(
+        self,
+        page_title: str,
+        content: str,
+        *,
+        page_path: Path | None = None,
+        graph_root: Path | None = None,
+    ) -> BootstrapSummaryResult:
+        """Return a one-sentence bootstrap summary."""
+        ...
+
+    def generate_graph_insights(
+        self,
+        *,
+        metrics_json: str,
+        graph_root: Path,
+    ) -> GraphInsightsLLMResult:
+        """Return structured graph diagnostics."""
         ...
 
 
@@ -879,6 +912,53 @@ class InstructorLLMClient:
             )
             raise
 
+    def harvest_page_summary(
+        self,
+        page_title: str,
+        content: str,
+        *,
+        page_path: Path | None = None,
+        graph_root: Path | None = None,
+    ) -> BootstrapSummaryResult:
+        """Extract a one-sentence summary for bootstrap harvesting."""
+        prompt = (
+            "Task: extract a concise one-sentence summary for catalog indexing.\n"
+            "Return JSON with summary, suggested_tags (0-5 tags), and optional MARPA domain "
+            "(mappa|area|risorsa|progetto|archivio) when clearly inferable.\n\n"
+            f"Page title: {page_title}\n\n"
+            f"Content:\n{content[:6000]}"
+        )
+        result, _ = self._completion_with_structured_output(
+            prompt=prompt,
+            response_model=BootstrapSummaryResult,
+            system_prompt=finalize_system_prompt(
+                "You are Matryca Plumber's bootstrap harvester. Return JSON only. "
+                "Write one crisp English sentence summarizing the page."
+            ),
+        )
+        _ = (page_path, graph_root)
+        return result
+
+    def generate_graph_insights(
+        self,
+        *,
+        metrics_json: str,
+        graph_root: Path,
+    ) -> GraphInsightsLLMResult:
+        """Generate structured graph diagnostics from topology aggregates."""
+        prompt = (
+            "Task: produce a panoramic ontology report and non-destructive cleanup suggestions "
+            "from the structural metrics below.\n\n"
+            f"Topology metrics JSON:\n{metrics_json[:12000]}"
+        )
+        result, _ = self._completion_with_structured_output(
+            prompt=prompt,
+            response_model=GraphInsightsLLMResult,
+            system_prompt=INSIGHTS_SYSTEM_PROMPT,
+        )
+        _ = graph_root
+        return result
+
 
 @dataclass
 class ScanMetrics:
@@ -915,6 +995,9 @@ def list_pending_files(graph_root: Path, state: DaemonState) -> list[Path]:
     pending: list[Path] = []
     settled_statuses = frozenset({"processed", "skipped"})
     for path in iter_alias_source_paths(graph_root):
+        title = _page_title_from_path(graph_root, path)
+        if title in MATRYCA_GENERATED_PAGE_TITLES:
+            continue
         key = str(path.resolve())
         mtime = path.stat().st_mtime
         rec = state.files.get(key)
@@ -972,6 +1055,7 @@ class MaintenanceDaemon:
         )
         self.max_files_per_cycle = max_files_per_cycle
         self._stop_requested = False
+        self._bootstrap_completed = False
 
     def _sync_runtime_config(self, state: DaemonState) -> DaemonState:
         """Align LLM client and persisted state with the active environment block."""
@@ -981,6 +1065,37 @@ class MaintenanceDaemon:
 
     def request_stop(self) -> None:
         self._stop_requested = True
+
+    def run_bootstrap_pipeline(self) -> None:
+        """Two-phase bootstrap harvest + graph insights before polling."""
+        if self._bootstrap_completed:
+            return
+        try:
+            run_bootstrap_harvest(
+                self.graph_root,
+                llm=self.llm_client,
+                incremental=False,
+                rebuild_index=True,
+            )
+            run_graph_insights_engine(self.graph_root, llm=self.llm_client)
+        except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
+            self.token_logger.log_structural_lint_warning(
+                target_file=self.graph_root,
+                message=f"Bootstrap harvest failed: {exc}",
+                malformed_refs=[],
+            )
+        self._bootstrap_completed = True
+
+    def refresh_catalog_if_stale(self) -> None:
+        """Incrementally sync catalog rows when page mtimes change."""
+        try:
+            run_incremental_catalog_refresh(self.graph_root, llm=self.llm_client)
+        except Exception as exc:  # noqa: BLE001 - never abort daemon cycle
+            self.token_logger.log_structural_lint_warning(
+                target_file=self.graph_root,
+                message=f"Incremental catalog refresh failed: {exc}",
+                malformed_refs=[],
+            )
 
     def _quarantine_structural_lint(
         self,
@@ -1024,6 +1139,7 @@ class MaintenanceDaemon:
         pending = list_pending_files(self.graph_root, state)[: self.max_files_per_cycle]
 
         if not pending:
+            self.refresh_catalog_if_stale()
             state.status = "idle"
             save_daemon_state(self.graph_root, state)
             return state
@@ -1128,6 +1244,7 @@ class MaintenanceDaemon:
         state.session_prompt_tokens = self.token_logger.session_prompt_tokens
         state.session_completion_tokens = self.token_logger.session_completion_tokens
         if not self._stop_requested:
+            self.refresh_catalog_if_stale()
             state.status = "idle"
         save_daemon_state(self.graph_root, state)
         return state
@@ -1146,6 +1263,7 @@ class MaintenanceDaemon:
         signal.signal(signal.SIGINT, _handle_signal)
 
         try:
+            self.run_bootstrap_pipeline()
             while not self._stop_requested:
                 self.run_cycle(state)
                 state = load_daemon_state(self.graph_root)
@@ -1157,6 +1275,24 @@ class MaintenanceDaemon:
             state.status = "stopped"
             save_daemon_state(self.graph_root, state)
             remove_pid_file(self.graph_root)
+
+
+def run_plumber_audit(graph_root: Path | None = None) -> dict[str, Any]:
+    """Manual entrypoint: refresh catalog and compile graph insights dashboard."""
+    root = graph_root or resolve_graph_root()
+    llm = InstructorLLMClient()
+    run_bootstrap_harvest(root, llm=llm, incremental=True, rebuild_index=True)
+    result = run_graph_insights_engine(root, llm=llm)
+    return {
+        "ok": True,
+        "graph_root": str(root),
+        "insights_path": str(result.output_path.relative_to(root)),
+        "page_count": result.metrics.page_count,
+        "orphan_pages": len(result.metrics.orphan_pages),
+        "catalog_coverage": result.metrics.catalog_coverage,
+        "llm_used": result.llm_used,
+        "latency_seconds": round(result.latency_seconds, 3),
+    }
 
 
 def start_daemon_foreground(graph_root: Path | None = None) -> None:
@@ -1223,6 +1359,7 @@ __all__ = [
     "prune_stale_daemon_file_entries",
     "read_pid_file",
     "resolve_graph_root",
+    "run_plumber_audit",
     "save_daemon_state",
     "start_daemon_detached",
     "start_daemon_foreground",

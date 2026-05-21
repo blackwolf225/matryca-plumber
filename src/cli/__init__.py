@@ -29,6 +29,7 @@ from ..agent.graph_tool_helpers import (
 )
 from ..agent.maintenance_daemon import (
     resolve_graph_root,
+    run_plumber_audit,
     start_daemon_detached,
     start_daemon_foreground,
     stop_daemon,
@@ -167,6 +168,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     plumber_sub.add_parser("status", help="Open the live TUI dashboard")
     plumber_sub.add_parser("stop", help="Gracefully stop the running daemon")
+    plumber_sub.add_parser(
+        "audit",
+        help="Run bootstrap harvest and graph insights diagnostic dashboard",
+    )
 
     return parser
 
@@ -257,6 +262,10 @@ async def run_cli(args: argparse.Namespace) -> int:
             stop_out = stop_daemon(graph_root)
             _emit_result(stop_out)
             return 0
+        if plumber_action == "audit":
+            audit_out = run_plumber_audit(graph_root)
+            _emit_result(audit_out)
+            return 0 if audit_out.get("ok") is not False else 1
         _emit_error(f"unknown plumber action: {plumber_action}")
         return 2
 
