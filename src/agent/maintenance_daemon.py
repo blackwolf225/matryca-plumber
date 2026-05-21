@@ -36,6 +36,13 @@ from .brain_modules.semantic_cache_router import (
     cache_put,
     semantic_cache_key,
 )
+from .context_compressor import (
+    COMPRESSION_SYSTEM_PROMPT,
+    MAX_EXECUTION_HISTORY_MESSAGES,
+    ChatMessage,
+    condense_messages,
+    extract_persisted_history,
+)
 
 STATE_FILENAME = ".matryca_daemon_state.json"
 PID_FILENAME = ".matryca_brain_daemon.pid"
@@ -535,6 +542,33 @@ class InstructorLLMClient:
         self.model = model or os.environ.get("MATRYCA_LM_MODEL", DEFAULT_MODEL)
         self.token_logger = token_logger or TokenLogger()
         self._raw_client = OpenAI(base_url=self.base_url, api_key="lm-studio")
+        self._execution_history: list[ChatMessage] = []
+
+    def reset_execution_history(self) -> None:
+        """Drop per-page session history (constant memory footprint across daemon uptime)."""
+        self._execution_history.clear()
+
+    def _trim_execution_history(self) -> None:
+        if len(self._execution_history) > MAX_EXECUTION_HISTORY_MESSAGES:
+            self._execution_history = self._execution_history[-MAX_EXECUTION_HISTORY_MESSAGES:]
+
+    def _append_execution_turn(self, prompt: str, response: str) -> None:
+        self._execution_history.append({"role": "user", "content": prompt})
+        self._execution_history.append({"role": "assistant", "content": response})
+        self._trim_execution_history()
+
+    def _compress_history_via_llm(self, compression_prompt: str) -> str:
+        """Send isolated history to LM Studio for epistemic condensation."""
+        response = self._raw_client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
+                {"role": "user", "content": compression_prompt},
+            ],
+            temperature=0.1,
+        )
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
 
     def _completion_with_structured_output[T: BaseModel](
         self,
@@ -544,18 +578,50 @@ class InstructorLLMClient:
         system_prompt: str,
     ) -> tuple[T, object]:
         """Call LM Studio with JSON schema mode, falling back when parsing fails."""
+        config = load_brain_lint_config()
+        if not config.context_compression:
+            self.reset_execution_history()
+            messages: list[ChatMessage] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+        else:
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(self._execution_history)
+            messages.append({"role": "user", "content": prompt})
+            messages, compression_event = condense_messages(
+                messages,
+                trigger=config.compression_trigger,
+                target=config.compression_target,
+                compress_fn=self._compress_history_via_llm,
+                warn_fn=lambda msg: self.token_logger.log_compression_warning(
+                    msg,
+                    model=self.model,
+                ),
+            )
+            if compression_event is not None:
+                self._execution_history = extract_persisted_history(messages)
+                self.token_logger.log_compression_event(
+                    initial_tokens=compression_event.initial_tokens,
+                    post_tokens=compression_event.post_tokens,
+                    latency_seconds=compression_event.latency_seconds,
+                    compression_ratio=compression_event.compression_ratio,
+                    messages_before=compression_event.messages_before,
+                    messages_after=compression_event.messages_after,
+                    model=self.model,
+                )
+
         errors: list[str] = []
         for mode in _instructor_modes_to_try():
             client = instructor.from_openai(self._raw_client, mode=mode)
             try:
                 parsed, completion = client.chat.completions.create_with_completion(
                     model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
+                    messages=messages,
                     response_model=response_model,
                 )
+                if config.context_compression:
+                    self._append_execution_turn(prompt, parsed.model_dump_json())
                 return parsed, completion
             except Exception as exc:  # noqa: BLE001 - try next instructor mode
                 errors.append(f"{mode.name}: {exc}")
@@ -901,6 +967,9 @@ class MaintenanceDaemon:
                     status="error",
                     error=str(exc),
                 )
+            finally:
+                if isinstance(self.llm_client, InstructorLLMClient):
+                    self.llm_client.reset_execution_history()
 
         state.session_prompt_tokens = self.token_logger.session_prompt_tokens
         state.session_completion_tokens = self.token_logger.session_completion_tokens

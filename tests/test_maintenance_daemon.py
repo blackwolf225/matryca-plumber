@@ -13,6 +13,7 @@ from src.agent.maintenance_daemon import (
     SEMANTIC_INDEX_HEADER,
     DaemonState,
     FileState,
+    InstructorLLMClient,
     MaintenanceDaemon,
     SemanticCrossRef,
     SemanticIndexResult,
@@ -443,3 +444,35 @@ def test_prune_stale_daemon_file_entries_removes_ghosts(graph_root: Path) -> Non
     assert removed == 1
     assert ghost_key not in state.files
     assert str(live.resolve()) in state.files
+
+
+def test_instructor_client_reset_execution_history() -> None:
+    client = InstructorLLMClient(base_url="http://localhost:1234/v1")
+    client._append_execution_turn("prompt-a", '{"ok": true}')
+    assert len(client._execution_history) == 2
+    client.reset_execution_history()
+    assert client._execution_history == []
+
+
+def test_maintenance_daemon_resets_instructor_history_after_cycle(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = InstructorLLMClient(base_url="http://localhost:1234/v1")
+    client._append_execution_turn("turn-one", '{"indexed": true}')
+
+    def fake_index(
+        page_title: str,
+        content: str,
+        *,
+        page_path: Path | None = None,
+        graph_root: Path | None = None,
+    ) -> tuple[SemanticIndexResult, dict[str, int]]:
+        _ = (page_title, content, page_path, graph_root)
+        return SemanticIndexResult(summary="ok"), {"prompt_tokens": 0, "completion_tokens": 0}
+
+    monkeypatch.setattr(client, "index_page", fake_index)
+    _write_page(graph_root, "HistoryReset", f"- Learn about Redis caching\n  id:: {BLOCK_UUID}\n")
+    daemon = MaintenanceDaemon(graph_root, llm_client=client, max_files_per_cycle=1)
+    daemon.run_cycle()
+    assert client._execution_history == []

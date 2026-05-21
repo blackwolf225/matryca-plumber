@@ -16,6 +16,7 @@ OperationType = Literal[
     "Structural Refactoring",
     "Health Check",
     "Daemon Lifecycle",
+    "Context Compression",
 ]
 
 DEFAULT_LOG_PATH = Path("logs") / "matryca_brain_ops.log"
@@ -145,6 +146,64 @@ class TokenLogger:
             lat = payload.get("latency_seconds", 0)
             summaries.append(f"{op} · {target} · p={pt} c={ct} · {lat}s")
         return summaries
+
+    def log_compression_event(
+        self,
+        *,
+        initial_tokens: int,
+        post_tokens: int,
+        latency_seconds: float,
+        compression_ratio: float,
+        messages_before: int,
+        messages_after: int,
+        model: str = "",
+    ) -> None:
+        """Persist a ``[CONTEXT COMPRESSION EVENT]`` record to the ops log."""
+        summary = (
+            "[CONTEXT COMPRESSION EVENT] "
+            f"initial={initial_tokens} post={post_tokens} "
+            f"ratio={compression_ratio:.4f} latency={latency_seconds:.4f}s "
+            f"messages={messages_before}->{messages_after}"
+        )
+        entry = {
+            "timestamp": datetime.now(tz=UTC).isoformat(),
+            "operation": "Context Compression",
+            "message": summary,
+            "initial_tokens": initial_tokens,
+            "post_tokens": post_tokens,
+            "compression_ratio": round(compression_ratio, 4),
+            "latency_seconds": round(latency_seconds, 4),
+            "messages_before": messages_before,
+            "messages_after": messages_after,
+            "model": model,
+        }
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with _write_guard:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
+                handle.flush()
+                os.fsync(handle.fileno())
+
+    def log_compression_warning(self, message: str, *, model: str = "") -> None:
+        """Persist a ``[COMPRESSION WARN]`` fallback record to the ops log."""
+        warn_text = (
+            message if message.startswith("[COMPRESSION WARN]") else f"[COMPRESSION WARN] {message}"
+        )
+        entry = {
+            "timestamp": datetime.now(tz=UTC).isoformat(),
+            "operation": "Context Compression",
+            "message": warn_text,
+            "model": model,
+            "fallback": True,
+        }
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with _write_guard:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
+                handle.flush()
+                os.fsync(handle.fileno())
 
 
 __all__ = [

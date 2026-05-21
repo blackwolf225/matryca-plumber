@@ -51,6 +51,9 @@ class BrainLintConfig:
     property_rules_path: Path | None = None
     backpropagate_links: bool = False
     semantic_routing: bool = False
+    context_compression: bool = False
+    compression_trigger: int = 100_000
+    compression_target: int = 30_000
 
     @property
     def any_enabled(self) -> bool:
@@ -90,6 +93,9 @@ def load_brain_lint_config() -> BrainLintConfig:
         property_rules_path=rules_path,
         backpropagate_links=_env_bool("MATRYCA_LINT_BACKPROPAGATE_LINKS"),
         semantic_routing=_env_bool("MATRYCA_LINT_SEMANTIC_ROUTING"),
+        context_compression=_env_bool("MATRYCA_BRAIN_CONTEXT_COMPRESSION"),
+        compression_trigger=_env_int("MATRYCA_BRAIN_COMPRESSION_TRIGGER_TOKENS", 100_000),
+        compression_target=_env_int("MATRYCA_BRAIN_COMPRESSION_TARGET_TOKENS", 30_000),
     )
 
 
