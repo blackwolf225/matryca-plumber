@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import signal
@@ -12,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 import instructor
 from openai import OpenAI
@@ -51,6 +52,7 @@ from ..graph.semantic_clustering import (
     format_cluster_neighborhood,
     load_or_compute_semantic_clusters,
 )
+from ..utils.json_repair import parse_llm_json
 from ..utils.token_logger import OperationType, TokenLogger
 from .context_compressor import (
     COMPRESSION_SYSTEM_PROMPT,
@@ -863,6 +865,27 @@ class InstructorLLMClient:
         content = response.choices[0].message.content
         return content.strip() if content else ""
 
+    def _raw_json_completion(self, messages: list[ChatMessage]) -> str:
+        """Request a raw JSON completion when instructor parsing fails."""
+        api_messages = cast(Any, messages)
+        try:
+            response = self._raw_client.chat.completions.create(
+                model=self.model,
+                messages=api_messages,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+        except Exception:  # noqa: BLE001 - local servers may reject response_format
+            response = self._raw_client.chat.completions.create(
+                model=self.model,
+                messages=api_messages,
+                temperature=0.1,
+            )
+        content = response.choices[0].message.content
+        if content is None or not content.strip():
+            raise RuntimeError("Empty raw JSON completion")
+        return str(content.strip())
+
     def _completion_with_structured_output[T: BaseModel](
         self,
         *,
@@ -920,6 +943,16 @@ class InstructorLLMClient:
                 return parsed, completion
             except Exception as exc:  # noqa: BLE001 - try next instructor mode
                 errors.append(f"{mode.name}: {exc}")
+        try:
+            raw_text = self._raw_json_completion(messages)
+            parsed = parse_llm_json(raw_text, response_model)
+            if use_history:
+                self._append_execution_turn(prompt, parsed.model_dump_json())
+            if stateless:
+                self.reset_execution_history()
+            return parsed, raw_text
+        except Exception as exc:  # noqa: BLE001 - include lenient repair in failure chain
+            errors.append(f"lenient-repair: {exc}")
         msg = "Structured output failed for all instructor modes: " + "; ".join(errors)
         raise RuntimeError(msg)
 
@@ -1171,6 +1204,14 @@ class ScanMetrics:
         return round(100.0 * self.processed / self.total, 1)
 
 
+def _mtime_matches(stored: float, current: float) -> bool:
+    """Return whether a checkpoint mtime still matches the on-disk value."""
+    if stored == current:
+        return True
+    # JSON checkpoint round-trip can shave sub-microsecond float precision.
+    return math.isclose(stored, current, rel_tol=0.0, abs_tol=1e-6)
+
+
 def compute_scan_metrics(graph_root: Path, state: DaemonState) -> ScanMetrics:
     files = iter_alias_source_paths(graph_root)
     total = len(files)
@@ -1180,7 +1221,7 @@ def compute_scan_metrics(graph_root: Path, state: DaemonState) -> ScanMetrics:
         key = str(path.resolve())
         mtime = path.stat().st_mtime if path.is_file() else 0.0
         rec = state.files.get(key)
-        if rec is not None and rec.mtime == mtime:
+        if rec is not None and _mtime_matches(rec.mtime, mtime):
             if rec.status == "processed":
                 processed += 1
             elif rec.status in {"skipped", "error"}:
@@ -1202,7 +1243,7 @@ def list_pending_files(graph_root: Path, state: DaemonState) -> list[Path]:
         key = str(path.resolve())
         mtime = path.stat().st_mtime
         rec = state.files.get(key)
-        if rec is not None and rec.mtime == mtime:
+        if rec is not None and _mtime_matches(rec.mtime, mtime):
             if rec.status in settled_statuses:
                 continue
             if rec.status == "error":
@@ -1785,15 +1826,24 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
     sys.stdout = open(os.devnull, "w")  # noqa: SIM115
     sys.stderr = open(os.devnull, "w")  # noqa: SIM115
 
-    with contextlib.suppress(Exception):
-        from loguru import logger
-
-        logger.remove()
-
     from dotenv import load_dotenv
+    from loguru import logger
 
     load_dotenv()
     os.environ["LOGSEQ_GRAPH_PATH"] = str(root)
+    config = load_plumber_lint_config()
+    if config.low_priority_mode and hasattr(os, "nice"):
+        try:
+            os.nice(19)
+            logger.info(
+                "[OS SCHEDULER] Low-Impact Antivirus Mode engaged. Process niceness set to 19."
+            )
+        except OSError as e:
+            logger.warning(f"[OS SCHEDULER] Could not adjust process niceness: {e}")
+
+    with contextlib.suppress(Exception):
+        logger.remove()
+
     MaintenanceDaemon(root).run_forever()
     os._exit(0)
 

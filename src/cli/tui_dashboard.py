@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
+import signal
+import sys
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from types import FrameType
 
-from rich.console import Group
+from rich.console import Console, Group, ScreenContext
 from rich.layout import Layout
-from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
@@ -51,6 +55,7 @@ class DashboardSnapshot:
     pid: int | None = None
     pid_file: str = PID_FILENAME
     log_file: str = ""
+    refreshed_at: str = ""
 
     def __post_init__(self) -> None:
         if self.activity_lines is None:
@@ -82,10 +87,25 @@ def _plumber_token_logger() -> TokenLogger:
     return TokenLogger(log_path=resolve_plumber_log_path())
 
 
+def _try_load_daemon_state(
+    graph_root: Path,
+    *,
+    last_good: DaemonState | None,
+) -> DaemonState:
+    """Load daemon state without blocking the TUI on transient read or parse failures."""
+    try:
+        return load_daemon_state(graph_root)
+    except Exception:
+        if last_good is not None:
+            return last_good
+        return DaemonState()
+
+
 def collect_snapshot(
     *,
     graph_root: Path | None = None,
     token_logger: TokenLogger | None = None,
+    last_good_state: DaemonState | None = None,
 ) -> DashboardSnapshot:
     """Build a dashboard snapshot from on-disk state and logs."""
     root = graph_root or _resolve_graph_root_safe()
@@ -98,9 +118,26 @@ def collect_snapshot(
             log_file=log_file,
         )
 
-    state = load_daemon_state(root)
-    metrics = compute_scan_metrics(root, state)
-    _, skipped, errors = _tally_checkpoint_files(state)
+    state = _try_load_daemon_state(root, last_good=last_good_state)
+    try:
+        metrics = compute_scan_metrics(root, state)
+    except Exception:
+        metrics = None
+
+    checkpoint_processed, skipped, errors = _tally_checkpoint_files(state)
+    total_pages = metrics.total if metrics is not None else 0
+    if metrics is not None and total_pages > 0:
+        # Checkpoint tally reflects completed daemon work; scan metrics only count
+        # pages whose on-disk mtime still matches the checkpoint (mtime drift =>
+        # pending re-index). The TUI progress bar tracks work done, not strict freshness.
+        processed_pages = checkpoint_processed
+        pending_backlog = max(0, total_pages - checkpoint_processed - skipped - errors)
+        percent_complete = round(100.0 * processed_pages / total_pages, 1)
+    else:
+        processed_pages = checkpoint_processed
+        pending_backlog = 0
+        percent_complete = 0.0
+
     pid = read_pid_file(root)
     running = pid is not None and is_process_alive(pid)
     status = "Stopped"
@@ -116,29 +153,61 @@ def collect_snapshot(
     if state.last_file:
         last_file = Path(state.last_file).name
 
+    activity_lines: list[str] = []
+    with contextlib.suppress(Exception):
+        activity_lines = logger.tail_activity_summaries(5)
+
     return DashboardSnapshot(
         status=status,
         model=state.model or resolve_lm_model(),
         bootstrap_complete=state.bootstrap_complete,
-        total_pages=metrics.total,
-        processed_pages=metrics.processed,
+        total_pages=total_pages,
+        processed_pages=processed_pages,
         skipped_pages=skipped,
         error_pages=errors,
-        pending_backlog=metrics.pending,
-        percent_complete=metrics.percent_complete,
-        activity_lines=logger.tail_summaries(5),
-        session_prompt_tokens=state.session_prompt_tokens or logger.session_prompt_tokens,
-        session_completion_tokens=(
-            state.session_completion_tokens or logger.session_completion_tokens
-        ),
+        pending_backlog=pending_backlog,
+        percent_complete=percent_complete,
+        activity_lines=activity_lines,
+        session_prompt_tokens=state.session_prompt_tokens,
+        session_completion_tokens=state.session_completion_tokens,
         last_file=last_file,
         pid=pid,
         pid_file=PID_FILENAME,
         log_file=log_file,
+        refreshed_at=datetime.now(tz=UTC).strftime("%H:%M:%S"),
     )
 
 
-def _build_layout(snapshot: DashboardSnapshot) -> Layout:
+def collect_snapshot_safe(
+    *,
+    graph_root: Path | None = None,
+    token_logger: TokenLogger | None = None,
+    last_good_state: DaemonState | None = None,
+) -> tuple[DashboardSnapshot, DaemonState | None]:
+    """Collect a snapshot, preserving the last known good daemon state on read failures."""
+    root = graph_root or _resolve_graph_root_safe()
+    logger = token_logger or _plumber_token_logger()
+    try:
+        snapshot = collect_snapshot(
+            graph_root=root,
+            token_logger=logger,
+            last_good_state=last_good_state,
+        )
+    except Exception:
+        return DashboardSnapshot(
+            status="Error",
+            activity_lines=["Dashboard refresh failed"],
+            log_file=str(logger.log_path),
+            refreshed_at=datetime.now(tz=UTC).strftime("%H:%M:%S"),
+        ), last_good_state
+
+    if root is not None:
+        with contextlib.suppress(Exception):
+            last_good_state = load_daemon_state(root)
+    return snapshot, last_good_state
+
+
+def _init_layout() -> Layout:
     layout = Layout()
     layout.split_column(
         Layout(name="header", size=4),
@@ -149,7 +218,10 @@ def _build_layout(snapshot: DashboardSnapshot) -> Layout:
         Layout(name="progress", ratio=2),
         Layout(name="tokens", ratio=1),
     )
+    return layout
 
+
+def _apply_snapshot(layout: Layout, snapshot: DashboardSnapshot) -> None:
     header_text = Text.assemble(
         (snapshot.title, "bold cyan"),
         "\n",
@@ -167,6 +239,8 @@ def _build_layout(snapshot: DashboardSnapshot) -> Layout:
     )
     if snapshot.pid:
         header_text.append(f"   PID: {snapshot.pid}", style="dim")
+    if snapshot.refreshed_at:
+        header_text.append(f"   Updated: {snapshot.refreshed_at}", style="dim cyan")
     layout["header"].update(Panel(header_text, border_style="cyan"))
 
     progress = Progress(
@@ -210,31 +284,93 @@ def _build_layout(snapshot: DashboardSnapshot) -> Layout:
 
     feed = "\n".join(snapshot.activity_lines or ["(no activity yet)"])
     layout["footer"].update(Panel(feed, title="Activity Feed (last 5 ops)", border_style="dim"))
+
+
+def _build_layout(snapshot: DashboardSnapshot) -> Layout:
+    layout = _init_layout()
+    _apply_snapshot(layout, snapshot)
     return layout
+
+
+def _clear_display(console: Console) -> None:
+    """Clear the terminal using Rich or a raw ANSI fallback."""
+    if console.is_dumb_terminal:
+        sys.stdout.write("\033[2J\033[H")
+        sys.stdout.flush()
+        return
+    console.clear(home=True)
+
+
+def _paint_dashboard(
+    console: Console,
+    screen: ScreenContext | None,
+    snapshot: DashboardSnapshot,
+) -> None:
+    """Redraw one dashboard frame."""
+    layout = _build_layout(snapshot)
+    if screen is not None:
+        screen.update(layout)
+        return
+    _clear_display(console)
+    console.print(layout)
 
 
 def run_dashboard(
     *,
     graph_root: Path | None = None,
-    refresh_hz: float = 2.0,
+    refresh_hz: float = 1.0,
 ) -> None:
     """Run the live TUI until interrupted."""
     interval = 1.0 / max(refresh_hz, 0.1)
     logger = _plumber_token_logger()
-    initial = _build_layout(collect_snapshot(graph_root=graph_root, token_logger=logger))
-    with Live(initial, refresh_per_second=4, screen=True) as live:
-        try:
+    console = Console()
+    last_good_state: DaemonState | None = None
+    screen_ctx: ScreenContext | None = None
+
+    previous_sigwinch = None
+    if hasattr(signal, "SIGWINCH"):
+        previous_sigwinch = signal.getsignal(signal.SIGWINCH)
+
+    def _refresh_frame() -> DashboardSnapshot:
+        nonlocal last_good_state
+        snapshot, last_good_state = collect_snapshot_safe(
+            graph_root=graph_root,
+            token_logger=logger,
+            last_good_state=last_good_state,
+        )
+        _paint_dashboard(console, screen_ctx, snapshot)
+        return snapshot
+
+    try:
+        with console.screen() as screen:
+            screen_ctx = screen
+
+            def _handle_sigwinch(signum: int, frame_info: FrameType | None) -> None:
+                with contextlib.suppress(Exception):
+                    _refresh_frame()
+                if callable(previous_sigwinch):
+                    previous_sigwinch(signum, frame_info)
+
+            if hasattr(signal, "SIGWINCH"):
+                signal.signal(signal.SIGWINCH, _handle_sigwinch)
+
+            _refresh_frame()
             while True:
                 time.sleep(interval)
-                snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
-                live.update(_build_layout(snap))
-        except KeyboardInterrupt:
-            return
+                _refresh_frame()
+    except KeyboardInterrupt:
+        return
+    finally:
+        if hasattr(signal, "SIGWINCH") and previous_sigwinch is not None:
+            signal.signal(signal.SIGWINCH, previous_sigwinch)
+        with contextlib.suppress(Exception):
+            console.show_cursor(True)
 
 
 __all__ = [
     "MONITOR_TITLE",
     "DashboardSnapshot",
     "collect_snapshot",
+    "collect_snapshot_safe",
     "run_dashboard",
 ]

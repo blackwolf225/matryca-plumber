@@ -111,6 +111,7 @@ def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> N
         "MATRYCA_LINT_SEMANTIC_ROUTING",
         "MATRYCA_THERMAL_DELAY_BOOTSTRAP",
         "MATRYCA_THERMAL_DELAY_COGNITIVE",
+        "MATRYCA_PLUMBER_LOW_PRIORITY_MODE",
     ):
         monkeypatch.delenv(key, raising=False)
     cfg = load_plumber_lint_config()
@@ -120,6 +121,7 @@ def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> N
     assert cfg.any_enabled is False
     assert cfg.thermal_delay_bootstrap == 2.0
     assert cfg.thermal_delay_cognitive == 2.0
+    assert cfg.low_priority_mode is True
 
 
 def test_dangling_healer_creates_seed_page(graph_root: Path) -> None:

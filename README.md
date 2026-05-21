@@ -151,6 +151,14 @@ Duty-cycle modulation after each local LLM inference event. Set to **`0`** to di
 | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` | `2.0` | Cooling pause (seconds) after each Phase 1 bootstrap page summary |
 | `MATRYCA_THERMAL_DELAY_COGNITIVE` | `2.0` | Cooling pause (seconds) after each Phase 2 file iteration (indexing + cognitive lint) |
 
+### Low-Impact Antivirus Mode (Sympathetic Background Scheduling)
+
+When enabled (default **`true`**), the detached Plumber daemon sets POSIX **niceness** to **19** at bootstrap — the lowest scheduling tier the kernel allows. The OS CPU scheduler then yields cycles to interactive apps (Logseq, IDE, browser) whenever the user is active, and allocates spare capacity to background indexing during idle gaps. No mouse/window tracking or polling overhead: the kernel’s own scheduler handles the handoff. Set **`MATRYCA_PLUMBER_LOW_PRIORITY_MODE=false`** to run the daemon at normal process priority (useful for dedicated inference workstations).
+
+| Variable | Default | Role |
+|----------|---------|------|
+| `MATRYCA_PLUMBER_LOW_PRIORITY_MODE` | `true` | Max niceness (19) for detached daemon — invisible background indexing |
+
 ### Context compression (Ermes mode)
 
 Loaded by `load_plumber_lint_config()` in `src/agent/plumber_config.py`:

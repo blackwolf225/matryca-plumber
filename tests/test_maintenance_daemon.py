@@ -638,6 +638,42 @@ def test_instructor_client_reset_execution_history() -> None:
     assert client._execution_history == []
 
 
+def test_completion_with_structured_output_uses_lenient_json_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = InstructorLLMClient(base_url="http://localhost:1234/v1")
+    malformed = (
+        '{"ontology_report": "940 pages mapped.", '
+        '"cleanup_suggestions": ["Review orphan cluster"]} { "reason": null }'
+    )
+
+    class FakeCompletions:
+        def create_with_completion(self, **_kwargs: object) -> tuple[object, object]:
+            raise RuntimeError("instructor parse failed")
+
+    class FakeClient:
+        chat = type("Chat", (), {"completions": FakeCompletions()})()
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.instructor.from_openai",
+        lambda *_args, **_kwargs: FakeClient(),
+    )
+    monkeypatch.setattr(
+        client,
+        "_raw_json_completion",
+        lambda _messages: malformed,
+    )
+
+    parsed, _completion = client._completion_with_structured_output(
+        prompt="metrics",
+        response_model=GraphInsightsLLMResult,
+        system_prompt="system",
+        stateless=True,
+    )
+    assert parsed.ontology_report == "940 pages mapped."
+    assert parsed.cleanup_suggestions == ["Review orphan cluster"]
+
+
 def test_bootstrap_harvest_uses_stateless_messages_when_compression_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

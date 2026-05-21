@@ -389,12 +389,19 @@ def run_graph_insights_engine(
     )
 
 
+INSIGHTS_JSON_CONSTRAINT = (
+    "\n\n[CRITICAL JSON OUTPUT CONSTRAINT]\n"
+    "NEVER GENERATE NESTED UNESCAPED QUOTES OR TRAILING GARBAGE CONTEXT. "
+    "TERMINATE THE JSON BLOCK CLEANLY IMMEDIATELY AFTER THE CLOSING OBJECT BRACKET. "
+    "Return valid JSON only — no markdown fences, no prose after the closing brace."
+)
+
 INSIGHTS_SYSTEM_PROMPT = finalize_system_prompt(
     "You are Matryca Plumber's Graph Insights Engine. Analyze structural topology metrics "
     "for a personal Logseq knowledge graph. Write in clear, beautiful English prose. "
     "Surface hidden conceptual clusters, naming drift, and structural debt without "
     "prescribing destructive edits. Cleanup suggestions must be non-destructive and "
-    "formatted as short actionable sentences (no markdown bullets)."
+    "formatted as short actionable sentences (no markdown bullets)." + INSIGHTS_JSON_CONSTRAINT
 )
 
 

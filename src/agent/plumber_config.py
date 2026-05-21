@@ -91,6 +91,9 @@ class PlumberLintConfig:
     compression_target: int = 30_000
     thermal_delay_bootstrap: float = 2.0
     thermal_delay_cognitive: float = 2.0
+    low_priority_mode: bool = True
+    mapreduce_trigger_chars: int = 25_000
+    mapreduce_chunk_chars: int = 15_000
 
     @property
     def any_enabled(self) -> bool:
@@ -141,6 +144,9 @@ def load_plumber_lint_config() -> PlumberLintConfig:
         compression_target=_env_int("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
         thermal_delay_bootstrap=_env_float("MATRYCA_THERMAL_DELAY_BOOTSTRAP", 2.0),
         thermal_delay_cognitive=_env_float("MATRYCA_THERMAL_DELAY_COGNITIVE", 2.0),
+        low_priority_mode=_env_bool("MATRYCA_PLUMBER_LOW_PRIORITY_MODE", True),
+        mapreduce_trigger_chars=_env_int("MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", 25_000),
+        mapreduce_chunk_chars=_env_int("MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", 15_000),
     )
 
 

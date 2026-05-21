@@ -542,6 +542,19 @@ Continuous local inference on consumer laptops saturates GPU/NPU heatsinks and t
 
 Set either variable to **`0`** to disable pacing for that phase. Defaults preserve battery longevity and zero-throttling execution on Apple Silicon and discrete-GPU workstations without sacrificing data quality.
 
+#### Low-Impact Antivirus Mode (Sympathetic Background Scheduling)
+
+Consumer-edge deployments must not compete with the user’s interactive session. **Low-Impact Antivirus Mode** delegates CPU scheduling to the OS: at detached daemon bootstrap (`start_daemon_detached`), when **`MATRYCA_PLUMBER_LOW_PRIORITY_MODE=true`** (default), the grandchild process calls **`os.nice(19)`** — maximum POSIX courtesy tier.
+
+| Mechanism | Detail |
+|-----------|--------|
+| **Trigger** | Once, before `MaintenanceDaemon.run_forever()` in the detached fork |
+| **Env var** | `MATRYCA_PLUMBER_LOW_PRIORITY_MODE` (default **`true`**) |
+| **Effect** | Kernel deprioritizes Plumber threads while foreground apps hold the run queue; idle periods reclaim full CPU for backlog drain (e.g. Phase 1 bootstrap over thousands of pages) |
+| **Disable** | Set env to **`false`** on headless inference nodes where normal priority is desired |
+
+Unlike application-level “is the user typing?” heuristics, this path adds **zero** polling overhead — Darwin/BSD schedulers already arbitrate between niceness classes. Combined with **Thermal Pacing**, the Plumber behaves like a modern antivirus or Spotlight indexer: present, persistent, and imperceptible during active use.
+
 #### Fault-tolerant block reference quarantine
 
 Human typo'd `((uuid))` tokens must not crash the daemon. **`run_cycle()`** preflights each page with **`find_malformed_block_refs`**. On failure:
@@ -589,6 +602,7 @@ flowchart TD
 | **Idempotent backlink deduplication** | `run_backlink_backpropagator` + semantic lint skip reasons (`no_change`, `uuid_not_found`) | Prevents duplicate wikilink injection on re-runs |
 | **Token estimate safety buffer** | `TOKEN_ESTIMATE_SAFETY_MULTIPLIER = 1.12` on Qwen/Gemma heuristic | Triggers compression before VRAM cliff on code/CJK-heavy pages |
 | **Thermal pacing shield** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` / `MATRYCA_THERMAL_DELAY_COGNITIVE` (default **2.0 s** each; **0** disables) | Breaks continuous heat curves during bootstrap and Phase 2 cognitive cycles |
+| **Low-Impact Antivirus Mode** | `MATRYCA_PLUMBER_LOW_PRIORITY_MODE` (default **`true`**); `os.nice(19)` at detached bootstrap | Kernel-level CPU courtesy — zero polling; full throughput during idle |
 
 ### Plumber index artifacts (on-disk)
 

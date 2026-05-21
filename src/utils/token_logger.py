@@ -159,35 +159,47 @@ class TokenLogger:
         """Return the last ``count`` non-empty log lines (raw JSONL).
 
         Reads backward from the file end in fixed-size blocks so memory use
-        stays bounded regardless of log file size.
+        stays bounded regardless of log file size. Each call opens, reads, and
+        closes the log file independently so the TUI always sees the latest
+        on-disk tail without reusing a stale file pointer or cached offset.
         """
-        if count <= 0 or not self.log_path.is_file():
+        if count <= 0:
+            return []
+
+        log_path = self.log_path
+        try:
+            if not log_path.is_file():
+                return []
+        except OSError:
             return []
 
         block_size = 8192
         collected: list[bytes] = []
-        with self.log_path.open("rb") as handle:
-            handle.seek(0, os.SEEK_END)
-            position = handle.tell()
-            if position == 0:
-                return []
+        try:
+            with log_path.open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                position = handle.tell()
+                if position == 0:
+                    return []
 
-            pending = b""
-            while position > 0 and len(collected) < count:
-                read_size = min(block_size, position)
-                position -= read_size
-                handle.seek(position)
-                pending = handle.read(read_size) + pending
-                parts = pending.split(b"\n")
-                pending = parts[0]
-                for part in reversed(parts[1:]):
-                    if part.strip():
-                        collected.append(part)
-                        if len(collected) >= count:
-                            break
+                pending = b""
+                while position > 0 and len(collected) < count:
+                    read_size = min(block_size, position)
+                    position -= read_size
+                    handle.seek(position)
+                    pending = handle.read(read_size) + pending
+                    parts = pending.split(b"\n")
+                    pending = parts[0]
+                    for part in reversed(parts[1:]):
+                        if part.strip():
+                            collected.append(part)
+                            if len(collected) >= count:
+                                break
 
-            if len(collected) < count and pending.strip():
-                collected.append(pending)
+                if len(collected) < count and pending.strip():
+                    collected.append(pending)
+        except OSError:
+            return []
 
         return [line.decode("utf-8", errors="replace") for line in reversed(collected[:count])]
 
@@ -204,6 +216,30 @@ class TokenLogger:
                 summaries.append(raw[:120])
                 continue
             summaries.append(format_activity_summary(payload))
+        return summaries
+
+    def tail_activity_summaries(self, count: int = 5) -> list[str]:
+        """Like :meth:`tail_summaries` but skips repetitive daemon lifecycle noise."""
+        _lifecycle_noise = (
+            "[DAEMON SHUTDOWN RECEIVED]",
+            "[DAEMON LIFECYCLE]",
+        )
+        summaries: list[str] = []
+        for raw in self.tail_lines(max(count * 8, count)):
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                line = raw[:120]
+            else:
+                if not isinstance(payload, dict):
+                    line = raw[:120]
+                else:
+                    line = format_activity_summary(payload)
+            if any(tag in line for tag in _lifecycle_noise):
+                continue
+            summaries.append(line)
+            if len(summaries) >= count:
+                break
         return summaries
 
     def log_compression_event(

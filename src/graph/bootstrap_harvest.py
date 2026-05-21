@@ -13,6 +13,7 @@ from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
 from .generational_cache import patch_generational_caches_for_paths
+from .hierarchical_summarization import mapreduce_harvest_page_summary
 from .markdown_blocks import atomic_write_bytes
 from .master_catalog import (
     MASTER_INDEX_PAGE_TITLE,
@@ -172,6 +173,7 @@ def harvest_page_into_catalog(
     *,
     llm: HarvestLLM | None = None,
     incoming_counts: dict[str, int] | None = None,
+    config: PlumberLintConfig | None = None,
 ) -> tuple[str, bool]:
     """Harvest one page into the catalog. Returns ``(status, changed)``."""
     title = page_title_from_path(graph_root, page_path)
@@ -200,12 +202,15 @@ def harvest_page_into_catalog(
     if llm is None:
         return "pending_llm", False
 
+    lint_config = config or load_plumber_lint_config()
     domain = _infer_domain_from_content(title, content)
-    summary_result = llm.harvest_page_summary(
-        title,
-        content,
+    summary_result = mapreduce_harvest_page_summary(
+        llm,
+        page_title=title,
+        content=content,
         page_path=page_path,
         graph_root=graph_root,
+        config=lint_config,
     )
     reset_history = getattr(llm, "reset_execution_history", None)
     if reset_history is not None:
@@ -261,6 +266,7 @@ def run_bootstrap_harvest(
                 page_path,
                 llm=llm,
                 incoming_counts=incoming,
+                config=lint_config,
             )
         except Exception as exc:  # noqa: BLE001 - per-file isolation
             metrics.errors += 1
