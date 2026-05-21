@@ -174,21 +174,24 @@ def harvest_page_into_catalog(
     llm: HarvestLLM | None = None,
     incoming_counts: dict[str, int] | None = None,
     config: PlumberLintConfig | None = None,
-) -> tuple[str, bool]:
-    """Harvest one page into the catalog. Returns ``(status, changed)``."""
+) -> tuple[str, bool, bool]:
+    """Harvest one page into the catalog.
+
+    Returns ``(status, changed, llm_called_this_turn)``.
+    """
     title = page_title_from_path(graph_root, page_path)
     if not page_path.is_file():
         catalog.remove(title)
-        return "missing", True
+        return "missing", True, False
 
     try:
         content = page_path.read_text(encoding="utf-8", errors="replace")
         mtime = int(page_path.stat().st_mtime)
     except OSError as exc:
-        return f"error:{exc}", False
+        return f"error:{exc}", False, False
 
     if not content.strip():
-        return "skipped_empty", False
+        return "skipped_empty", False, False
 
     incoming = incoming_counts or {}
     orphan = incoming.get(title, 0) == 0
@@ -197,10 +200,10 @@ def harvest_page_into_catalog(
         extracted.last_mtime = mtime
         extracted.orphan = orphan
         catalog.upsert(title, extracted)
-        return "regex", True
+        return "regex", True, False
 
     if llm is None:
-        return "pending_llm", False
+        return "pending_llm", False, False
 
     lint_config = config or load_plumber_lint_config()
     domain = _infer_domain_from_content(title, content)
@@ -227,7 +230,7 @@ def harvest_page_into_catalog(
         orphan=orphan,
     )
     catalog.upsert(title, entry)
-    return "llm", True
+    return "llm", True, True
 
 
 def run_bootstrap_harvest(
@@ -260,7 +263,7 @@ def run_bootstrap_harvest(
     for page_path in paths:
         metrics.scanned += 1
         try:
-            status, page_changed = harvest_page_into_catalog(
+            status, page_changed, llm_called_this_turn = harvest_page_into_catalog(
                 root,
                 catalog,
                 page_path,
@@ -277,10 +280,10 @@ def run_bootstrap_harvest(
             metrics.regex_harvested += 1
         elif status == "llm":
             metrics.llm_harvested += 1
-            if lint_config.thermal_delay_bootstrap > 0:
-                time.sleep(lint_config.thermal_delay_bootstrap)
         elif status == "skipped_empty":
             metrics.skipped_empty += 1
+        if llm_called_this_turn and lint_config.thermal_delay_bootstrap > 0:
+            time.sleep(lint_config.thermal_delay_bootstrap)
         changed = changed or page_changed
 
     _refresh_orphan_flags(root, catalog)

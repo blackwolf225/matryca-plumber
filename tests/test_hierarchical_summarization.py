@@ -144,7 +144,7 @@ def test_harvest_page_into_catalog_mapreduce_integration(graph_root: Path) -> No
 
     catalog = load_master_catalog(graph_root)
     config = PlumberLintConfig(mapreduce_trigger_chars=2_000, mapreduce_chunk_chars=800)
-    status, changed = harvest_page_into_catalog(
+    status, changed, llm_called = harvest_page_into_catalog(
         graph_root,
         catalog,
         path,
@@ -153,6 +153,7 @@ def test_harvest_page_into_catalog_mapreduce_integration(graph_root: Path) -> No
     )
     assert status == "llm"
     assert changed is True
+    assert llm_called is True
     assert len(calls) >= 3
     entry = catalog.get("Giant")
     assert entry is not None

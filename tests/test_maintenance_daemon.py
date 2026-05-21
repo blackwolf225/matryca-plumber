@@ -939,3 +939,53 @@ def test_run_cycle_disables_semantic_routing_until_bootstrap_complete(
     observed.clear()
     daemon.run_cycle()
     assert observed.get("enable_semantic_routing") is True
+
+
+def test_run_cycle_bulk_fast_track_drains_cached_pages_despite_llm_cap(
+    graph_root: Path,
+) -> None:
+    """Instant skips must not be throttled by max_files_per_cycle or poll pacing."""
+    paths: list[Path] = []
+    for index in range(5):
+        paths.append(
+            _write_page(
+                graph_root,
+                f"Cached{index}",
+                f"- body {index}\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: cached\n",
+            ),
+        )
+
+    daemon = MaintenanceDaemon(
+        graph_root,
+        llm_client=StubLLM(),
+        max_files_per_cycle=1,
+    )
+    state = daemon.run_cycle()
+
+    for path in paths:
+        key = str(path.resolve())
+        assert state.files[key].status == "skipped"
+    assert list_pending_files(graph_root, state) == []
+
+
+def test_run_cycle_thermal_delay_only_after_llm_inference(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_COGNITIVE", "2.0")
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    _write_page(
+        graph_root,
+        "AlreadyIndexed",
+        f"- note\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: done\n",
+    )
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM(), max_files_per_cycle=1)
+    daemon.run_cycle()
+    assert sleeps == []
+
+    _write_page(graph_root, "NeedsLlm", "- fresh content\n")
+    sleeps.clear()
+    daemon.run_cycle()
+    assert sleeps == [2.0]

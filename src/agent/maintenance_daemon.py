@@ -1519,53 +1519,82 @@ class MaintenanceDaemon:
         neighborhood = format_cluster_neighborhood(catalog.to_json(), cluster_titles)
         self.llm_client.inject_cluster_focus_context(neighborhood)
 
-    def _process_cycle_file(
+    def _save_cycle_checkpoint(self, state: DaemonState, *, path: Path | None = None) -> None:
+        """Persist daemon state after one file settles in the cycle flywheel."""
+        try:
+            save_daemon_state(self.graph_root, state)
+        except Exception as save_exc:  # noqa: BLE001 - log and continue cycle
+            target = path if path is not None else self.graph_root
+            self.token_logger.log_structural_lint_warning(
+                target_file=target,
+                message=f"Checkpoint save failed: {save_exc}",
+                malformed_refs=[],
+            )
+
+    def _try_fast_track_cycle_file(self, path: Path, state: DaemonState) -> bool:
+        """Settle a pending page without LLM tokens (quarantine, cache, empty)."""
+        key = str(path.resolve())
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return False
+
+        state.last_file = key
+        try:
+            content = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+
+        protected_lines = compute_page_protected_line_indices(content)
+        malformed_refs = find_malformed_block_refs(
+            content,
+            protected_lines=protected_lines,
+        )
+        if malformed_refs:
+            self._quarantine_structural_lint(
+                path=path,
+                key=key,
+                mtime=mtime,
+                message="Malformed UUID detected in block ref. Must be standard 36-char format.",
+                malformed_refs=malformed_refs,
+                state=state,
+            )
+            return True
+        if SEMANTIC_INDEX_HEADER in content:
+            state.files[key] = FileState(
+                mtime=mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="skipped",
+            )
+            return True
+        if not content.strip():
+            state.files[key] = FileState(
+                mtime=mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="skipped",
+            )
+            return True
+        return False
+
+    def _process_llm_cycle_file(
         self,
         path: Path,
         state: DaemonState,
         lint_config: PlumberLintConfig,
         *,
         reset_history_after: bool,
-    ) -> None:
-        """Index one pending page and checkpoint daemon state."""
+    ) -> bool:
+        """Index one pending page via LLM path. Returns whether inference ran this turn."""
         key = str(path.resolve())
         mtime = path.stat().st_mtime
         title = _page_title_from_path(self.graph_root, path)
         state.last_file = key
         content = ""
+        prompt_before = self.token_logger.session_prompt_tokens
+        completion_before = self.token_logger.session_completion_tokens
+        llm_called_from_usage = False
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
-            protected_lines = compute_page_protected_line_indices(content)
-            malformed_refs = find_malformed_block_refs(
-                content,
-                protected_lines=protected_lines,
-            )
-            if malformed_refs:
-                self._quarantine_structural_lint(
-                    path=path,
-                    key=key,
-                    mtime=mtime,
-                    message=(
-                        "Malformed UUID detected in block ref. Must be standard 36-char format."
-                    ),
-                    malformed_refs=malformed_refs,
-                    state=state,
-                )
-                return
-            if SEMANTIC_INDEX_HEADER in content:
-                state.files[key] = FileState(
-                    mtime=mtime,
-                    processed_at=datetime.now(tz=UTC).isoformat(),
-                    status="skipped",
-                )
-                return
-            if not content.strip():
-                state.files[key] = FileState(
-                    mtime=mtime,
-                    processed_at=datetime.now(tz=UTC).isoformat(),
-                    status="skipped",
-                )
-                return
             if self.bootstrap_complete and lint_config.any_enabled:
                 run_cognitive_lint_pipeline(
                     self.graph_root,
@@ -1579,7 +1608,7 @@ class MaintenanceDaemon:
             alias_index = self._compiled_alias_index() if self.bootstrap_complete else None
             enable_semantic_routing = self.bootstrap_complete and lint_config.semantic_routing
             enable_backprop = self.bootstrap_complete and lint_config.backpropagate_links
-            result, _usage = self.llm_client.index_page(
+            result, usage = self.llm_client.index_page(
                 title,
                 content,
                 page_path=path,
@@ -1587,6 +1616,10 @@ class MaintenanceDaemon:
                 alias_index=alias_index,
                 enable_semantic_routing=enable_semantic_routing,
             )
+            llm_called_from_usage = (
+                int(usage.get("prompt_tokens", 0) or 0)
+                + int(usage.get("completion_tokens", 0) or 0)
+            ) > 0
             apply_semantic_page_result(
                 self.graph_root,
                 path,
@@ -1626,14 +1659,11 @@ class MaintenanceDaemon:
         finally:
             if reset_history_after and isinstance(self.llm_client, InstructorLLMClient):
                 self.llm_client.reset_execution_history()
-            try:
-                save_daemon_state(self.graph_root, state)
-            except Exception as save_exc:  # noqa: BLE001 - log and continue cycle
-                self.token_logger.log_structural_lint_warning(
-                    target_file=path,
-                    message=f"Checkpoint save failed after {key}: {save_exc}",
-                    malformed_refs=[],
-                )
+        llm_called_from_logger = (
+            self.token_logger.session_prompt_tokens > prompt_before
+            or self.token_logger.session_completion_tokens > completion_before
+        )
+        return llm_called_from_usage or llm_called_from_logger
 
     def _quarantine_structural_lint(
         self,
@@ -1669,12 +1699,12 @@ class MaintenanceDaemon:
         )
 
     def run_cycle(self, state: DaemonState | None = None) -> DaemonState:
-        """Process up to ``max_files_per_cycle`` pending files."""
+        """Drain fast-skippable pending files, then up to ``max_files_per_cycle`` LLM turns."""
         state = self._sync_runtime_config(state or load_daemon_state(self.graph_root))
         prune_stale_daemon_file_entries(state, self.graph_root)
         state.status = "running"
         state.last_scan_at = datetime.now(tz=UTC).isoformat()
-        pending = list_pending_files(self.graph_root, state)[: self.max_files_per_cycle]
+        pending = list_pending_files(self.graph_root, state)
 
         if not pending:
             self.refresh_catalog_if_stale()
@@ -1683,17 +1713,35 @@ class MaintenanceDaemon:
             save_daemon_state(self.graph_root, state)
             return state
 
+        for path in pending:
+            if self._stop_requested:
+                state.status = "stopped"
+                break
+            if self._try_fast_track_cycle_file(path, state):
+                self._save_cycle_checkpoint(state, path=path)
+
+        if self._stop_requested:
+            self._prune_stale_catalog_entries()
+            state.session_prompt_tokens = self.token_logger.session_prompt_tokens
+            state.session_completion_tokens = self.token_logger.session_completion_tokens
+            save_daemon_state(self.graph_root, state)
+            return state
+
+        pending_llm = list_pending_files(self.graph_root, state)
         lint_config = self._effective_lint_config()
         cluster_cycle = self._use_semantic_cluster_cycle(lint_config)
+        llm_turns_this_cycle = 0
         pending_groups: list[tuple[str, list[Path]]]
         if cluster_cycle:
-            pending_groups = self._group_pending_by_cluster(pending)
+            pending_groups = self._group_pending_by_cluster(pending_llm)
         else:
-            pending_groups = [("flat", pending)]
+            pending_groups = [("flat", pending_llm)]
 
         for cluster_id, cluster_paths in pending_groups:
             if self._stop_requested:
                 state.status = "stopped"
+                break
+            if llm_turns_this_cycle >= self.max_files_per_cycle:
                 break
             if cluster_cycle:
                 self._begin_cluster_context(cluster_id, cluster_paths)
@@ -1701,14 +1749,19 @@ class MaintenanceDaemon:
                 if self._stop_requested:
                     state.status = "stopped"
                     break
-                self._process_cycle_file(
+                if llm_turns_this_cycle >= self.max_files_per_cycle:
+                    break
+                llm_called_this_turn = self._process_llm_cycle_file(
                     path,
                     state,
                     lint_config,
                     reset_history_after=not cluster_cycle,
                 )
-                if lint_config.thermal_delay_cognitive > 0:
-                    time.sleep(lint_config.thermal_delay_cognitive)
+                self._save_cycle_checkpoint(state, path=path)
+                if llm_called_this_turn:
+                    llm_turns_this_cycle += 1
+                    if lint_config.thermal_delay_cognitive > 0:
+                        time.sleep(lint_config.thermal_delay_cognitive)
 
         self._prune_stale_catalog_entries()
         state.session_prompt_tokens = self.token_logger.session_prompt_tokens

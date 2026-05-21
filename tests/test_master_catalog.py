@@ -188,6 +188,33 @@ def test_build_master_index_groups_by_domain_with_collapsed(graph_root: Path) ->
     assert "Mappa — strategic vision" in md
 
 
+def test_bootstrap_harvest_thermal_delay_only_after_llm(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_BOOTSTRAP", "2.0")
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    _write_page(graph_root, "Indexed", _indexed_body(summary="Already indexed."))
+    run_bootstrap_harvest(graph_root, llm=StubHarvestLLM(), incremental=False, phase1_strict=True)
+    assert sleeps == []
+
+    _write_page(graph_root, "Needs Index", "- type:: risorsa\n- Body content\n")
+    sleeps.clear()
+    metrics = run_bootstrap_harvest(
+        graph_root,
+        llm=StubHarvestLLM(),
+        incremental=True,
+        phase1_strict=True,
+    )
+    assert metrics.llm_harvested >= 1
+    assert metrics.llm_harvested == len(sleeps)
+    assert all(delay == 2.0 for delay in sleeps)
+
+
 def test_bootstrap_harvest_regex_path_without_llm(graph_root: Path) -> None:
     _write_page(graph_root, "Indexed", _indexed_body(summary="Already indexed."))
     metrics = run_bootstrap_harvest(
@@ -316,6 +343,7 @@ def test_format_graph_insights_fallback_markdown() -> None:
 def test_harvest_page_into_catalog_skips_empty_body(graph_root: Path) -> None:
     path = _write_page(graph_root, "Empty", "   \n")
     catalog = load_master_catalog(graph_root)
-    status, changed = harvest_page_into_catalog(graph_root, catalog, path, llm=None)
+    status, changed, llm_called = harvest_page_into_catalog(graph_root, catalog, path, llm=None)
     assert status == "skipped_empty"
     assert changed is False
+    assert llm_called is False
