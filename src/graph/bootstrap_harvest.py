@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -282,8 +281,6 @@ def run_bootstrap_harvest(
             metrics.llm_harvested += 1
         elif status == "skipped_empty":
             metrics.skipped_empty += 1
-        if llm_called_this_turn and lint_config.thermal_delay_bootstrap > 0:
-            time.sleep(lint_config.thermal_delay_bootstrap)
         changed = changed or page_changed
 
     _refresh_orphan_flags(root, catalog)

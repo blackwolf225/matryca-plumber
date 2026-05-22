@@ -2,16 +2,34 @@
 
 from __future__ import annotations
 
+import os
+import re
+import subprocess
 import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 import webbrowser
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from ..agent.maintenance_daemon import DaemonState, load_daemon_state, resolve_graph_root
+from ..agent.maintenance_daemon import (
+    DaemonState,
+    is_process_alive,
+    load_daemon_state,
+    read_pid_file,
+    resolve_graph_root,
+    start_daemon_detached,
+    stop_daemon,
+)
+from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 
 FileStatus = Literal["processed", "skipped", "error", "pending"]
@@ -24,6 +42,11 @@ LOCAL_DEV_ORIGINS = [
     "http://127.0.0.1:5173",
     "tauri://localhost",
 ]
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_FRONTEND_ROOT = _REPO_ROOT / "frontend"
+_FRONTEND_DIST = _FRONTEND_ROOT / "dist"
+_FRONTEND_SRC = _FRONTEND_ROOT / "src"
 
 
 class FileStateResponse(BaseModel):
@@ -55,6 +78,132 @@ class DaemonStateResponse(BaseModel):
     @classmethod
     def from_daemon_state(cls, state: DaemonState) -> DaemonStateResponse:
         return cls.model_validate(state.to_json())
+
+
+class PlumberConfigResponse(BaseModel):
+    """Live Plumber configuration exposed to the React control room."""
+
+    logseq_graph_path: str
+    lm_studio_url: str
+    low_priority_mode: bool
+    thermal_delay_bootstrap: float
+    thermal_delay_cognitive: float
+    mapreduce_trigger_chars: int
+    mapreduce_chunk_chars: int
+    context_compression: bool
+    backpropagate_links: bool
+    heal_dangling: bool
+
+    @classmethod
+    def from_lint_config(cls, config: PlumberLintConfig) -> PlumberConfigResponse:
+        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        return cls(
+            logseq_graph_path=graph_path,
+            lm_studio_url=config.lm_base_url,
+            low_priority_mode=config.low_priority_mode,
+            thermal_delay_bootstrap=config.thermal_delay_bootstrap,
+            thermal_delay_cognitive=config.thermal_delay_cognitive,
+            mapreduce_trigger_chars=config.mapreduce_trigger_chars,
+            mapreduce_chunk_chars=config.mapreduce_chunk_chars,
+            context_compression=config.context_compression,
+            backpropagate_links=config.backpropagate_links,
+            heal_dangling=config.heal_dangling,
+        )
+
+
+class DaemonControlResponse(BaseModel):
+    """Result of a start/stop request against the maintenance daemon."""
+
+    ok: bool
+    code: str
+    message: str | None = None
+    pid: int | None = None
+
+
+_ENV_KEY_MAP: dict[str, str] = {
+    "logseq_graph_path": "LOGSEQ_GRAPH_PATH",
+    "lm_studio_url": "MATRYCA_LM_BASE_URL",
+    "low_priority_mode": "MATRYCA_PLUMBER_LOW_PRIORITY_MODE",
+    "thermal_delay_bootstrap": "MATRYCA_THERMAL_DELAY_BOOTSTRAP",
+    "thermal_delay_cognitive": "MATRYCA_THERMAL_DELAY_COGNITIVE",
+    "mapreduce_trigger_chars": "MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS",
+    "mapreduce_chunk_chars": "MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS",
+    "context_compression": "MATRYCA_PLUMBER_CONTEXT_COMPRESSION",
+    "backpropagate_links": "MATRYCA_LINT_BACKPROPAGATE_LINKS",
+    "heal_dangling": "MATRYCA_LINT_HEAL_DANGLING",
+}
+
+
+def _resolve_dotenv_path() -> Path:
+    return _REPO_ROOT / ".env"
+
+
+def _format_env_value(value: str) -> str:
+    if re.search(r'[\s#"\'\\]', value):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
+
+
+def _serialize_config_value(field: str, value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if field in {"mapreduce_trigger_chars", "mapreduce_chunk_chars"}:
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            return str(int(value))
+        if isinstance(value, str):
+            return str(int(value))
+        return str(value)
+    if field in {"thermal_delay_bootstrap", "thermal_delay_cognitive"}:
+        if isinstance(value, (int, float)):
+            return str(float(value))
+        if isinstance(value, str):
+            return str(float(value))
+        return str(value)
+    return str(value).strip()
+
+
+def _update_dotenv(payload: PlumberConfigResponse) -> None:
+    """Persist configuration updates to ``.env`` and the active process environment."""
+    env_path = _resolve_dotenv_path()
+    updates = {
+        env_key: _serialize_config_value(field, getattr(payload, field))
+        for field, env_key in _ENV_KEY_MAP.items()
+    }
+
+    if env_path.is_file():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    else:
+        example_path = _REPO_ROOT / ".env.example"
+        lines = (
+            example_path.read_text(encoding="utf-8").splitlines() if example_path.is_file() else []
+        )
+
+    seen: set[str] = set()
+    new_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            new_lines.append(line)
+            continue
+        key, _, _ = line.partition("=")
+        key = key.strip()
+        if key in updates:
+            new_lines.append(f"{key}={_format_env_value(updates[key])}")
+            seen.add(key)
+        else:
+            new_lines.append(line)
+
+    for key, value in updates.items():
+        if key not in seen:
+            new_lines.append(f"{key}={_format_env_value(value)}")
+
+    env_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+    for key, value in updates.items():
+        os.environ[key] = value
+    load_dotenv(env_path, override=True)
 
 
 app = FastAPI(title="Matryca Plumber API")
@@ -90,22 +239,185 @@ def get_logs() -> list[str]:
     return logger.tail_lines(50)
 
 
+@app.get("/api/config", response_model=PlumberConfigResponse)
+def get_config() -> PlumberConfigResponse:
+    """Return live Plumber hardening thresholds loaded from environment."""
+    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
+
+
+@app.post("/api/config", response_model=PlumberConfigResponse)
+def post_config(payload: PlumberConfigResponse) -> PlumberConfigResponse:
+    """Update ``.env`` and in-process settings from the control-room form."""
+    try:
+        _update_dotenv(payload)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
+    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
+
+
+def _daemon_control_response(result: dict[str, Any]) -> DaemonControlResponse:
+    return DaemonControlResponse(
+        ok=bool(result.get("ok")),
+        code=str(result.get("code", "unknown")),
+        message=result.get("message") if isinstance(result.get("message"), str) else None,
+        pid=int(result["pid"]) if isinstance(result.get("pid"), int) else None,
+    )
+
+
+@app.post("/api/daemon/start", response_model=DaemonControlResponse)
+def start_daemon_endpoint() -> DaemonControlResponse:
+    """Launch the maintenance daemon without blocking the FastAPI event loop."""
+    graph_root = _resolve_graph_root_or_raise()
+    existing = read_pid_file(graph_root)
+    if existing is not None and is_process_alive(existing):
+        return DaemonControlResponse(
+            ok=False,
+            code="already_running",
+            message=f"Matryca Plumber daemon already running (pid {existing})",
+            pid=existing,
+        )
+
+    def _launch() -> None:
+        start_daemon_detached(graph_root)
+
+    threading.Thread(target=_launch, daemon=True, name="plumber-daemon-start").start()
+    return DaemonControlResponse(
+        ok=True,
+        code="starting",
+        message="Daemon launch scheduled",
+    )
+
+
+@app.post("/api/daemon/stop", response_model=DaemonControlResponse)
+def stop_daemon_endpoint() -> DaemonControlResponse:
+    """Signal the maintenance daemon to shut down gracefully."""
+    graph_root = _resolve_graph_root_or_raise()
+    result: dict[str, Any] = {}
+
+    def _shutdown() -> None:
+        result.update(stop_daemon(graph_root))
+
+    thread = threading.Thread(target=_shutdown, daemon=True, name="plumber-daemon-stop")
+    thread.start()
+    thread.join(timeout=5.0)
+    if not result:
+        return DaemonControlResponse(
+            ok=False,
+            code="timeout",
+            message="Stop request timed out",
+        )
+    return _daemon_control_response(result)
+
+
+def _frontend_source_mtime() -> float:
+    if not _FRONTEND_SRC.is_dir():
+        return 0.0
+    return max(
+        (path.stat().st_mtime for path in _FRONTEND_SRC.rglob("*") if path.is_file()),
+        default=0.0,
+    )
+
+
+def _frontend_dist_mtime() -> float:
+    index_html = _FRONTEND_DIST / "index.html"
+    if not index_html.is_file():
+        return 0.0
+    return index_html.stat().st_mtime
+
+
+def _ensure_frontend_built() -> None:
+    """Rebuild ``frontend/dist`` when source files are newer than the last build."""
+    package_json = _FRONTEND_ROOT / "package.json"
+    if not package_json.is_file():
+        return
+    if _frontend_source_mtime() <= _frontend_dist_mtime():
+        return
+
+    sys.stderr.write("[Matryca Plumber] Rebuilding frontend dashboard…\n")
+    sys.stderr.flush()
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=_FRONTEND_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        sys.stderr.write(
+            "[Matryca Plumber] Frontend build failed; "
+            "serving the previous dashboard bundle if present.\n"
+        )
+        if result.stderr.strip():
+            sys.stderr.write(result.stderr.strip() + "\n")
+        sys.stderr.flush()
+
+
+def _mount_frontend_assets() -> None:
+    """Serve the built React dashboard when ``frontend/dist`` is present."""
+    if any(getattr(route, "name", None) == "frontend" for route in app.routes):
+        return
+    if _FRONTEND_DIST.is_dir():
+        app.mount("/", StaticFiles(directory=str(_FRONTEND_DIST), html=True), name="frontend")
+        return
+    sys.stderr.write(
+        f"[Matryca Plumber] frontend/dist not found at {_FRONTEND_DIST}; "
+        "run `cd frontend && npm run build` to enable the web dashboard.\n"
+    )
+
+
+def _schedule_browser_open(
+    url: str,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    timeout_seconds: float = 15.0,
+) -> None:
+    """Open the dashboard after the API responds on ``/openapi.json``."""
+
+    def _open_when_ready() -> None:
+        health_url = f"http://{host}:{port}/openapi.json"
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(health_url, timeout=0.5) as response:
+                    if response.status == 200:
+                        webbrowser.open(url)
+                        return
+            except (OSError, urllib.error.URLError):
+                time.sleep(0.2)
+        webbrowser.open(url)
+
+    threading.Thread(target=_open_when_ready, daemon=True).start()
+
+
 def run_ui_server(*, host: str = "127.0.0.1", port: int = 8000) -> None:
-    """Start Uvicorn and open the interactive Swagger docs in the default browser."""
+    """Start Uvicorn and open the Plumber control-room dashboard in the default browser."""
     import uvicorn
 
+    _ensure_frontend_built()
+    _mount_frontend_assets()
+
+    dashboard_url = f"http://{host}:{port}/"
     docs_url = f"http://{host}:{port}/docs"
     sys.stdout.write(f"Matryca Plumber API listening on http://{host}:{port}\n")
+    sys.stdout.write(f"Control room: {dashboard_url}\n")
     sys.stdout.write(f"Interactive docs: {docs_url}\n")
-    webbrowser.open(docs_url)
+    sys.stdout.flush()
+    _schedule_browser_open(dashboard_url, host=host, port=port)
     uvicorn.run("src.cli.ui_server:app", host=host, port=port, log_level="info")
 
 
 __all__ = [
+    "DaemonControlResponse",
     "DaemonStateResponse",
     "FileStateResponse",
+    "PlumberConfigResponse",
     "app",
+    "get_config",
     "get_logs",
     "get_state",
+    "post_config",
     "run_ui_server",
+    "start_daemon_endpoint",
+    "stop_daemon_endpoint",
 ]

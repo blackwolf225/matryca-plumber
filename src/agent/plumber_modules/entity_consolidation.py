@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.alias_index import normalize_concept_key
 from ...graph.generational_cache import patch_generational_caches_for_paths
 from ...graph.markdown_blocks import graph_safe_page_path
@@ -19,6 +20,8 @@ def run_entity_consolidation(
     *,
     llm: object,
     threshold: float,
+    config: PlumberLintConfig | None = None,
+    llm_context: str | None = None,
 ) -> ModuleOutcome:
     """Add ``alias::`` on canonical pages when the LLM detects semantic duplication."""
     outcome = ModuleOutcome()
@@ -26,6 +29,8 @@ def run_entity_consolidation(
         return outcome
 
     seen_pairs: set[tuple[str, str]] = set()
+
+    llm_body = llm_context if llm_context is not None else content
 
     for target in extract_wikilink_targets(content):
         if not page_file_exists(graph_root, target):
@@ -43,8 +48,9 @@ def run_entity_consolidation(
         assessment = llm.assess_entity_overlap(
             title_a=page_title,
             title_b=target,
-            context=content[:4000],
+            context=llm_body[:4000],
         )
+        apply_thermal_pause_cognitive(config)
         if not assessment.should_merge_alias or assessment.overlap_score < threshold:
             continue
 

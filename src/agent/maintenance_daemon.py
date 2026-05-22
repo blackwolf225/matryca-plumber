@@ -61,14 +61,19 @@ from .context_compressor import (
     condense_messages,
     extract_persisted_history,
 )
+from .llm_context_payload import prepare_llm_context_payload
 from .plumber_config import (
     DEFAULT_LM_BASE_URL,
     DEFAULT_LM_MODEL,
     PlumberLintConfig,
+    apply_thermal_pause_bootstrap,
+    apply_thermal_pause_cognitive,
     bootstrap_phase_lint_config,
     load_plumber_lint_config,
+    reload_plumber_dotenv,
     resolve_lm_base_url,
     resolve_lm_model,
+    resolve_repo_dotenv_path,
 )
 from .plumber_llm import (
     BootstrapSummaryResult,
@@ -90,8 +95,12 @@ from .plumber_modules.semantic_cache_router import (
     semantic_cache_key,
 )
 from .prompt_constraints import ALIAS_FIRST_LINK_CONSTRAINT, finalize_system_prompt
+from .prompt_layout import build_cache_aligned_prompt
+
+ThermalProfile = Literal["none", "bootstrap", "cognitive"]
 
 STATE_FILENAME = ".matryca_daemon_state.json"
+STATE_TMP_FILENAME = f"{STATE_FILENAME}.tmp"
 PID_FILENAME = ".matryca_plumber_daemon.pid"
 SEMANTIC_INDEX_HEADER = "### Matryca Semantic Index"
 STRUCTURAL_LINT_HEADER = "### Matryca Structural Lint"
@@ -299,37 +308,68 @@ def sync_daemon_state_from_env(state: DaemonState) -> DaemonState:
     return state
 
 
+def _read_daemon_state_payload(path: Path) -> dict[str, Any] | None:
+    """Load JSON payload from disk, retrying once on transient empty or malformed reads."""
+    for attempt in range(2):
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        if not raw.strip():
+            if attempt == 0:
+                continue
+            return None
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            if attempt == 0:
+                continue
+            return None
+        if isinstance(payload, dict):
+            return payload
+        return None
+    return None
+
+
 def load_daemon_state(graph_root: Path) -> DaemonState:
     from loguru import logger
 
     path = state_path(graph_root)
     if not path.is_file():
         return sync_daemon_state_from_env(DaemonState())
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
-    except OSError:
-        return sync_daemon_state_from_env(DaemonState())
-    except (json.JSONDecodeError, ValueError):
+
+    payload = _read_daemon_state_payload(path)
+    if payload is None:
         logger.warning(
             "[METADATA CORRUPTION DETECTED] File state was malformed, "
             "self-healing by initializing a fresh instance."
         )
         return sync_daemon_state_from_env(DaemonState())
-    if not isinstance(payload, dict):
-        return sync_daemon_state_from_env(DaemonState())
     return sync_daemon_state_from_env(DaemonState.from_json(payload))
 
 
 def save_daemon_state(graph_root: Path, state: DaemonState) -> None:
-    """Persist daemon state via atomic write under graph root."""
+    """Persist daemon state via POSIX atomic write-and-replace.
+
+    Writes to ``.matryca_daemon_state.json.tmp`` in the same directory, fsyncs,
+    then ``os.replace`` swaps the inode instantly. FastAPI pollers always observe
+    either the previous complete checkpoint or the next one — never a truncated file.
+    """
     path = state_path(graph_root)
-    data = json.dumps(state.to_json(), indent=2, ensure_ascii=False) + "\n"
-    atomic_write_bytes(
-        path,
-        data.encode("utf-8"),
-        graph_root=graph_root,
-        validate_block_refs=False,
-    )
+    tmp_path = path.parent / STATE_TMP_FILENAME
+    payload = json.dumps(state.to_json(), indent=2, ensure_ascii=False) + "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    committed = False
+    try:
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(tmp_path), str(path))
+        committed = True
+    finally:
+        if not committed:
+            tmp_path.unlink(missing_ok=True)
 
 
 def write_pid_file(graph_root: Path) -> None:
@@ -473,27 +513,34 @@ def _build_index_prompt(
     content: str,
     *,
     alias_index_context: str | None = None,
+    llm_body: str | None = None,
 ) -> str:
     block_catalog = _enumerate_blocks_for_prompt(content)
-    alias_section = ""
+    display_body = llm_body if llm_body is not None else content
+    task_lines = [
+        "Task: semantic indexing and safe per-block lint for one Logseq OG outliner page.",
+        "Output: structured JSON only.",
+        "Steps:",
+        "1. Read the page title, block catalog, AliasIndex, and page content above.",
+        "2. Extract summary, cross_references, suggested_tags, and moc_pointers.",
+        "3. Propose semantic_corrections only when every system-prompt safety rule is satisfied.",
+        "4. Prefer existing canonical titles and alias:: over inventing new page names.",
+        "",
+        f"Page title: {page_title}",
+        "",
+        f"Blocks available for semantic_corrections:\n{block_catalog}",
+    ]
     if alias_index_context:
-        alias_section = (
-            "\nAliasIndex (resolve every wikilink against this map before suggesting links):\n"
-            f"{alias_index_context}\n"
+        task_lines.extend(
+            [
+                "",
+                "AliasIndex (resolve every wikilink against this map before suggesting links):",
+                alias_index_context,
+            ],
         )
-    return (
-        "Task: semantic indexing and safe per-block lint for one Logseq OG outliner page.\n"
-        "Output: structured JSON only.\n"
-        "Steps:\n"
-        "1. Read the page title, block catalog, AliasIndex, and full content below.\n"
-        "2. Extract summary, cross_references, suggested_tags, and moc_pointers.\n"
-        "3. Propose semantic_corrections only when every system-prompt "
-        "safety rule is satisfied.\n"
-        "4. Prefer existing canonical titles and alias:: over inventing new page names.\n\n"
-        f"Page title: {page_title}\n\n"
-        f"Blocks available for semantic_corrections:\n{block_catalog}\n"
-        f"{alias_section}\n"
-        f"Full page content:\n{content[:8000]}"
+    return build_cache_aligned_prompt(
+        content=display_body[:8000],
+        task_instruction="\n".join(task_lines),
     )
 
 
@@ -800,6 +847,14 @@ class InstructorLLMClient:
         self.model = resolve_lm_model(override=model)
         self._raw_client: OpenAI = OpenAI(base_url=self.base_url, api_key="lm-studio")
         self._execution_history: list[ChatMessage] = []
+        self._runtime_lint_config: PlumberLintConfig | None = None
+
+    def bind_lint_config(self, config: PlumberLintConfig | None) -> None:
+        """Pin the active lint/thermal config for this daemon cycle (live drawer updates)."""
+        self._runtime_lint_config = config
+
+    def _active_lint_config(self) -> PlumberLintConfig:
+        return self._runtime_lint_config or load_plumber_lint_config()
 
     def refresh_config(
         self,
@@ -926,9 +981,22 @@ class InstructorLLMClient:
             response=text,
             latency_seconds=time.perf_counter() - started,
         )
+        apply_thermal_pause_cognitive(self._active_lint_config())
         return text
 
-    def _raw_json_completion(self, messages: list[ChatMessage]) -> tuple[str, object]:
+    def _apply_thermal_after_completion(self, profile: ThermalProfile) -> None:
+        cfg = self._active_lint_config()
+        if profile == "bootstrap":
+            apply_thermal_pause_bootstrap(cfg)
+        elif profile == "cognitive":
+            apply_thermal_pause_cognitive(cfg)
+
+    def _raw_json_completion(
+        self,
+        messages: list[ChatMessage],
+        *,
+        thermal_profile: ThermalProfile = "cognitive",
+    ) -> tuple[str, object]:
         """Request a raw JSON completion when instructor parsing fails."""
         api_messages = cast(Any, messages)
         try:
@@ -938,12 +1006,14 @@ class InstructorLLMClient:
                 temperature=0.1,
                 response_format={"type": "json_object"},
             )
+            self._apply_thermal_after_completion(thermal_profile)
         except Exception:  # noqa: BLE001 - local servers may reject response_format
             response = self._raw_client.chat.completions.create(
                 model=self.model,
                 messages=api_messages,
                 temperature=0.1,
             )
+            self._apply_thermal_after_completion(thermal_profile)
         content = response.choices[0].message.content
         if content is None or not content.strip():
             raise RuntimeError("Empty raw JSON completion")
@@ -981,6 +1051,7 @@ class InstructorLLMClient:
         telemetry_target: str | None = None,
         telemetry_operation: OperationType | None = None,
         log_tokens: bool = True,
+        thermal_profile: ThermalProfile = "cognitive",
     ) -> tuple[T, object]:
         """Call LM Studio with JSON schema mode, falling back when parsing fails."""
         started = time.perf_counter()
@@ -1029,7 +1100,7 @@ class InstructorLLMClient:
                     self._append_execution_turn(prompt, parsed.model_dump_json())
                 if stateless:
                     self.reset_execution_history()
-                return self._finalize_structured_completion(
+                finalized = self._finalize_structured_completion(
                     parsed=parsed,
                     completion=completion,
                     prompt=prompt,
@@ -1038,16 +1109,23 @@ class InstructorLLMClient:
                     telemetry_operation=telemetry_operation,
                     log_tokens=log_tokens,
                 )
+                self._apply_thermal_after_completion(thermal_profile)
+                return finalized
             except Exception as exc:  # noqa: BLE001 - try next instructor mode
                 errors.append(f"{mode.name}: {exc}")
+                if thermal_profile != "none":
+                    self._apply_thermal_after_completion(thermal_profile)
         try:
-            raw_text, completion = self._raw_json_completion(messages)
+            raw_text, completion = self._raw_json_completion(
+                messages,
+                thermal_profile=thermal_profile,
+            )
             parsed = parse_llm_json(raw_text, response_model)
             if use_history:
                 self._append_execution_turn(prompt, parsed.model_dump_json())
             if stateless:
                 self.reset_execution_history()
-            return self._finalize_structured_completion(
+            finalized = self._finalize_structured_completion(
                 parsed=parsed,
                 completion=completion,
                 prompt=prompt,
@@ -1056,6 +1134,8 @@ class InstructorLLMClient:
                 telemetry_operation=telemetry_operation,
                 log_tokens=log_tokens,
             )
+            self._apply_thermal_after_completion(thermal_profile)
+            return finalized
         except Exception as exc:  # noqa: BLE001 - include lenient repair in failure chain
             errors.append(f"lenient-repair: {exc}")
         msg = "Structured output failed for all instructor modes: " + "; ".join(errors)
@@ -1069,12 +1149,14 @@ class InstructorLLMClient:
         context: str,
         max_words: int,
     ) -> ContextualSeedResult:
-        prompt = (
-            "Task: write a contextual seed definition for a dangling wikilink.\n"
-            f"Target link: [[{link_title}]]\n"
-            f"Source page: [[{source_page}]]\n"
-            f"Max length: {max_words} words.\n\n"
-            f"Surrounding blocks:\n{context}"
+        prompt = build_cache_aligned_prompt(
+            content=context,
+            task_instruction=(
+                "Task: write a contextual seed definition for a dangling wikilink.\n"
+                f"Target link: [[{link_title}]]\n"
+                f"Source page: [[{source_page}]]\n"
+                f"Max length: {max_words} words."
+            ),
         )
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
@@ -1095,11 +1177,13 @@ class InstructorLLMClient:
         title_b: str,
         context: str,
     ) -> EntityOverlapResult:
-        prompt = (
-            "Task: decide whether two page titles refer to the same concept.\n"
-            f"Title A: {title_a}\n"
-            f"Title B: {title_b}\n\n"
-            f"Page context:\n{context[:3000]}"
+        prompt = build_cache_aligned_prompt(
+            content=context[:3000],
+            task_instruction=(
+                "Task: decide whether two page titles refer to the same concept.\n"
+                f"Title A: {title_a}\n"
+                f"Title B: {title_b}"
+            ),
         )
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
@@ -1122,12 +1206,14 @@ class InstructorLLMClient:
         content: str,
     ) -> InferredPropertiesResult:
         keys = ", ".join(required_keys)
-        prompt = (
-            "Task: infer Logseq block property values from page context.\n"
-            f"Page: [[{page_title}]]\n"
-            f"Tag: #{tag}\n"
-            f"Required property keys: {keys}\n\n"
-            f"Content:\n{content[:5000]}"
+        prompt = build_cache_aligned_prompt(
+            content=content[:5000],
+            task_instruction=(
+                "Task: infer Logseq block property values from page context.\n"
+                f"Page: [[{page_title}]]\n"
+                f"Tag: #{tag}\n"
+                f"Required property keys: {keys}"
+            ),
         )
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
@@ -1183,7 +1269,17 @@ class InstructorLLMClient:
         graph_root: Path | None = None,
         alias_index: AliasIndex | None = None,
         enable_semantic_routing: bool = False,
+        llm_context: str | None = None,
     ) -> tuple[SemanticIndexResult, dict[str, int]]:
+        config = load_plumber_lint_config()
+        if llm_context is None and graph_root is not None:
+            llm_context, _ = prepare_llm_context_payload(
+                graph_root,
+                page_title,
+                content,
+                config=config,
+            )
+        index_body = llm_context if llm_context is not None else content
         alias_context = (
             format_alias_index_for_prompt(alias_index, page_content=content)
             if alias_index is not None
@@ -1193,10 +1289,10 @@ class InstructorLLMClient:
             page_title,
             content,
             alias_index_context=alias_context,
+            llm_body=index_body,
         )
         started = time.perf_counter()
         usage = {"prompt_tokens": 0, "completion_tokens": 0}
-        config = load_plumber_lint_config()
         routing_enabled = enable_semantic_routing and config.semantic_routing
         try:
             if routing_enabled and page_path is not None and graph_root is not None:
@@ -1282,6 +1378,7 @@ class InstructorLLMClient:
             stateless=True,
             telemetry_target=page_title,
             telemetry_operation="Concept Indexing",
+            thermal_profile="none",
         )
         _ = (page_path, graph_root)
         return result
@@ -1609,9 +1706,11 @@ class MaintenanceDaemon:
 
     def _sync_runtime_config(self, state: DaemonState) -> DaemonState:
         """Align LLM client and persisted state with the active environment block."""
+        reload_plumber_dotenv()
         self._ensure_shared_token_logger()
         if isinstance(self.llm_client, InstructorLLMClient):
             self.llm_client.refresh_config()
+            self.llm_client.bind_lint_config(self._effective_lint_config())
         return sync_daemon_state_from_env(state)
 
     def request_stop(self) -> None:
@@ -1781,7 +1880,11 @@ class MaintenanceDaemon:
             state.status = "running"
 
     def _save_cycle_checkpoint(self, state: DaemonState, *, path: Path | None = None) -> None:
-        """Persist daemon state after one file settles in the cycle flywheel."""
+        """Persist daemon state after one file settles in the cycle flywheel.
+
+        Uses :func:`save_daemon_state` (POSIX ``os.replace``) so concurrent FastAPI
+        readers never observe a truncated checkpoint mid-write.
+        """
         self._sync_live_telemetry(state)
         try:
             save_daemon_state(self.graph_root, state)
@@ -1947,6 +2050,7 @@ class MaintenanceDaemon:
         llm_called = llm_called_from_usage or llm_called_from_logger
         if llm_called and self.bootstrap_complete:
             state.phase2_llm_turns += 1
+            apply_thermal_pause_cognitive(lint_config)
         self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
         return llm_called
 
@@ -2067,8 +2171,6 @@ class MaintenanceDaemon:
                 self._save_cycle_checkpoint(state, path=path)
                 if llm_called_this_turn:
                     llm_turns_this_cycle += 1
-                    if lint_config.thermal_delay_cognitive > 0:
-                        time.sleep(lint_config.thermal_delay_cognitive)
 
         self._prune_stale_catalog_entries()
         self._sync_live_telemetry(state)
@@ -2153,9 +2255,7 @@ def run_plumber_audit(graph_root: Path | None = None) -> dict[str, Any]:
 
 def start_daemon_foreground(graph_root: Path | None = None) -> None:
     """Run the daemon in the current process (foreground)."""
-    from dotenv import load_dotenv
-
-    load_dotenv()
+    reload_plumber_dotenv()
     root = graph_root or resolve_graph_root()
     daemon = MaintenanceDaemon(root)
     daemon.run_forever()
@@ -2186,10 +2286,14 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
     sys.stdout = open(os.devnull, "w")  # noqa: SIM115
     sys.stderr = open(os.devnull, "w")  # noqa: SIM115
 
-    from dotenv import load_dotenv
     from loguru import logger
 
-    load_dotenv()
+    env_path = resolve_repo_dotenv_path()
+    if env_path is not None:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path, override=True)
+    reload_plumber_dotenv()
     os.environ["LOGSEQ_GRAPH_PATH"] = str(root)
     config = load_plumber_lint_config()
     if config.low_priority_mode and hasattr(os, "nice"):

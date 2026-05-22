@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..llm_context_payload import prepare_llm_context_payload
 from ..plumber_config import PlumberLintConfig
 from .auto_split import run_auto_split
 from .dangling_healer import run_dangling_healer
@@ -37,6 +38,13 @@ def run_cognitive_lint_pipeline(
     if not config.any_enabled:
         return outcome
 
+    llm_context, _payload_source = prepare_llm_context_payload(
+        graph_root,
+        page_title,
+        content,
+        config=config,
+    )
+
     if config.marpa_framework:
         sub = run_marpa_framework(
             graph_root,
@@ -44,6 +52,8 @@ def run_cognitive_lint_pipeline(
             page_title,
             content,
             llm=llm,
+            config=config,
+            llm_context=llm_context,
         )
         outcome.modules_run.append("marpa_framework")
         outcome.pages_modified.extend(sub.pages_modified)
@@ -59,6 +69,7 @@ def run_cognitive_lint_pipeline(
             content,
             llm=llm,
             max_words=config.dangling_max_words,
+            config=config,
         )
         outcome.modules_run.append("heal_dangling")
         outcome.pages_created.extend(sub.pages_created)
@@ -73,6 +84,8 @@ def run_cognitive_lint_pipeline(
             content,
             llm=llm,
             threshold=config.similarity_threshold,
+            config=config,
+            llm_context=llm_context,
         )
         outcome.modules_run.append("entity_consolidation")
         outcome.pages_modified.extend(sub.pages_modified)
@@ -101,6 +114,8 @@ def run_cognitive_lint_pipeline(
             llm=llm,
             rules_path=config.property_rules_path,
             infer_missing=config.infer_missing_properties,
+            config=config,
+            llm_context=llm_context,
         )
         outcome.modules_run.append("property_hygiene")
         outcome.pages_modified.extend(sub.pages_modified)

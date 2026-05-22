@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..agent.plumber_config import PlumberLintConfig
+from ..agent.plumber_config import PlumberLintConfig, apply_thermal_pause_bootstrap
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 
 _ROOT_BULLET = re.compile(r"^[-*+]\s+")
@@ -105,35 +105,31 @@ def mapreduce_harvest_page_summary(
     config: PlumberLintConfig,
 ) -> BootstrapSummaryResult:
     """Harvest a page summary via structural MapReduce when content exceeds the trigger."""
-    if len(content) <= config.mapreduce_trigger_chars:
-        return llm.harvest_page_summary(
+
+    def _harvest_turn(chunk_text: str) -> BootstrapSummaryResult:
+        result = llm.harvest_page_summary(
             page_title,
-            content,
+            chunk_text,
             page_path=page_path,
             graph_root=graph_root,
         )
+        apply_thermal_pause_bootstrap(config)
+        return result
+
+    if len(content) <= config.mapreduce_trigger_chars:
+        return _harvest_turn(content)
 
     chunks = chunk_outliner_content(content, max_chunk_chars=config.mapreduce_chunk_chars)
     partials: list[BootstrapSummaryResult] = []
     for chunk in chunks:
-        partial = llm.harvest_page_summary(
-            page_title,
-            chunk,
-            page_path=page_path,
-            graph_root=graph_root,
-        )
+        partial = _harvest_turn(chunk)
         reset_history = getattr(llm, "reset_execution_history", None)
         if reset_history is not None:
             reset_history()
         partials.append(partial)
 
     reduce_content = _build_reduce_content(page_title, partials)
-    consolidated = llm.harvest_page_summary(
-        page_title,
-        reduce_content,
-        page_path=page_path,
-        graph_root=graph_root,
-    )
+    consolidated = _harvest_turn(reduce_content)
     reset_history = getattr(llm, "reset_execution_history", None)
     if reset_history is not None:
         reset_history()

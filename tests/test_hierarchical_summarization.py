@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -108,6 +109,49 @@ def test_mapreduce_harvest_splits_and_reduces_above_trigger() -> None:
     assert result.suggested_tags == ["activity", "fbu"]
     assert len(calls) >= 3
     assert "MapReduce consolidation task" in calls[-1]
+
+
+def test_mapreduce_thermal_pause_after_each_harvest_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_BOOTSTRAP", "1.5")
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    calls: list[str] = []
+
+    class MapReduceLLM:
+        def harvest_page_summary(
+            self,
+            page_title: str,
+            content: str,
+            *,
+            page_path: Path | None = None,
+            graph_root: Path | None = None,
+        ) -> BootstrapSummaryResult:
+            _ = (page_title, page_path, graph_root)
+            calls.append(content[:40])
+            if "MapReduce consolidation task" in content:
+                return BootstrapSummaryResult(summary="Unified summary.")
+            return BootstrapSummaryResult(summary="Partial.")
+
+    root_a = "- Root A\n" + "  - child\n" * 200
+    root_b = "- Root B\n" + "  - child\n" * 200
+    content = root_a + root_b
+    config = PlumberLintConfig(
+        mapreduce_trigger_chars=500,
+        mapreduce_chunk_chars=400,
+        thermal_delay_bootstrap=1.5,
+    )
+    mapreduce_harvest_page_summary(
+        MapReduceLLM(),
+        page_title="Giant",
+        content=content,
+        config=config,
+    )
+    assert len(calls) >= 3
+    assert len(sleeps) == len(calls)
+    assert all(delay == 1.5 for delay in sleeps)
 
 
 def test_harvest_page_into_catalog_mapreduce_integration(graph_root: Path) -> None:

@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from src.agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
+from src.agent.plumber_config import (
+    PlumberLintConfig,
+    apply_thermal_pause_bootstrap,
+    apply_thermal_pause_cognitive,
+    load_plumber_lint_config,
+)
 from src.agent.plumber_llm import (
     ContextualSeedResult,
     EntityOverlapResult,
@@ -98,6 +103,23 @@ def _write_page(graph_root: Path, title: str, body: str) -> Path:
     path = pages / f"{title}.md"
     path.write_text(body, encoding="utf-8")
     return path
+
+
+def test_apply_thermal_pause_ignores_negative_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+    apply_thermal_pause_cognitive(
+        PlumberLintConfig(thermal_delay_cognitive=-3.0),
+    )
+    assert sleeps == []
+    apply_thermal_pause_bootstrap(
+        PlumberLintConfig(thermal_delay_bootstrap=1.25),
+    )
+    assert sleeps == [1.25]
 
 
 def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:

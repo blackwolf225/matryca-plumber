@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.markdown_blocks import atomic_write_bytes
 from ...graph.page_write_lock import page_rmw_lock
 from ._shared import ModuleOutcome, extract_inline_tags, page_property_keys
@@ -53,6 +54,8 @@ def run_property_hygiene(
     llm: object,
     rules_path: Path | None,
     infer_missing: bool,
+    config: PlumberLintConfig | None = None,
+    llm_context: str | None = None,
 ) -> ModuleOutcome:
     """Append missing ``key:: value`` property lines inferred from page context."""
     outcome = ModuleOutcome()
@@ -72,6 +75,8 @@ def run_property_hygiene(
     if not missing_by_tag:
         return outcome
 
+    llm_body = llm_context if llm_context is not None else content
+
     inferred: dict[str, str] = {}
     if infer_missing and hasattr(llm, "infer_tag_properties"):
         for tag, keys in missing_by_tag.items():
@@ -79,8 +84,9 @@ def run_property_hygiene(
                 tag=tag,
                 required_keys=keys,
                 page_title=page_title,
-                content=content[:6000],
+                content=llm_body[:6000],
             )
+            apply_thermal_pause_cognitive(config)
             for key, value in result.properties.items():
                 norm_key = key.strip().lower()
                 if norm_key in keys and value.strip():

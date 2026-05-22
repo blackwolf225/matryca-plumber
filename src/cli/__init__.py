@@ -261,9 +261,6 @@ async def run_cli(args: argparse.Namespace) -> int:
             start_out = start_daemon_detached(graph_root)
             _emit_result(start_out)
             return 0 if start_out.get("ok") is not False else 1
-        if plumber_action in {"status", "ui"}:
-            run_ui_server()
-            return 0
         if plumber_action == "stop":
             stop_out = stop_daemon(graph_root)
             _emit_result(stop_out)
@@ -288,6 +285,12 @@ def main(argv: list[str] | None = None) -> None:
     load_dotenv()
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "plumber" and args.plumber_action in {"status", "ui"}:
+        try:
+            run_ui_server()
+        except KeyboardInterrupt:
+            raise SystemExit(130) from None
+        raise SystemExit(0)
     try:
         exit_code = asyncio.run(run_cli(args))
     except (ValueError, TypeError, json.JSONDecodeError, OSError) as exc:

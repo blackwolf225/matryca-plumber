@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.markdown_blocks import atomic_write_bytes
 from ...graph.page_write_lock import page_rmw_lock
 from ._shared import (
@@ -30,6 +31,7 @@ def run_dangling_healer(
     *,
     llm: object,
     max_words: int,
+    config: PlumberLintConfig | None = None,
 ) -> ModuleOutcome:
     """Create seed pages for wikilinks that do not yet exist on disk."""
     outcome = ModuleOutcome()
@@ -46,6 +48,7 @@ def run_dangling_healer(
             context=ctx,
             max_words=max_words,
         )
+        apply_thermal_pause_cognitive(config)
         definition = _truncate_words(seed.definition.strip(), max_words)
         if not definition:
             continue

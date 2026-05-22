@@ -6,11 +6,13 @@ import re
 from pathlib import Path
 from typing import Literal
 
+from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.generational_cache import patch_generational_caches_for_paths
 from ...graph.markdown_blocks import atomic_write_bytes
 from ...graph.page_write_lock import page_rmw_lock
 from ..plumber_llm import MarpaClassificationResult
 from ..prompt_constraints import finalize_system_prompt
+from ..prompt_layout import build_cache_aligned_prompt
 from ._shared import ModuleOutcome
 
 MarpaDomain = Literal["mappa", "area", "risorsa", "progetto", "archivio"]
@@ -50,12 +52,16 @@ def build_marpa_classify_user_prompt(
 ) -> str:
     """User prompt for MARPA domain classification."""
     hint = namespace_hint or "(none)"
-    return (
-        "Classify the page below into exactly one MARPA domain using these definitions:\n"
+    task = (
+        "Task: classify the page content above into exactly one MARPA domain "
+        "using these definitions:\n"
         f"{MARPA_DOMAIN_DEFINITIONS}\n\n"
         f"Page title: {page_title}\n"
-        f"Namespace hint: {hint}\n\n"
-        f"Page content:\n{content[:max_content_chars]}"
+        f"Namespace hint: {hint}"
+    )
+    return build_cache_aligned_prompt(
+        content=content[:max_content_chars],
+        task_instruction=task,
     )
 
 
@@ -181,6 +187,8 @@ def run_marpa_framework(
     content: str,
     *,
     llm: object,
+    config: PlumberLintConfig | None = None,
+    llm_context: str | None = None,
 ) -> ModuleOutcome:
     """Classify page into MARPA domain and inject ``type::`` metadata safely."""
     outcome = ModuleOutcome()
@@ -202,13 +210,15 @@ def run_marpa_framework(
                 break
         classification = MarpaClassificationResult(assigned_domain=domain)
     else:
+        llm_body = (llm_context if llm_context is not None else content)[:8000]
         classification = llm.classify_marpa_page(
             page_title=page_title,
-            content=content[:8000],
+            content=llm_body,
             namespace_hint=namespace,
             page_path=page_path,
             graph_root=graph_root,
         )
+        apply_thermal_pause_cognitive(config)
     if ssot_flags:
         classification.violates_ssot_duplication = True
 

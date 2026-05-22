@@ -416,7 +416,7 @@ Use this table as a **mental map** for `src/` and `.github/` — phases are narr
 | **11 — Fortress (`v1.3.0`)** | **`path_sandbox.py`** (`is_relative_to` graph root), **`mcp_tool_guard`**, lifespan lock/tmp-task teardown | **Adversarial hardening**: block LLM path traversal, graceful MCP shutdown |
 | **12 — Headless Revolution (`v1.4.0`)** | Removed **`httpx`** / **`LogseqClient`** / `src/bridge/`; **`graph_dispatch.py`** + **`append_child_to_node`**; **`.matryca_xray_state.json`**; **`get_broken_references()`** lint | **Zero UI dependency**: server-safe automation with a single read/write path on disk |
 | **13 — Operational hardening (`v1.4.1`)** | Lifespan **`os.chdir`** to sandbox root; **`mcp_telemetry` privacy sanitizer** (`MATRYCA_DEBUG`); **`service_manager.py`** + CLI **`matryca service`**; **162** strict tests | **Daemon-safe cwd**, **production-safe MCP logs**, **LaunchAgent / systemd** background integration |
-| **14 — Ironclad Autonomous Linter OS (`v1.5.x`)** | **`MaintenanceDaemon`**, Instructor **`JSON_SCHEMA`**, Ermes **context compression**, cognitive lint modules, **structural quarantine**, **`semantic_clustering.py`** (Louvain GraphRAG), strict phase separation, **`prompt_constraints`**, **`patch_generational_caches_for_paths`** on Plumber writes | **Continuous local graph maintenance** without cloud APIs; fault-tolerant background processing; **262** strict tests |
+| **14 — Ironclad Autonomous Linter OS (`v1.5.x`)** | **`MaintenanceDaemon`**, Instructor **`JSON_SCHEMA`**, Ermes **context compression**, cognitive lint modules, **structural quarantine**, **`semantic_clustering.py`** (Louvain GraphRAG), strict phase separation, **`hierarchical_summarization.py`** (outliner MapReduce), **Context Acceleration Shield** (`llm_context_payload.py`, `prompt_layout.py`), **`ui_server.py`** + React SPA cockpit, intra-turn telemetry sync, POSIX atomic daemon checkpoints, **`json_repair.py`**, **`prompt_constraints`**, **`reload_plumber_dotenv()`** hot-reload, **`patch_generational_caches_for_paths`** on Plumber writes | **Continuous local graph maintenance** without cloud APIs; monolithic single-server operator UX; fault-tolerant background processing; **317** strict tests |
 
 **Cross-cutting:** **`src/config.py`**, **`matryca-wiki.yml`**, **`docs/openspec/`**, **`docs/PROJECT_DIARY.md`**, roadmap documents under **`docs/roadmaps/`**.
 
@@ -499,17 +499,109 @@ flowchart TB
 | `src/agent/plumber_modules/` | Env-gated cognitive plugins (MARPA, dangling healer, property hygiene, …) |
 | `src/agent/context_compressor.py` | Ermes-inspired epistemic condensation (100k trigger) |
 | `src/agent/prompt_constraints.py` | Cross-lingual output constraint for Plumber LLM prompts |
-| `src/cli/tui_dashboard.py` | Rich TUI for `matryca plumber status` |
+| `src/agent/prompt_layout.py` | Cache-aligned prompt builder (`build_cache_aligned_prompt`) for KV prefix reuse |
+| `src/agent/llm_context_payload.py` | Phase 1 summary substitution + semantic skeleton for giant-page LLM payloads |
+| `src/cli/ui_server.py` | FastAPI + Uvicorn monolith for `matryca plumber status` — REST API + compiled React SPA on `:8000` |
+| `frontend/` | Dark-themed cyberpunk React cockpit (Vite build → `frontend/dist/`); Tauri-ready layout |
+| `src/graph/hierarchical_summarization.py` | Outliner-native MapReduce chunking for giant pages (Phase 1 bootstrap) |
+| `src/utils/json_repair.py` | Lenient JSON repair for local LLM grammar leakages |
 
 ---
 
-## Matryca Plumber — autonomous maintenance daemon (Phase 8)
+## Matryca Plumber — autonomous maintenance daemon (Phase 14)
 
 **Matryca Plumber** is a **local-first background structure & cognitive maintenance daemon** that progressively indexes Logseq markdown with a **local LLM** (LM Studio OpenAI-compatible API). It complements the interactive MCP plane: agents mutate on demand; the daemon **continuously** repairs broken block references, flushes context loops via Ermes compression, appends semantic metadata, runs optional cognitive lint modules, and logs token economics to **`logs/matryca_plumber_ops.log`**.
 
 > **Brand separation:** **Matryca Brain** is reserved exclusively for the Nuitka-compiled Pro enterprise ingestion suite. The open-source maintenance daemon described here is **Matryca Plumber**.
 
 State checkpoint: **`.matryca_daemon_state.json`** at the graph root (per-file `mtime`, `processed` / `skipped` / `error`). Process lock: **`.matryca_plumber_daemon.pid`**.
+
+### Modern Cockpit — monolithic FastAPI + React SPA
+
+The legacy Rich terminal canvas is **deprecated**. **`matryca plumber status`** and **`matryca plumber ui`** invoke **`run_ui_server()`** in **`src/cli/ui_server.py`**, which binds **Uvicorn** on **`127.0.0.1:8000`** and serves:
+
+| Surface | Path | Role |
+|---------|------|------|
+| **Daemon checkpoint** | `GET /api/state` | Reads `.matryca_daemon_state.json` via `load_daemon_state()` |
+| **Ops log tail** | `GET /api/logs` | Last 50 JSONL lines from `TokenLogger` |
+| **Hardening thresholds** | `GET /api/config` | Live `PlumberLintConfig` (thermal delays, MapReduce char buckets) |
+| **React SPA** | `/` | Static assets from `frontend/dist/` when built (`npm run build`) |
+
+The React hook **`usePlumberPolling`** polls `/api/state`, `/api/logs`, and `/api/config` at **1 Hz**. CORS allows local Vite dev (`:5173`) and future **Tauri** packaging (`tauri://localhost`). One process, one port — no split between “API server” and “dashboard server.”
+
+```mermaid
+flowchart LR
+  CLI["matryca plumber status"] --> UV["Uvicorn :8000\nui_server.py"]
+  UV --> API["/api/state · /api/logs · /api/config"]
+  UV --> SPA["React SPA\nfrontend/dist"]
+  DAEMON["MaintenanceDaemon\nbackground"] --> SAVE["save_daemon_state\nPOSIX os.replace"]
+  SAVE --> JSON[".matryca_daemon_state.json"]
+  API --> LOAD["load_daemon_state\ndouble-read retry"]
+  LOAD --> JSON
+  SPA -->|1 Hz poll| API
+```
+
+### Structural hardening matrix (Phase 14 shields)
+
+Three engineering shields close the last production gaps between “works in foreground debug” and “runs for weeks on a 3,000+ page graph while a browser polls state at 1 Hz.”
+
+#### Outliner-native hierarchical MapReduce chunking
+
+**Problem:** Naive character- or token-based text splitting is **destructive** for Logseq outliners. Fixed-width cuts shatter parent-child nesting trees, tear `key:: value` property syntax, and bisect Markdown code fences — producing summaries that hallucinate structure the parser never saw.
+
+**Solution:** **`src/graph/hierarchical_summarization.py`** implements a deterministic **root-level indentation tree compiler**:
+
+1. **`_split_root_trees`** — partitions page bytes on **root bullet boundaries** (`^[-*+]\s+` at column 0); child lines stay attached to their parent subtree.
+2. **`chunk_outliner_content`** — packs whole subtrees into bounded buckets (default **`MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS=15_000`**) without splitting a tree mid-block.
+3. **`mapreduce_harvest_page_summary`** — when `len(content) > mapreduce_trigger_chars` (default **25_000**), runs a **Map → Reduce** flow: each chunk gets an isolated `harvest_page_summary` call with **`reset_execution_history()`** between chunks, then a final reduce pass merges partial summaries and tag sets.
+
+This isolates Gemma 4’s attention window per chunk, prevents cross-chunk KV-cache contamination, and keeps local prefill latency bounded on megabyte-class outliner pages.
+
+```mermaid
+flowchart TD
+  PAGE["Giant Logseq page\n(root bullet forest)"] --> SPLIT["_split_root_trees\natomic subtrees"]
+  SPLIT --> PACK["chunk_outliner_content\n15K char buckets"]
+  PACK --> MAP["Map: harvest_page_summary\nper chunk + history reset"]
+  MAP --> REDUCE["Reduce: consolidate partials\nsingle page summary"]
+  REDUCE --> INDEX["BootstrapSummaryResult\n→ Master Index"]
+```
+
+#### Intra-turn telemetry sync engine
+
+**Problem:** Cognitive sub-modules (link backpropagation, semantic routing, MARPA lint) instantiated their own **`TokenLogger`** instances. Usage accumulated in submodule memory but **never reached** `.matryca_daemon_state.json` — the React cockpit showed stale zero counters while JSONL logs contained the real spend (“isolated token logging” blindspot).
+
+**Solution:** **`MaintenanceDaemon._ensure_shared_token_logger()`** rebinds the central logger onto **`InstructorLLMClient`** at construction and every **`_sync_runtime_config()`** cycle. **`_absorb_token_logger_delta()`** merges prompt/completion deltas from submodule loggers after **`run_cognitive_lint_pipeline()`**. **`_sync_live_telemetry()`** mirrors in-memory totals onto **`DaemonState`**, and **`_save_cycle_checkpoint()`** flushes to disk **immediately before and after** active LLM inference blocks via **`save_daemon_state()`** — so 1 Hz FastAPI readers observe monotonic session counters even mid-file.
+
+```mermaid
+sequenceDiagram
+    participant D as MaintenanceDaemon
+    participant TL as Central TokenLogger
+    participant SUB as Cognitive submodule
+    participant DISK as .matryca_daemon_state.json
+
+    D->>TL: _ensure_shared_token_logger()
+    D->>DISK: _save_cycle_checkpoint (pre-inference)
+    D->>SUB: run_cognitive_lint_pipeline()
+    SUB->>TL: isolated usage (via shared client)
+    D->>D: _absorb_token_logger_delta()
+    D->>DISK: _save_cycle_checkpoint (post-lint)
+    D->>D: index_page LLM call
+    D->>DISK: _save_cycle_checkpoint (post-inference)
+```
+
+#### POSIX-atomic write-and-replace daemon checkpoints
+
+**Problem:** Standard non-atomic truncation (`open(path, "w")`) on `.matryca_daemon_state.json` exposes a torn-write window. Concurrent **1 Hz** frontend pollers calling **`json.loads`** during truncation raised transient **`JSONDecodeError`** flakes — decoupling disk persistence from parallel Web API readers.
+
+**Solution:** **`save_daemon_state()`** mirrors the Ironclad page commit discipline:
+
+1. Write full JSON payload to **`.matryca_daemon_state.json.tmp`** in the graph root.
+2. **`flush()`** + **`os.fsync(fileno)`** — push bytes to the OS before any live path references them.
+3. **`os.replace(tmp, final)`** — POSIX **atomic** inode swap; readers always see the previous complete checkpoint or the next one.
+
+**`load_daemon_state()`** pairs this with a **defensive double-read fallback**: **`_read_daemon_state_payload()`** retries once on empty or malformed reads (catching the microsecond race if a reader opens mid-replace). Corrupt payloads self-heal to a fresh **`DaemonState()`** with a logged **`[METADATA CORRUPTION DETECTED]`** warning.
+
+Markdown page writes continue to use **`atomic_write_bytes`** in **`markdown_blocks.py`**; daemon state uses the same **write → fsync → replace** contract without sharing the page-level `((uuid))` pre-flight guard.
 
 ### Why these mechanisms exist
 
@@ -537,8 +629,8 @@ Continuous local inference on consumer laptops saturates GPU/NPU heatsinks and t
 
 | Phase | Env var | Default | Injection site |
 |-------|---------|---------|----------------|
-| **Phase 1 — bootstrap harvest** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` | **2.0 s** | After each successful page summary in `run_bootstrap_harvest()` |
-| **Phase 2 — cognitive cycle** | `MATRYCA_THERMAL_DELAY_COGNITIVE` | **2.0 s** | After each file iteration in `MaintenanceDaemon.run_cycle()` |
+| **Phase 1 — bootstrap harvest** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` | **2.0 s** | After each atomic `harvest_page_summary` turn in `mapreduce_harvest_page_summary()` (per MapReduce chunk + reduce) |
+| **Phase 2 — cognitive cycle** | `MATRYCA_THERMAL_DELAY_COGNITIVE` | **2.0 s** | After each atomic completion in `InstructorLLMClient` (indexing, lint modules, context compression) |
 
 Set either variable to **`0`** to disable pacing for that phase. Defaults preserve battery longevity and zero-throttling execution on Apple Silicon and discrete-GPU workstations without sacrificing data quality.
 
@@ -579,17 +671,15 @@ flowchart TD
   PRE -->|ok| COG{"Cognitive modules\nenv-gated pipeline"}
   COG --> MARPA["MARPA taxonomy\n(optional)"]
   MARPA --> LLM["Instructor structured inference\nJSON_SCHEMA → MD_JSON fallback"]
-  LLM --> ERMES{"Token estimate\n> compression trigger?"}
+  LLM --> COOL["thermal_delay_cognitive\napply_thermal_pause_cognitive"]
+  COOL --> ERMES{"Token estimate\n> compression trigger?"}
   ERMES -->|yes| COMP["Ermes condensation\nConsolidated Epistemic State"]
   ERMES -->|no| APPLY
   COMP --> APPLY["apply_semantic_page_result\npage_rmw_lock + atomic_write_bytes"]
   APPLY --> PATCH["patch_generational_caches_for_paths"]
   PATCH --> STATE["Update .matryca_daemon_state.json"]
   QUAR --> STATE
-  STATE --> THERMAL{"thermal_delay_cognitive\n> 0?"}
-  THERMAL -->|yes| COOL["sleep MATRYCA_THERMAL_DELAY_COGNITIVE"]
-  THERMAL -->|no| SLEEP
-  COOL --> SLEEP["sleep MATRYCA_PLUMBER_POLL_SECONDS"]
+  STATE --> SLEEP["sleep MATRYCA_PLUMBER_POLL_SECONDS"]
   SLEEP --> SCAN
 ```
 
@@ -597,12 +687,117 @@ flowchart TD
 
 | Vector | Implementation | Rationale |
 |--------|----------------|-----------|
+| **Outliner MapReduce** | `hierarchical_summarization.py` — root-tree chunking at 15K char buckets, history reset per chunk | Preserve Logseq nesting; bound Gemma 4 attention / KV-cache on giant pages |
+| **Intra-turn telemetry** | `_ensure_shared_token_logger`, `_absorb_token_logger_delta`, `_save_cycle_checkpoint` before/after LLM | Unify token counters for cockpit + checkpoint plane |
+| **Atomic daemon checkpoints** | `save_daemon_state` tmp + fsync + `os.replace`; `load_daemon_state` double-read retry | Eliminate JSONDecodeError flakes under 1 Hz API polling |
+| **Lenient JSON repair** | `json_repair.py` — fence strip, bracket balance, double-escape heal, trailing garbage trim | Recover structured output from local LLM grammar leakages |
 | **Memory history cap** | `MAX_EXECUTION_HISTORY_MESSAGES = 48` in `context_compressor.py`; Instructor client trims `_execution_history` after each page | Constant memory across infinite daemon uptime |
 | **HTTP / compression fallbacks** | `condense_messages` try/except → truncation; compression warnings logged as `[COMPRESSION WARN]` | LM Studio offline must not kill the child process |
 | **Idempotent backlink deduplication** | `run_backlink_backpropagator` + semantic lint skip reasons (`no_change`, `uuid_not_found`) | Prevents duplicate wikilink injection on re-runs |
 | **Token estimate safety buffer** | `TOKEN_ESTIMATE_SAFETY_MULTIPLIER = 1.12` on Qwen/Gemma heuristic | Triggers compression before VRAM cliff on code/CJK-heavy pages |
-| **Thermal pacing shield** | `MATRYCA_THERMAL_DELAY_BOOTSTRAP` / `MATRYCA_THERMAL_DELAY_COGNITIVE` (default **2.0 s** each; **0** disables) | Breaks continuous heat curves during bootstrap and Phase 2 cognitive cycles |
+| **Thermal pacing shield** | `apply_thermal_pause_*` in `plumber_config.py`; bootstrap pauses in MapReduce map/reduce loops; cognitive pauses in `InstructorLLMClient._completion_with_structured_output` | Breaks intra-file micro-cycle heat spikes (chunk lint, entity routing, compression) |
 | **Low-Impact Antivirus Mode** | `MATRYCA_PLUMBER_LOW_PRIORITY_MODE` (default **`true`**); `os.nice(19)` at detached bootstrap | Kernel-level CPU courtesy — zero polling; full throughput during idle |
+| **Context Acceleration Shield** | `llm_context_payload.py` + `prompt_layout.py` — Phase 1 summary substitution, semantic skeleton fallback, cache-aligned prompt prefix | Bound prefill on 5,000+ block pages; maximize llama.cpp KV-cache hits across consecutive Phase 2 operations |
+
+---
+
+## TRIZ-Driven Inventive Architecture for Context Acceleration
+
+Matryca Plumber Phase 2 executes multiple consecutive LLM operations per page — MARPA classification, dangling-link seeding, entity consolidation, property hygiene, and semantic indexing. On production graphs containing **5,000+ block outliner pages**, each operation previously forced LM Studio (llama.cpp) to recompute a massive prompt prefill, invalidating the GPU **KV-cache** and stalling inference for minutes per file.
+
+### The technical contradiction
+
+| Improve (Parameter A) | Worsen (Parameter B) |
+|-----------------------|----------------------|
+| **Deep semantic contextual processing** — Phase 2 linting and routing require rich page context for accurate entity topology, alias consolidation, and MARPA taxonomy | **Local inference throughput** — massive graph notes exceed practical context windows, invalidate KV-cache prefixes, and explode GPU prefill latency |
+
+Classic engineering would trade quality for speed (truncate blindly) or speed for quality (send full raw text every turn). The **Context Acceleration Shield** resolves this contradiction without sacrificing semantic resolution by applying four **TRIZ Inventive Principles** in combination.
+
+### TRIZ Principle 10 — Preliminary Action (Pre-Action)
+
+**Module:** `src/agent/llm_context_payload.py` → `prepare_llm_context_payload()`
+
+Phase 1 bootstrap already distills giant pages via outliner-native MapReduce (`hierarchical_summarization.py`) and persists dense abstracts in `master_catalog.json` and each page's `### Matryca Semantic Index` block. Principle 10 applies that work **before** Phase 2 demands it:
+
+- When `len(content) > mapreduce_trigger_chars` (default **25,000**), Phase 2 cognitive modules receive the **pre-computed hierarchical summary** instead of raw or flat-truncated text.
+- Token mass drops by up to **~90%** while high-level entity topology (domain, tags, summary prose) remains intact.
+- Disk mutations (property injection, alias lines, seed page creation) still operate on **raw on-disk content** — only the LLM inference payload is compressed.
+
+### TRIZ Principle 5 — Merging / Combination (Prefix Alignment)
+
+**Module:** `src/agent/prompt_layout.py` → `build_cache_aligned_prompt()`
+
+llama.cpp **Prompt Caching** reuses KV tensors when consecutive requests share an identical token prefix. Phase 2 previously placed dynamic task instructions **before** page content, mutating the prefix on every sub-operation and forcing full prefill recomputation.
+
+Principle 5 enforces an **invariant prefix layout** across all Phase 2 LLM calls:
+
+```text
+[SYSTEM_PROMPT]  +  [STABLE_PAGE_CONTENT_OR_SUMMARY]  +  [DYNAMIC_TASK_INSTRUCTION]
+```
+
+Implementation rules:
+
+1. **System prompt** — role, safety rules, cross-lingual constraint (`finalize_system_prompt`).
+2. **User message body** — stable page payload first (`Page content:\n…`), derived once per file via `prepare_llm_context_payload()`.
+3. **Dynamic tail** — task-specific fields (MARPA domain catalog, tag keys, entity pair titles, seed link targets) appended **last**.
+
+Consecutive operations on the same file therefore share the heaviest token prefix. LM Studio logs show **`[Prompt Cache Hit]`** on turns 2–6; sequential prefill latency drops to **~0 s** after the first operation.
+
+```mermaid
+flowchart LR
+  subgraph prefix["Shared KV-cache prefix"]
+    SYS["System prompt"]
+    BODY["Page content / Phase 1 summary"]
+  end
+  subgraph tail["Per-operation suffix"]
+    T1["MARPA classify task"]
+    T2["Entity overlap task"]
+    T3["Property infer task"]
+  end
+  SYS --> BODY
+  BODY --> T1
+  BODY --> T2
+  BODY --> T3
+```
+
+**Semantic indexing nuance:** `_build_index_prompt()` passes the compressed `llm_body` for reading while `_enumerate_blocks_for_prompt()` still derives the block UUID catalog from **raw content** — preserving per-block `semantic_corrections` accuracy.
+
+### TRIZ Principle 2 — Taking Out / Separation
+
+**Module:** `src/agent/llm_context_payload.py` → `extract_semantic_skeleton()`
+
+When a giant page lacks a complete Phase 1 summary (stale catalog row, interrupted bootstrap), Principle 2 **separates signal from noise** at zero LLM cost:
+
+- A lightweight regex pass retains only lines carrying active information: `[[WikiLinks]]`, inline `#tags`, and `key:: value` property lines.
+- Conversational prose, filler bullets, and non-structural narrative are stripped before inference.
+- Payload size typically shrinks **~85%** while link/tag/property topology — the inputs entity consolidation and property hygiene actually need — survives intact.
+
+Fallback order: **raw** (under threshold) → **summary** (catalog or on-page index) → **skeleton** → **truncated** raw cap.
+
+### TRIZ Principle 15 — Dynamicity
+
+**Module:** `src/agent/plumber_config.py` → `reload_plumber_dotenv()`
+
+Detached daemon forks inherit an arbitrary working directory. A blind `load_dotenv()` without an explicit repository root caused the child process to **miss thermal delays, MapReduce thresholds, and lint flags** written to the repo `.env` by the React Settings Drawer — configuration appeared frozen at startup defaults.
+
+Principle 15 makes runtime parameters **dynamic within live background threads**:
+
+- `resolve_repo_dotenv_path()` anchors `.env` to the package repository root (`Path(__file__).resolve().parents[2]`), not process `cwd`.
+- `reload_plumber_dotenv()` re-reads that file with `override=True` on every `_sync_runtime_config()` cycle and at daemon entry points.
+- Operators hot-swap thermal breaks, `mapreduce_trigger_chars`, and cognitive lint toggles from the web cockpit without restarting the Plumber process.
+
+### Integration surface
+
+| Component | Role |
+|-----------|------|
+| `run_cognitive_lint_pipeline()` | Computes `llm_context` once per page; passes to MARPA, entity consolidation, property hygiene |
+| `InstructorLLMClient` | All structured Phase 2 methods use `build_cache_aligned_prompt()` |
+| `index_page()` | Auto-invokes `prepare_llm_context_payload()` when `graph_root` is available |
+| `tests/test_llm_context_payload.py` | Six integration tests validating payload selection, skeleton extraction, and prefix order |
+
+**Validation bar:** **317** pytest targets green (1 skipped); strict Mypy and Ruff clean via `make check`.
+
+---
 
 ### Plumber index artifacts (on-disk)
 
@@ -688,7 +883,7 @@ Sviluppato in Python puro per escludere dipendenze C pesanti o database vettoria
 
 - **Universal Unicode Resilience:** Ogni operazione di decodifica/codifica I/O impone il flag `errors="replace"` per digerire frammenti web corrotti senza mai sollevare un `UnicodeDecodeError`.
 - **Graceful Signal Evacuation (`SIGTERM`/`SIGINT`):** All'intercettazione dei segnali di spegnimento, un hook atomico scrive lo stato corrente, persiste il catalogo in RAM, svuota tutti i descrittori di lock di processo (`*.matryca.lock`) e disalloca il file PID prima del `sys.exit(0)`.
-- **Streaming Log Tail in $O(1)$ Memory:** La visualizzazione dei log nella TUI Rich esegue una scansione inversa a ritroso a blocchi fissi di 8KB dal fondo del file, garantendo il refresh a 1Hz a consumo di RAM costante, impedendo i memory-bloat causati da file di log multi-megabyte.
+- **Live cockpit telemetry:** The React control room polls `/api/state` and `/api/logs` at 1 Hz; ops log tailing uses bounded line reads — constant RAM regardless of multi-megabyte JSONL history.
 - **Error Backoff:** Le pagine che falliscono l'indicizzazione per cause esterne (es. timeout VRAM di LM Studio) vengono marcate come `"error"`. Il demone le esclude dai cicli di scansione successivi finché il loro `st_mtime` sul disco non subisce una modifica fisica da parte dell'utente, azzerando lo spreco di cicli CPU.
 
 ---

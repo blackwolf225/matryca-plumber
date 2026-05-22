@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_LM_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_LM_MODEL = "qwen2.5-coder-7b"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_repo_dotenv_path() -> Path | None:
+    """Return the repo ``.env`` path when present (daemon may fork with an arbitrary cwd)."""
+    env_path = _REPO_ROOT / ".env"
+    return env_path if env_path.is_file() else None
+
+
+def reload_plumber_dotenv() -> None:
+    """Refresh ``os.environ`` from the repo ``.env`` (Settings Drawer writes here)."""
+    env_path = resolve_repo_dotenv_path()
+    if env_path is None:
+        return
+    from dotenv import load_dotenv
+
+    load_dotenv(env_path, override=True)
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -113,8 +131,35 @@ def bootstrap_phase_lint_config() -> PlumberLintConfig:
     return PlumberLintConfig()
 
 
-def load_plumber_lint_config() -> PlumberLintConfig:
+def _safe_thermal_seconds(seconds: float) -> float:
+    """Clamp thermal pause to a non-negative float (guards bad env / UI input)."""
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, value)
+
+
+def apply_thermal_pause_bootstrap(config: PlumberLintConfig | None = None) -> None:
+    """GPU cool-down after one bootstrap harvest LLM turn (reads live env each call)."""
+    cfg = config or load_plumber_lint_config()
+    delay = _safe_thermal_seconds(cfg.thermal_delay_bootstrap)
+    if delay > 0:
+        time.sleep(delay)
+
+
+def apply_thermal_pause_cognitive(config: PlumberLintConfig | None = None) -> None:
+    """GPU cool-down after one Plumber cognitive LLM turn (reads live env each call)."""
+    cfg = config or load_plumber_lint_config()
+    delay = _safe_thermal_seconds(cfg.thermal_delay_cognitive)
+    if delay > 0:
+        time.sleep(delay)
+
+
+def load_plumber_lint_config(*, reload_env: bool = False) -> PlumberLintConfig:
     """Load Plumber lint settings from environment variables."""
+    if reload_env:
+        reload_plumber_dotenv()
     rules_raw = os.environ.get("MATRYCA_LINT_PROPERTY_RULES", "").strip()
     rules_path = Path(rules_raw).expanduser() if rules_raw else None
     if rules_path is None:
@@ -154,8 +199,12 @@ __all__ = [
     "DEFAULT_LM_BASE_URL",
     "DEFAULT_LM_MODEL",
     "PlumberLintConfig",
+    "apply_thermal_pause_bootstrap",
+    "apply_thermal_pause_cognitive",
     "bootstrap_phase_lint_config",
     "load_plumber_lint_config",
+    "reload_plumber_dotenv",
     "resolve_lm_base_url",
     "resolve_lm_model",
+    "resolve_repo_dotenv_path",
 ]

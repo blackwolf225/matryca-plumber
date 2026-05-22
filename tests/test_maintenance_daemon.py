@@ -19,6 +19,7 @@ from src.agent.maintenance_daemon import (
     SemanticCrossRef,
     SemanticIndexResult,
     SemanticLintCorrection,
+    ThermalProfile,
     append_semantic_index,
     apply_semantic_corrections_to_lines,
     apply_semantic_page_result,
@@ -28,6 +29,7 @@ from src.agent.maintenance_daemon import (
     prune_stale_daemon_file_entries,
     read_pid_file,
     save_daemon_state,
+    state_path,
     stop_daemon,
     write_pid_file,
 )
@@ -226,6 +228,65 @@ def test_save_daemon_state_persists_block_ref_error_text(graph_root: Path) -> No
     assert loaded_error == error_msg
     assert loaded_error is not None
     assert f"(({bad_uuid}))" in loaded_error
+
+
+def test_save_daemon_state_is_atomic_under_concurrent_reads(graph_root: Path) -> None:
+    """Concurrent readers must never observe truncated or invalid JSON checkpoints."""
+    page_key = str((graph_root / "pages" / "Alpha.md").resolve())
+    baseline = DaemonState(
+        status="running",
+        session_prompt_tokens=10,
+        session_completion_tokens=5,
+        files={
+            page_key: FileState(
+                mtime=1.0,
+                processed_at="2026-01-01T00:00:00+00:00",
+                status="processed",
+            ),
+        },
+    )
+    save_daemon_state(graph_root, baseline)
+    checkpoint = state_path(graph_root)
+    parse_errors: list[str] = []
+    stop_event = threading.Event()
+
+    def reader_loop() -> None:
+        while not stop_event.is_set():
+            try:
+                raw = checkpoint.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not raw.strip():
+                continue
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError:
+                parse_errors.append(raw[:120])
+
+    readers = [threading.Thread(target=reader_loop, daemon=True) for _ in range(4)]
+    for thread in readers:
+        thread.start()
+
+    try:
+        for index in range(120):
+            save_daemon_state(
+                graph_root,
+                DaemonState(
+                    status="running",
+                    session_prompt_tokens=10 + index,
+                    session_completion_tokens=5 + index,
+                    files=baseline.files,
+                ),
+            )
+    finally:
+        stop_event.set()
+        for thread in readers:
+            thread.join(timeout=2.0)
+
+    assert parse_errors == []
+    loaded = load_daemon_state(graph_root)
+    assert loaded.session_prompt_tokens == 129
+    assert loaded.session_completion_tokens == 124
 
 
 def test_append_semantic_index_preserves_content(graph_root: Path) -> None:
@@ -663,7 +724,7 @@ def test_completion_with_structured_output_uses_lenient_json_repair(
     monkeypatch.setattr(
         client,
         "_raw_json_completion",
-        lambda _messages: (malformed, type("Usage", (), {"usage": None})()),
+        lambda _messages, **_kwargs: (malformed, type("Usage", (), {"usage": None})()),
     )
 
     parsed, _completion = client._completion_with_structured_output(
@@ -971,7 +1032,7 @@ def test_run_cycle_bulk_fast_track_drains_cached_pages_despite_llm_cap(
     assert list_pending_files(graph_root, state) == []
 
 
-def test_run_cycle_thermal_delay_only_after_llm_inference(
+def test_run_cycle_thermal_delay_after_each_atomic_llm_turn(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -979,19 +1040,41 @@ def test_run_cycle_thermal_delay_only_after_llm_inference(
     sleeps: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
 
+    def _fake_completion(
+        self: InstructorLLMClient,
+        *,
+        response_model: type[SemanticIndexResult],
+        thermal_profile: ThermalProfile = "cognitive",
+        **kwargs: object,
+    ) -> tuple[SemanticIndexResult, object]:
+        _ = (self, response_model, kwargs)
+        self._apply_thermal_after_completion(thermal_profile)
+        return SemanticIndexResult(summary="Indexed summary"), object()
+
+    monkeypatch.setattr(
+        InstructorLLMClient,
+        "_completion_with_structured_output",
+        _fake_completion,
+    )
+
     _write_page(
         graph_root,
         "AlreadyIndexed",
         f"- note\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: done\n",
     )
-    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM(), max_files_per_cycle=1)
+    daemon = MaintenanceDaemon(
+        graph_root,
+        llm_client=InstructorLLMClient(),
+        max_files_per_cycle=1,
+    )
     daemon.run_cycle()
     assert sleeps == []
 
     _write_page(graph_root, "NeedsLlm", "- fresh content\n")
     sleeps.clear()
     daemon.run_cycle()
-    assert sleeps == [2.0]
+    assert sleeps.count(2.0) >= 1
+    assert all(delay == 2.0 for delay in sleeps)
 
 
 def test_daemon_state_serializes_phase2_telemetry_fields(graph_root: Path) -> None:

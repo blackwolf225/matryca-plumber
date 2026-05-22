@@ -17,13 +17,68 @@ Entries are chronological (newest first within each phase summary). When a decis
 | **5** | Graph gardener | Flashcards, tag unify, same-page reparent |
 | **6** | Synthesis engine | Unlinked mentions, MOC generation, large-block split |
 | **7** | Mldoc compliance | `mldoc_properties` + `mldoc_guards` integrated into mutators |
-| **8** | Ironclad Autonomous Linter OS | Global fence scanner, atomic writes, generational cache, **Matryca Plumber** daemon, Ermes context compression, structural quarantine, GraphRAG Louvain clustering, 262-test CI bar |
+| **8** | Ironclad Autonomous Linter OS | Global fence scanner, atomic writes, generational cache, **Matryca Plumber** daemon, Ermes context compression, structural quarantine, GraphRAG Louvain clustering, FastAPI + React cockpit, **317-test** CI bar |
 
 Phases **9–13** (Trust plane, delivery, Fortress, Headless Revolution, operational hardening) are documented in [`ARCHITECTURE.md`](ARCHITECTURE.md) § Complete phase evolution history.
 
 ---
 
-## [2026-05-21] Phase 14b: Thermal Pacing & Hardware Protection Shield
+## [2026-05-22] Phase 14d: Context Acceleration & TRIZ Hardening
+
+### Context & defect discovery
+
+Production validation on a live graph copy exposed a **5,260-block monster page** that turned Phase 2 cognitive lint into a sequential GPU bottleneck. Each sub-operation on the same file — MARPA classification, entity consolidation, property hygiene, semantic indexing — triggered a full LM Studio **prefill** pass because:
+
+1. **Payload mass** — even flat-truncated excerpts exceeded practical local context budgets.
+2. **Prefix invalidation** — dynamic task instructions preceded page content in the prompt string, so llama.cpp treated every turn as a new prefix and **destroyed KV-cache reuse** across the 5–6 inference calls per file.
+
+In parallel, detached daemon forks revealed a **non-atomic `.env` resolution bug**: child processes called `load_dotenv()` without an explicit repository root. Forked Plumber workers inherited an arbitrary `cwd`, failed to load thermal delays and MapReduce thresholds from the repo `.env`, and appeared to ignore Settings Drawer hot-swaps — operators saw default pacing while the web cockpit wrote valid configuration to disk.
+
+### The solution
+
+Framing the bottleneck through **TRIZ** (Theory of Inventive Problem Solving) produced three surgical modules instead of a brute-force context window upgrade:
+
+1. **`src/agent/llm_context_payload.py`** — Principle **10 (Preliminary Action)**: substitute raw megabyte-class text with Phase 1 hierarchical summaries above `mapreduce_trigger_chars`; Principle **2 (Separation)**: regex semantic skeleton when summaries are absent.
+2. **`src/agent/prompt_layout.py`** — Principle **5 (Prefix Alignment)**: `build_cache_aligned_prompt()` enforces `[STABLE_CONTENT] + [DYNAMIC_TASK]` so consecutive operations share the heaviest token prefix for **100% Prompt Cache Hit** on turns 2–6.
+3. **`reload_plumber_dotenv()`** — Principle **15 (Dynamicity)**: anchor `.env` to the repository root and re-read on every `_sync_runtime_config()` cycle so thermal breaks and lint flags adapt live from the React cockpit.
+
+Six new integration tests in **`tests/test_llm_context_payload.py`** validate payload selection, skeleton extraction, and prefix ordering — pushing the global bar to **317 green validations** (1 skipped).
+
+### Outcome
+
+Local inference on giant pages transformed from a **sequential prefill bottleneck** (minutes per file, sustained GPU fan load) into an **accelerated caching workflow**: one prefill on the stable content prefix, near-instant subsequent turns. Disk mutations remain on raw markdown; only the LLM client receives compressed, cache-aligned payloads.
+
+### Status
+
+Shipped. **`make check`** — **317 passed**, 1 skipped; strict Mypy clean.
+
+---
+
+## [2026-05-21] Phase 14c: UI Hardening — Monolithic Cockpit & Production Graph Validation
+
+### Context
+
+Phase 14b closed thermal pacing and Louvain GraphRAG on test graphs. The next gate was **production-scale validation** on a real-world Logseq deployment and retiring the fragmented operator experience (Rich terminal canvas + implicit log tailing) in favor of a **100% stable, monolithic, single-server** control plane guarded by **317 green regression tests**.
+
+On a live graph copy, bootstrap harvest grew the connected corpus from **1,426 fragmented pages** to a **hyper-connected network of 3,862 pages** — validating latent **link backpropagation** and **semantic neighbor routing** under strict Phase separation (no orphan-page hallucination loops during Phase 1).
+
+### The telemetry defect lessons
+
+1. **Isolated token logging blindspot** — Cognitive sub-modules (backpropagation, semantic routing, MARPA lint) logged tokens into submodule-scoped loggers. The React cockpit and `.matryca_daemon_state.json` showed stale session counters while JSONL ops logs contained the real spend. Fixed via **`_ensure_shared_token_logger()`**, **`_absorb_token_logger_delta()`**, and **`_save_cycle_checkpoint()`** flushes immediately before and after LLM inference blocks.
+2. **Lenient JSON repair engine** — Local Gemma 4 outputs leaked grammar artifacts (broken brackets, double-escaped quote runs, trailing `{` blocks after the root object). Refactored **`src/utils/json_repair.py`** to auto-heal fences, balance brackets, collapse `\\"", \\"` leakage, and strip trailing garbage before Pydantic validation — reducing Instructor retry storms on the daemon hot path.
+3. **POSIX atomic checkpoints vs 1 Hz polling** — Non-atomic `open(..., "w")` on daemon state caused transient **`JSONDecodeError`** flakes when the FastAPI reader polled mid-truncation. Hardened **`save_daemon_state()`** (tmp → flush → fsync → **`os.replace`**) and **`_read_daemon_state_payload()`** double-read retry decouple writers from parallel Web API readers.
+
+### Cockpit architecture decisions
+
+1. **Deprecated Rich TUI dashboard** — `matryca plumber status` no longer renders a text canvas; it starts **`run_ui_server()`** (FastAPI + Uvicorn on **`:8000`**) serving REST endpoints and the compiled React SPA from **`frontend/dist/`**.
+2. **Full-stack React layout** — Dark cyberpunk cockpit (`CognitiveProgressCard`, `TokenCounterCard`, `HardeningShieldCard`, `LiveConsole`) polls `/api/state`, `/api/logs`, `/api/config` at 1 Hz via **`usePlumberPolling`**. Layout is designed for future native packaging into **Tauri** (CORS already allows `tauri://localhost`).
+3. **Outliner-native MapReduce** — Giant pages now chunk on **root-bullet tree boundaries** (`hierarchical_summarization.py`) at **15K char buckets** with per-chunk history reset — preventing destructive flat splits on Logseq nesting.
+
+### Status
+
+Shipped. **`make check`** — **317 passed**, 1 skipped; strict Mypy clean. The Plumber plane is formally stable for long-running production graphs with concurrent browser monitoring.
+
+---
 
 ### Context
 
@@ -55,11 +110,11 @@ Durante i primi stress test su larga scala con una copia fresca del grafo di tes
 1. **Separazione Rigorosa delle Fasi (Strict Phase Separation):** Riscritto il ciclo vitale del demone blindando la Phase 1 in modalità puramente passiva (Read/Append-Index). Introdotta la flag atomica `bootstrap_complete` che inibisce qualsiasi mutazione o creazione di file markdown fino alla completa stesura del catalogo e del Master Index.
 2. **Ottimizzazione Stateless di Ingestione:** Forzato l'azzeramento totale del buffer di conversazione dell'Instructor LLM Client durante la Phase 1. Il tempo di elaborazione per singola pagina è crollato verticalmente da 25 secondi a meno di 2 secondi per file, riducendo drasticamente l'impronta termica della GPU Mac.
 3. **Iniezione del Motore GraphRAG Louvain-Nativo:** Introdotto il modulo `semantic_clustering.py` ispirato alle comunità gerarchiche di Microsoft GraphRAG. Python calcola localmente a costo token zero una matrice ibrida TF-IDF + Jaccard Tags ed esegue il partizionamento di Louvain con un loop guard di 20 iterazioni massime. La Phase 2 ora opera esclusivamente confinando la memoria rolling all'interno di questi isolati "quartieri semantici" (5-35 pagine), guidata da un nodo hub centrale (*Cluster Hub Anchor Node*).
-4. **Hardening Totale Operativo:** Chiusi gli ultimi varchi di instabilità legati ai file system virtuali (iCloud, Dropbox) intercettando i fallimenti di `flock`, implementato il self-healing automatico in caso di file JSON di stato azzerati da blackout, ed ottimizzata la TUI tramite un lettore di log streaming inverso a blocchi costanti da 8KB.
+4. **Hardening Totale Operativo:** Chiusi gli ultimi varchi di instabilità legati ai file system virtuali (iCloud, Dropbox) intercettando i fallimenti di `flock`, implementato il self-healing automatico in caso di file JSON di stato azzerati da blackout, ed Error Backoff per evitare loop infiniti di CPU su file corrotti non modificati.
 
 ### Stato della Suite di Test
 
-La validazione finale ha portato il contatore globale a **262 test unitari e di integrazione completamente superati (100% verdi)**, superando brillantemente i vincoli di MyPy Strict e Ruff linting. Il sistema è formalmente dichiarato stabile, resiliente ed ermetico per carichi di produzione su grafi reali complessi.
+La validazione finale ha portato il contatore globale a **317 test unitari e di integrazione completamente superati (100% verdi)**, superando brillantemente i vincoli di MyPy Strict e Ruff linting. Il sistema è formalmente dichiarato stabile, resiliente ed ermetico per carichi di produzione su grafi reali complessi.
 
 ---
 
@@ -96,7 +151,7 @@ Running `matryca plumber start --foreground` against a real graph surfaced a har
 
 ### Status
 
-Shipped. **262** pytest targets green; strict Mypy clean.
+Shipped. **317** pytest targets green (1 skipped); strict Mypy clean.
 
 ---
 
@@ -128,7 +183,7 @@ Interactive MCP sessions excel at agent-driven edits, but a personal graph also 
 
 1. **`MaintenanceDaemon`** (`src/agent/maintenance_daemon.py`) — polls `pages/` and `journals/` for pending markdown, calls LM Studio via Instructor + `JSON_SCHEMA`, appends `### Matryca Semantic Index` sections.
 2. **Env-gated cognitive modules** (`src/agent/plumber_modules/`) — dangling-link healer, entity consolidation, auto-split, property hygiene, MARPA framework, backlink backpropagation, semantic routing cache.
-3. **Rich TUI** — `matryca plumber status` renders scan progress, token session totals, and ops-log tail summaries.
+3. **Web cockpit (supersedes Rich TUI)** — `matryca plumber status` starts the FastAPI + React control room on `:8000`; the legacy Rich text canvas in `tui_dashboard.py` remains for snapshot tests only.
 4. **Detached vs foreground** — `matryca plumber start` forks a session; `--foreground` runs the infinite loop in the current terminal for debugging.
 
 ### Status
@@ -178,7 +233,7 @@ Shipped.
 
 ### Context
 
-`.matryca_daemon_state.json` persisted a stale `model` field (`qwen2.5-coder-7b`) while operators changed `MATRYCA_LM_MODEL` in `.env`. The TUI and token logger reported the wrong model after reload.
+`.matryca_daemon_state.json` persisted a stale `model` field (`qwen2.5-coder-7b`) while operators changed `MATRYCA_LM_MODEL` in `.env`. The web cockpit and token logger reported the wrong model after reload.
 
 ### Decisions made
 
