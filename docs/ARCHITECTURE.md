@@ -397,6 +397,127 @@ Stdio is appended under **`~/.matryca/logs/`**. Install captures **`LOGSEQ_GRAPH
 
 ---
 
+## Logseq-native parity layer (Phase 15 — the *WHY*)
+
+Matryca Plumber now mirrors Logseq OG's internal Clojure/Datalog filesystem contract end-to-end. Third-party tools routinely corrupt graphs by treating Markdown as flat text; these mechanisms exist because **Logseq's on-disk grammar is not generic CommonMark** — it is a spatial outliner with encoding rules, property placement invariants, and concurrency assumptions baked into the desktop app's indexer.
+
+### Physical vs. semantic namespaces
+
+Logseq stores **semantic page titles** in memory and wikilinks using `/` as a namespace separator — e.g. `[[Domain/Subdomain/Topic]]`. On disk, Logseq's `:file/name-format :triple-lowbar` rule translates `/` to `___` and then percent-encodes OS-reserved characters via `urllib.parse.quote` so filenames remain valid on **Windows** (where `?`, `#`, `%`, `<`, `>`, `|`, `\`, `"`, `:`, and `*` are forbidden in paths).
+
+**Module:** `src/graph/page_path.py`
+
+| Layer | Example |
+|-------|---------|
+| **Semantic (in-graph)** | `Domain/Subdomain/Topic` |
+| **Physical (on disk)** | `pages/Domain___Subdomain___Topic.md` |
+| **Reserved char** | `Topic?` → `Topic%3F.md` |
+
+Every Plumber module that resolves, creates, or scans pages — alias index, dangling healer, auto-split, MasterCatalog — routes through `page_title_to_filename()` / `filename_to_page_title()` instead of naive string concatenation. **Ghost duplicate pages** from path-encoding drift (the classic `Domain/Topic` vs `Domain___Topic` split) are eliminated at the source.
+
+### True frontmatter vs. block properties
+
+Logseq distinguishes two property planes with **different line-level grammar**. Conflating them breaks indexing silently.
+
+#### Page properties (absolute frontmatter)
+
+Page-level metadata (`tags::`, `alias::`, `title::`, …) must appear as **raw `key:: value` lines at the top of the file (line 0 region)** — **without** a leading bullet dash (`- `). A blank line separates frontmatter from the first outliner bullet. Logseq's indexer reads this region as page metadata; prefixing `- ` promotes the line to a block and **drops it from the property index**.
+
+**Module:** `src/graph/page_properties.py` — `inject_page_property()`, `_frontmatter_span()`
+
+#### Block properties (contiguous to parent text)
+
+Block-scoped properties (`id::`, `matryca-plumber:: true`, `collapsed:: true`, …) must sit **immediately after the parent bullet's text**, indented **exactly +2 spaces** relative to the bullet, **before any child bullets**. Orphaning a property below nested children, or deleting an existing `id::`, breaks Logseq's block identity graph and produces dangling `((uuid))` references.
+
+**Enforcement:** `src/graph/mldoc_properties.py` (`is_logseq_block_property_line`), `src/graph/property_line_edit.py` (subtree-scoped surgery), cursor rules in `.cursor/rules/01-core-paradigm.mdc`.
+
+```text
+tags:: project, idea          ← page frontmatter (no bullet)
+
+- Parent bullet text
+  id:: aaaa-bbbb-…            ← block property (+2 spaces, before children)
+  matryca-plumber:: true
+  - Child bullet              ← children come after properties
+```
+
+### Optimistic concurrency control (OCC)
+
+Local LLM inference is **slow** (seconds to minutes per page). Humans continue typing in Logseq during that window. A naive read-modify-write cycle would **overwrite live edits** with stale LLM output.
+
+**Mechanism:** `read_file_mtime()` → inference → `atomic_write_bytes_if_unchanged()` in `src/graph/markdown_blocks.py`.
+
+1. Before reading page content for inference, record `st_mtime` as `baseline_mtime`.
+2. Run LLM inference and assemble the mutation payload.
+3. Immediately before `atomic_write_bytes`, call `file_mtime_drifted()` — if `st_mtime` changed, **abort the write** and return `False` (no data loss).
+4. If mtime still matches, commit via temp file → `fsync` → `os.replace` under `page_rmw_lock`.
+
+This complements **`fcntl.flock`** serialization (which prevents torn writes between concurrent writers) with **lost-update prevention** (which protects the human editor's in-flight changes). Cognitive modules (`property_hygiene`, `auto_split`, semantic index append) all pass `baseline_mtime` through the OCC gate.
+
+```mermaid
+sequenceDiagram
+    participant D as Plumber daemon
+    participant FS as Page .md on disk
+    participant LLM as Local LLM
+
+    D->>FS: read_file_mtime() → baseline
+    D->>FS: read_text(encoding=utf-8)
+    D->>LLM: structured inference (seconds…)
+    Note over FS: User edits in Logseq
+    D->>FS: file_mtime_drifted()?
+    alt mtime changed
+        D-->>D: abort write — no data loss
+    else mtime stable
+        D->>FS: atomic_write_bytes_if_unchanged()
+    end
+```
+
+### Alias-aware resolution and case-insensitivity
+
+The **Dangling Healer** and entity consolidation modules must not spawn **ghost duplicate pages** when a canonical page already exists under a different casing or alias spelling.
+
+**Module:** `src/graph/alias_index.py` + `src/graph/master_catalog.py`
+
+1. **`build_alias_index()`** scans all scannable `pages/**/*.md`, parses comma-separated `alias::` / `aliases::` frontmatter, and builds `alias_to_page` + `page_to_aliases` maps.
+2. **`normalize_concept_key()`** case-folds candidates before lookup — `Topic`, `topic`, and `TOPIC` resolve to the same canonical title.
+3. **`resolve_existing_page_title()`** in `page_path.py` checks on-disk filenames **and** the alias index before any module creates a new page file.
+4. **`MasterCatalog`** tracks canonical titles for Phase 1 bootstrap and Phase 2 cognitive routing — alias collisions surface as `collision_notes` instead of silent overwrites.
+
+Combined with **`EXCLUDED_GRAPH_DIR_NAMES`** (`logseq`, `.recycle`, `.git`), backup trees under `logseq/bak/` never enter the alias scan — preventing **Ghost Clones** where stale backup files masquerade as live pages.
+
+### Outliner UX — foldable headings and embed stubs
+
+Logseq's outliner UI treats `- ### Heading` as a **foldable section heading** (bulleted heading), not a flat Markdown H3 inside document body text. Plumber-generated sections use this form so operators can collapse daemon output without leaving the outliner paradigm:
+
+- `- ### Matryca Semantic Index`
+- `- ### Matryca Backlink Context`
+- `- ### Matryca MARPA Validation`
+- `- ### Matryca Structural Lint`
+
+**Auto-split** (`src/agent/plumber_modules/auto_split.py`) extracts dense subtrees (above `MATRYCA_LINT_SPLIT_BLOCK_THRESHOLD` child bullets) into dedicated child pages, then replaces the original subtree with a lightweight stub:
+
+```markdown
+- {{embed [[Child Page Title]]}}
+```
+
+Embeds preserve **inline readability** on the parent page while keeping files small — the full subtree lives on the child page, transcluded on demand in Logseq. This is strictly **Surgeon Mode** (opt-in via the Trust & Safety drawer) because it restructures block hierarchy.
+
+### Code-block immunity and graph hygiene guards
+
+**Module:** `src/graph/global_fence_scanner.py`
+
+Every scan and mutation pass intersects with **protected line indices**: Markdown fenced code (```), HTML comments (`<!-- … -->`), and Logseq Advanced Query blocks (`#+BEGIN_QUERY` … `#+END_QUERY`). Lines inside an open fence **mask** inner query/comment markers — pasted examples cannot corrupt scanner state.
+
+Additional early-exit guards in `src/agent/plumber_modules/_shared.py`:
+
+- **`is_blank_page_content()`** — 0-byte files and whitespace-only ghost pages skip inference (no crash, no empty index pollution).
+- **`is_scannable_graph_markdown()`** — excludes hidden dirs, `logseq/bak/`, `.recycle/`, `.git`, and internal `.matryca_*` caches from alias/catalog/daemon scans.
+
+### UTF-8 I/O hardening (Windows parity)
+
+All graph read/write paths use **`encoding="utf-8"`** explicitly. On Windows, Python's locale-default encoding (`cp1252`) silently mangles Unicode page titles and property values — producing **graph corruption** invisible until Logseq re-index fails. Matryca forces UTF-8 on every `read_text`, `write_text`, and `encode("utf-8")` commit path; decode fallbacks use `errors="replace"` only on **read** paths where corrupted third-party bytes must not crash the daemon.
+
+---
+
 ## Complete phase evolution history
 
 Use this table as a **mental map** for `src/` and `.github/` — phases are narrative; modules and workflows are what you grep.
@@ -416,7 +537,8 @@ Use this table as a **mental map** for `src/` and `.github/` — phases are narr
 | **11 — Fortress (`v1.3.0`)** | **`path_sandbox.py`** (`is_relative_to` graph root), **`mcp_tool_guard`**, lifespan lock/tmp-task teardown | **Adversarial hardening**: block LLM path traversal, graceful MCP shutdown |
 | **12 — Headless Revolution (`v1.4.0`)** | Removed **`httpx`** / **`LogseqClient`** / `src/bridge/`; **`graph_dispatch.py`** + **`append_child_to_node`**; **`.matryca_xray_state.json`**; **`get_broken_references()`** lint | **Zero UI dependency**: server-safe automation with a single read/write path on disk |
 | **13 — Operational hardening (`v1.4.1`)** | Lifespan **`os.chdir`** to sandbox root; **`mcp_telemetry` privacy sanitizer** (`MATRYCA_DEBUG`); **`service_manager.py`** + CLI **`matryca service`**; **162** strict tests | **Daemon-safe cwd**, **production-safe MCP logs**, **LaunchAgent / systemd** background integration |
-| **14 — Ironclad Autonomous Linter OS (`v1.5.x`)** | **`MaintenanceDaemon`**, Instructor **`JSON_SCHEMA`**, Ermes **context compression**, cognitive lint modules, **structural quarantine**, **`semantic_clustering.py`** (Louvain GraphRAG), strict phase separation, **`hierarchical_summarization.py`** (outliner MapReduce), **Context Acceleration Shield** (`llm_context_payload.py`, `prompt_layout.py`), **`ui_server.py`** + React SPA cockpit, intra-turn telemetry sync, POSIX atomic daemon checkpoints, **`json_repair.py`**, **`prompt_constraints`**, **`reload_plumber_dotenv()`** hot-reload, **`patch_generational_caches_for_paths`** on Plumber writes | **Continuous local graph maintenance** without cloud APIs; monolithic single-server operator UX; fault-tolerant background processing; **317** strict tests |
+| **14 — Ironclad Autonomous Linter OS (`v1.5.x`)** | **`MaintenanceDaemon`**, Instructor **`JSON_SCHEMA`**, Ermes **context compression**, cognitive lint modules, **structural quarantine**, **`semantic_clustering.py`** (Louvain GraphRAG), strict phase separation, **`hierarchical_summarization.py`** (outliner MapReduce), **Context Acceleration Shield** (`llm_context_payload.py`, `prompt_layout.py`), **`ui_server.py`** + React SPA cockpit, intra-turn telemetry sync, POSIX atomic daemon checkpoints, **`json_repair.py`**, **`prompt_constraints`**, **`reload_plumber_dotenv()`** hot-reload, **`patch_generational_caches_for_paths`** on Plumber writes | **Continuous local graph maintenance** without cloud APIs; monolithic single-server operator UX; fault-tolerant background processing; **349+** strict tests |
+| **15 — Logseq-native parity shield (`v1.5.x`)** | **`page_path.py`** namespace encoding (`___` + percent-encode), **`page_properties.py`** true frontmatter vs block property placement, **`atomic_write_bytes_if_unchanged`** optimistic concurrency (mtime guard), **`alias_index.py`** case-insensitive alias resolution + `logseq/bak/` / `.recycle/` exclusion, **`global_fence_scanner.py`** code-block immunity, UTF-8 I/O on all graph paths, **`SettingsDrawer.tsx`** Trust & Safety UI (Safe / Augmented / Surgeon tiers), **`auto_split.py`** embed stubs | **100% Datalog filesystem parity** with Logseq OG; zero ghost-clone pages; no data loss during concurrent human + daemon edits; operator-visible mutation guardrails |
 
 **Cross-cutting:** **`src/config.py`**, **`matryca-wiki.yml`**, **`docs/openspec/`**, **`docs/PROJECT_DIARY.md`**, roadmap documents under **`docs/roadmaps/`**.
 
@@ -484,7 +606,9 @@ flowchart TB
 | `src/agent/git_snapshot.py` | Optional commits on graph root |
 | `src/agent/quality_gate.py` | Outline and Advanced Query EDN pre-flight scans |
 | `src/rag/matryca_hooks.py` | Parser adapter for spatial reads |
-| `src/graph/markdown_blocks.py` | `atomic_write_bytes` / `atomic_write_file` (sandbox + pre-flight `((uuid))` guard), block line helpers, `graph_safe_page_path` |
+| `src/graph/page_path.py` | Logseq semantic title ↔ on-disk filename translation (`/` → `___`, percent-encoding) |
+| `src/graph/page_properties.py` | True page frontmatter injection (line 0, no bullet prefix) |
+| `src/graph/markdown_blocks.py` | `atomic_write_bytes` / `atomic_write_bytes_if_unchanged` (OCC mtime guard), block line helpers, `graph_safe_page_path` |
 | `src/graph/logseq_uuid.py` | UUID v4/v5 shape checks; `assert_valid_block_refs_in_markdown` for atomic writes |
 | `src/graph/block_ref_lint.py` | Vault-wide `((uuid))` ↔ `id::` integrity via `LogseqGraph.get_broken_references()` |
 | `src/graph/global_fence_scanner.py` | Whole-page dead-zone line index |
@@ -795,7 +919,7 @@ Principle 15 makes runtime parameters **dynamic within live background threads**
 | `index_page()` | Auto-invokes `prepare_llm_context_payload()` when `graph_root` is available |
 | `tests/test_llm_context_payload.py` | Six integration tests validating payload selection, skeleton extraction, and prefix order |
 
-**Validation bar:** **317** pytest targets green (1 skipped); strict Mypy and Ruff clean via `make check`.
+**Validation bar:** **349+** pytest targets green (2 skipped); strict Mypy and Ruff clean via `make check`.
 
 ---
 
