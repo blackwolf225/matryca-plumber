@@ -5,7 +5,6 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
-import re
 import socket
 import subprocess
 import sys
@@ -18,7 +17,7 @@ import webbrowser
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -37,12 +36,14 @@ from ..agent.maintenance_daemon import (
 )
 from ..agent.plumber_config import (
     PlumberLintConfig,
+    format_dotenv_value,
     load_plumber_lint_config,
+    load_plumber_lint_config_from_environ,
     reload_plumber_dotenv,
     resolve_llm_base_url,
+    serialize_plumber_config_field_for_dotenv,
 )
 from ..graph.graph_analytics import compute_graph_analytics
-from ..graph.graph_path_validate import validate_logseq_graph_path
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 from ..utils.updater import UpdateCheckResult, check_for_updates, update_check_to_dict
@@ -324,7 +325,15 @@ def _fetch_lm_studio_models(base_url: str) -> LmModelsResponse:
     models_url = f"{resolve_llm_base_url(override=base_url).rstrip('/')}/models"
 
     class _NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl) -> None:  # noqa: ANN001, ARG002
+        def redirect_request(
+            self,
+            req: urllib.request.Request,
+            fp: Any,
+            code: int,
+            msg: str,
+            headers: Any,
+            newurl: str,
+        ) -> None:
             return None
 
     opener = urllib.request.build_opener(_NoRedirect())
@@ -374,67 +383,6 @@ def _resolve_dotenv_path() -> Path:
     return _REPO_ROOT / ".env"
 
 
-def _format_env_value(value: str) -> str:
-    if re.search(r'[\s#"\'\\]', value):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return value
-
-
-def _serialize_config_value(field: str, value: object) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if field in {"mapreduce_trigger_chars", "mapreduce_chunk_chars"}:
-        try:
-            if isinstance(value, int):
-                parsed = value
-            elif isinstance(value, float):
-                parsed = int(value)
-            elif isinstance(value, str):
-                parsed = int(value.strip())
-            else:
-                parsed = int(str(value))
-            if parsed < 0:
-                raise ValueError(f"{field} must be non-negative")
-            return str(parsed)
-        except (TypeError, ValueError) as exc:
-            msg = f"Invalid integer for {field}: {value!r}"
-            raise ValueError(msg) from exc
-    if field in {"compression_trigger", "compression_target"}:
-        try:
-            if isinstance(value, int):
-                parsed = value
-            elif isinstance(value, float):
-                parsed = int(value)
-            elif isinstance(value, str):
-                parsed = int(value.strip())
-            else:
-                parsed = int(str(value))
-            if parsed < 0:
-                raise ValueError(f"{field} must be non-negative")
-            return str(parsed)
-        except (TypeError, ValueError) as exc:
-            msg = f"Invalid integer for {field}: {value!r}"
-            raise ValueError(msg) from exc
-    if field in {"thermal_delay_bootstrap", "thermal_delay_cognitive"}:
-        try:
-            if isinstance(value, (int, float)):
-                parsed = float(value)
-            elif isinstance(value, str):
-                parsed = float(value.strip())
-            else:
-                parsed = float(str(value))
-            if parsed < 0:
-                raise ValueError(f"{field} must be non-negative")
-            return str(parsed)
-        except (TypeError, ValueError) as exc:
-            msg = f"Invalid float for {field}: {value!r}"
-            raise ValueError(msg) from exc
-    if field == "logseq_graph_path":
-        return str(validate_logseq_graph_path(str(value)))
-    return str(value).strip()
-
-
 def _require_ui_token(
     x_matryca_token: Annotated[str | None, Header(alias="X-Matryca-Token")] = None,
 ) -> None:
@@ -459,7 +407,7 @@ def _update_dotenv(payload: PlumberConfigResponse) -> None:
     """Persist configuration updates to ``.env`` and the active process environment."""
     env_path = _resolve_dotenv_path()
     updates = {
-        env_key: _serialize_config_value(field, getattr(payload, field))
+        env_key: serialize_plumber_config_field_for_dotenv(field, getattr(payload, field))
         for field, env_key in _ENV_KEY_MAP.items()
     }
     updates["MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS"] = (
@@ -484,14 +432,14 @@ def _update_dotenv(payload: PlumberConfigResponse) -> None:
         key, _, _ = line.partition("=")
         key = key.strip()
         if key in updates:
-            new_lines.append(f"{key}={_format_env_value(updates[key])}")
+            new_lines.append(f"{key}={format_dotenv_value(updates[key])}")
             seen.add(key)
         else:
             new_lines.append(line)
 
     for key, value in updates.items():
         if key not in seen:
-            new_lines.append(f"{key}={_format_env_value(value)}")
+            new_lines.append(f"{key}={format_dotenv_value(value)}")
 
     env_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
     for key, value in updates.items():
@@ -568,7 +516,7 @@ def get_auth_session() -> AuthSessionResponse:
 
 
 @app.get("/api/graph-analytics", response_model=GraphAnalyticsResponse)
-def get_graph_analytics() -> GraphAnalyticsResponse:
+def get_graph_analytics(_: None = Depends(_require_ui_token)) -> GraphAnalyticsResponse:
     """Return live graph topology telemetry for the configured ``LOGSEQ_GRAPH_PATH``."""
     graph_root = _resolve_graph_root_or_raise()
     state = _load_healed_daemon_state(graph_root)
@@ -580,7 +528,7 @@ def get_graph_analytics() -> GraphAnalyticsResponse:
 
 
 @app.get("/api/state", response_model=DaemonStateResponse)
-def get_state() -> DaemonStateResponse:
+def get_state(_: None = Depends(_require_ui_token)) -> DaemonStateResponse:
     """Return the current daemon checkpoint from ``.matryca_daemon_state.json``."""
     graph_root = _resolve_graph_root_or_raise()
     state = _load_healed_daemon_state(graph_root)
@@ -588,28 +536,29 @@ def get_state() -> DaemonStateResponse:
 
 
 @app.get("/api/logs", response_model=list[str])
-def get_logs() -> list[str]:
+def get_logs(_: None = Depends(_require_ui_token)) -> list[str]:
     """Return the latest 50 non-empty operational log lines (prompt/response redacted)."""
     token_logger = TokenLogger(log_path=resolve_plumber_log_path())
     return [_redact_log_line(line) for line in token_logger.tail_lines(50)]
 
 
 @app.get("/api/config", response_model=PlumberConfigResponse)
-def get_config() -> PlumberConfigResponse:
-    """Return Plumber settings as persisted in the repo ``.env`` file."""
+def get_config(_: None = Depends(_require_ui_token)) -> PlumberConfigResponse:
+    """Return Plumber settings as persisted in the repo ``.env`` file (no global env mutation)."""
     env_path = _resolve_dotenv_path()
-    saved = dict(os.environ)
-    try:
-        if env_path.is_file():
-            load_dotenv(env_path, override=True)
-        return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
-    finally:
-        os.environ.clear()
-        os.environ.update(saved)
+    if env_path.is_file():
+        file_vars = dotenv_values(env_path, interpolate=True)
+        merged: dict[str, str] = dict(os.environ)
+        for key, value in file_vars.items():
+            if value is not None:
+                merged[key] = value
+        return PlumberConfigResponse.from_lint_config(load_plumber_lint_config_from_environ(merged))
+    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
 
 
 @app.get("/api/system/update-check", response_model=UpdateCheckResponse)
 async def get_update_check(
+    _: None = Depends(_require_ui_token),
     force_refresh: bool = Query(default=False),
 ) -> UpdateCheckResponse:
     """Compare the installed package version against the latest PyPI release."""
@@ -618,7 +567,10 @@ async def get_update_check(
 
 
 @app.get("/api/lm-models", response_model=LmModelsResponse)
-def get_lm_models(base_url: str | None = None) -> LmModelsResponse:
+def get_lm_models(
+    _: None = Depends(_require_ui_token),
+    base_url: str | None = None,
+) -> LmModelsResponse:
     """Proxy local model discovery for the settings drawer (avoids browser CORS)."""
     resolved = base_url.strip() if isinstance(base_url, str) and base_url.strip() else None
     if resolved is None:

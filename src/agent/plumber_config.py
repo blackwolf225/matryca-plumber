@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
 import os
+import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -167,10 +170,12 @@ def bootstrap_phase_lint_config() -> PlumberLintConfig:
 
 
 def _safe_thermal_seconds(seconds: float) -> float:
-    """Clamp thermal pause to a non-negative float (guards bad env / UI input)."""
+    """Clamp thermal pause to a non-negative finite float (guards bad env / UI input)."""
     try:
         value = float(seconds)
     except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(value):
         return 0.0
     return max(0.0, value)
 
@@ -200,60 +205,193 @@ def apply_thermal_pause_cognitive(config: PlumberLintConfig | None = None) -> No
         time.sleep(delay)
 
 
-def load_plumber_lint_config(*, reload_env: bool = False) -> PlumberLintConfig:
-    """Load Plumber lint settings from environment variables."""
-    if reload_env:
-        reload_plumber_dotenv()
-    rules_raw = os.environ.get("MATRYCA_LINT_PROPERTY_RULES", "").strip()
+def _map_bool(env: Mapping[str, str], key: str, default: bool = False) -> bool:
+    raw = (env.get(key) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _map_int(env: Mapping[str, str], key: str, default: int) -> int:
+    raw = (env.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _map_float(env: Mapping[str, str], key: str, default: float) -> float:
+    raw = (env.get(key) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _map_str_nonempty(env: Mapping[str, str], key: str, default: str) -> str:
+    raw = (env.get(key) or "").strip()
+    return raw if raw else default
+
+
+def _resolve_llm_model_name_from_env(env: Mapping[str, str]) -> str:
+    canonical = (env.get("LLM_MODEL_NAME") or "").strip()
+    if canonical:
+        return canonical
+    return _map_str_nonempty(env, "MATRYCA_LM_MODEL", DEFAULT_LLM_MODEL_NAME)
+
+
+def _resolve_llm_base_url_from_env(env: Mapping[str, str]) -> str:
+    canonical = (env.get("LLM_BASE_URL") or "").strip()
+    raw = (
+        canonical
+        if canonical
+        else _map_str_nonempty(env, "MATRYCA_LM_BASE_URL", DEFAULT_LLM_BASE_URL)
+    )
+    base = raw.rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    parsed = urlparse(base)
+    path = (parsed.path or "").rstrip("/")
+    if path:
+        return base
+    return f"{base}/v1"
+
+
+def _resolve_llm_api_key_from_env(env: Mapping[str, str]) -> str:
+    return _map_str_nonempty(env, "LLM_API_KEY", DEFAULT_LLM_API_KEY)
+
+
+def load_plumber_lint_config_from_environ(env: Mapping[str, str]) -> PlumberLintConfig:
+    """Build :class:`PlumberLintConfig` from a string environment mapping (thread-safe reads)."""
+    rules_raw = (env.get("MATRYCA_LINT_PROPERTY_RULES") or "").strip()
     rules_path = Path(rules_raw).expanduser() if rules_raw else None
     if rules_path is None:
-        graph = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+        graph = (env.get("LOGSEQ_GRAPH_PATH") or "").strip()
         if graph:
             candidate = Path(graph).expanduser() / "matryca-plumber-rules.yml"
             if candidate.is_file():
                 rules_path = candidate
 
     return PlumberLintConfig(
-        lm_model=resolve_llm_model_name(),
-        lm_base_url=resolve_llm_base_url(),
-        llm_api_key=resolve_llm_api_key(),
-        marpa_framework=_env_bool("MATRYCA_LINT_MARPA_FRAMEWORK"),
-        heal_dangling=_env_bool("MATRYCA_LINT_HEAL_DANGLING"),
-        dangling_max_words=_env_int("MATRYCA_LINT_DANGLING_MAX_WORDS", 50),
-        entity_consolidation=_env_bool("MATRYCA_LINT_ENTITY_CONSOLIDATION"),
-        similarity_threshold=_env_float("MATRYCA_LINT_SIMILARITY_THRESHOLD", 0.85),
-        auto_split=_env_bool("MATRYCA_LINT_AUTO_SPLIT"),
-        split_block_threshold=_env_int("MATRYCA_LINT_SPLIT_BLOCK_THRESHOLD", 15),
-        property_hygiene=_env_bool("MATRYCA_LINT_PROPERTY_HYGIENE"),
-        infer_missing_properties=_env_bool("MATRYCA_LINT_INFER_MISSING_PROPERTIES", True),
+        lm_model=_resolve_llm_model_name_from_env(env),
+        lm_base_url=_resolve_llm_base_url_from_env(env),
+        llm_api_key=_resolve_llm_api_key_from_env(env),
+        marpa_framework=_map_bool(env, "MATRYCA_LINT_MARPA_FRAMEWORK"),
+        heal_dangling=_map_bool(env, "MATRYCA_LINT_HEAL_DANGLING"),
+        dangling_max_words=_map_int(env, "MATRYCA_LINT_DANGLING_MAX_WORDS", 50),
+        entity_consolidation=_map_bool(env, "MATRYCA_LINT_ENTITY_CONSOLIDATION"),
+        similarity_threshold=_map_float(env, "MATRYCA_LINT_SIMILARITY_THRESHOLD", 0.85),
+        auto_split=_map_bool(env, "MATRYCA_LINT_AUTO_SPLIT"),
+        split_block_threshold=_map_int(env, "MATRYCA_LINT_SPLIT_BLOCK_THRESHOLD", 15),
+        property_hygiene=_map_bool(env, "MATRYCA_LINT_PROPERTY_HYGIENE"),
+        infer_missing_properties=_map_bool(env, "MATRYCA_LINT_INFER_MISSING_PROPERTIES", True),
         property_rules_path=rules_path,
-        backpropagate_links=_env_bool("MATRYCA_LINT_BACKPROPAGATE_LINKS"),
-        semantic_routing=_env_bool("MATRYCA_LINT_SEMANTIC_ROUTING"),
-        disable_semantic_corrections=_env_bool(
+        backpropagate_links=_map_bool(env, "MATRYCA_LINT_BACKPROPAGATE_LINKS"),
+        semantic_routing=_map_bool(env, "MATRYCA_LINT_SEMANTIC_ROUTING"),
+        disable_semantic_corrections=_map_bool(
+            env,
             "MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS",
             True,
         ),
-        context_compression=_env_bool("MATRYCA_PLUMBER_CONTEXT_COMPRESSION"),
+        context_compression=_map_bool(env, "MATRYCA_PLUMBER_CONTEXT_COMPRESSION"),
         compression_trigger=_safe_nonneg_int(
-            _env_int("MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", 100_000),
+            _map_int(env, "MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", 100_000),
             default=100_000,
         ),
         compression_target=_safe_nonneg_int(
-            _env_int("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
+            _map_int(env, "MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
             default=30_000,
         ),
-        thermal_delay_bootstrap=_env_float("MATRYCA_THERMAL_DELAY_BOOTSTRAP", 2.0),
-        thermal_delay_cognitive=_env_float("MATRYCA_THERMAL_DELAY_COGNITIVE", 2.0),
-        low_priority_mode=_env_bool("MATRYCA_PLUMBER_LOW_PRIORITY_MODE", True),
+        thermal_delay_bootstrap=_map_float(env, "MATRYCA_THERMAL_DELAY_BOOTSTRAP", 2.0),
+        thermal_delay_cognitive=_map_float(env, "MATRYCA_THERMAL_DELAY_COGNITIVE", 2.0),
+        low_priority_mode=_map_bool(env, "MATRYCA_PLUMBER_LOW_PRIORITY_MODE", True),
         mapreduce_trigger_chars=_safe_nonneg_int(
-            _env_int("MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", 25_000),
+            _map_int(env, "MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", 25_000),
             default=25_000,
         ),
         mapreduce_chunk_chars=_safe_nonneg_int(
-            _env_int("MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", 15_000),
+            _map_int(env, "MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", 15_000),
             default=15_000,
         ),
     )
+
+
+def format_dotenv_value(value: str) -> str:
+    """Quote ``.env`` values when needed, including ``$`` to avoid expansion surprises."""
+    if re.search(r'[\s#"\'\\$]', value):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
+
+
+def serialize_plumber_config_field_for_dotenv(field: str, value: object) -> str:
+    """Serialize one Plumber UI field to a scalar string safe for ``KEY=value`` lines."""
+    from ..graph.graph_path_validate import validate_logseq_graph_path
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if field in {"mapreduce_trigger_chars", "mapreduce_chunk_chars"}:
+        try:
+            if isinstance(value, int):
+                parsed = value
+            elif isinstance(value, float):
+                parsed = int(value)
+            elif isinstance(value, str):
+                parsed = int(value.strip())
+            else:
+                parsed = int(str(value))
+            if parsed < 0:
+                raise ValueError(f"{field} must be non-negative")
+            return str(parsed)
+        except (TypeError, ValueError) as exc:
+            msg = f"Invalid integer for {field}: {value!r}"
+            raise ValueError(msg) from exc
+    if field in {"compression_trigger", "compression_target"}:
+        try:
+            if isinstance(value, int):
+                parsed = value
+            elif isinstance(value, float):
+                parsed = int(value)
+            elif isinstance(value, str):
+                parsed = int(value.strip())
+            else:
+                parsed = int(str(value))
+            if parsed < 0:
+                raise ValueError(f"{field} must be non-negative")
+            return str(parsed)
+        except (TypeError, ValueError) as exc:
+            msg = f"Invalid integer for {field}: {value!r}"
+            raise ValueError(msg) from exc
+    if field in {"thermal_delay_bootstrap", "thermal_delay_cognitive"}:
+        try:
+            if isinstance(value, (int, float)):
+                thermal = float(value)
+            elif isinstance(value, str):
+                thermal = float(value.strip())
+            else:
+                thermal = float(str(value))
+        except (TypeError, ValueError) as exc:
+            msg = f"Invalid float for {field}: {value!r}"
+            raise ValueError(msg) from exc
+        if not math.isfinite(thermal):
+            raise ValueError(f"{field} must be a finite number")
+        if thermal < 0:
+            raise ValueError(f"{field} must be non-negative")
+        return str(thermal)
+    if field == "logseq_graph_path":
+        return str(validate_logseq_graph_path(str(value)))
+    return str(value).strip()
+
+
+def load_plumber_lint_config(*, reload_env: bool = False) -> PlumberLintConfig:
+    """Load Plumber lint settings from environment variables."""
+    if reload_env:
+        reload_plumber_dotenv()
+    return load_plumber_lint_config_from_environ(os.environ)
 
 
 __all__ = [
@@ -266,7 +404,9 @@ __all__ = [
     "apply_thermal_pause_bootstrap",
     "apply_thermal_pause_cognitive",
     "bootstrap_phase_lint_config",
+    "format_dotenv_value",
     "load_plumber_lint_config",
+    "load_plumber_lint_config_from_environ",
     "reload_plumber_dotenv",
     "resolve_llm_api_key",
     "resolve_llm_base_url",
@@ -274,4 +414,5 @@ __all__ = [
     "resolve_lm_base_url",
     "resolve_lm_model",
     "resolve_repo_dotenv_path",
+    "serialize_plumber_config_field_for_dotenv",
 ]

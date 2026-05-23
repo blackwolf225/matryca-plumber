@@ -11,6 +11,7 @@ from src.graph.path_sandbox import (
     SECURITY_VIOLATION_MSG,
     PathTraversalSecurityError,
     assert_path_within_graph,
+    normalize_daemon_file_key,
 )
 from src.rag.matryca_hooks import resolve_logseq_page_md
 
@@ -19,6 +20,24 @@ def _make_graph(tmp_path: Path) -> Path:
     graph = tmp_path / "graph"
     (graph / "pages").mkdir(parents=True)
     return graph
+
+
+def test_normalize_daemon_file_key_resolves_dotdot_inside_graph(tmp_path: Path) -> None:
+    graph = tmp_path / "graph"
+    (graph / "pages").mkdir(parents=True)
+    page = graph / "pages" / "Safe.md"
+    page.write_text("- ok\n", encoding="utf-8")
+    key = normalize_daemon_file_key(graph, "pages/../pages/Safe.md")
+    assert key == "pages/Safe.md"
+
+
+def test_normalize_daemon_file_key_rejects_dotdot_escape(tmp_path: Path) -> None:
+    graph = tmp_path / "graph"
+    (graph / "pages").mkdir(parents=True)
+    outside = tmp_path / "outside.md"
+    outside.write_text("x", encoding="utf-8")
+    key = normalize_daemon_file_key(graph, f"pages/../../{outside.name}")
+    assert key == ""
 
 
 def test_graph_safe_page_path_blocks_dotdot_page_ref(tmp_path: Path) -> None:

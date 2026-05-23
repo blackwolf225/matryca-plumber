@@ -32,7 +32,10 @@ def graph_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_get_state_returns_daemon_checkpoint(graph_root: Path) -> None:
+def test_get_state_returns_daemon_checkpoint(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
     page = graph_root / "pages" / "Alpha.md"
     page.write_text("- alpha\n- link [[Beta]]\n", encoding="utf-8")
     beta = graph_root / "pages" / "Beta.md"
@@ -55,7 +58,7 @@ def test_get_state_returns_daemon_checkpoint(graph_root: Path) -> None:
     save_daemon_state(graph_root, state)
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
+        response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -80,14 +83,17 @@ def test_get_state_returns_daemon_checkpoint(graph_root: Path) -> None:
     assert analytics["context_acceleration"] == 0.0
 
 
-def test_get_graph_analytics_returns_topology(graph_root: Path) -> None:
+def test_get_graph_analytics_returns_topology(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
     page = graph_root / "pages" / "Alpha.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_text("- alpha\n- link [[Beta]]\n", encoding="utf-8")
     (graph_root / "pages" / "Beta.md").write_text("- beta\nalias:: B\n", encoding="utf-8")
 
     with TestClient(app) as client:
-        response = client.get("/api/graph-analytics")
+        response = client.get("/api/graph-analytics", headers=auth_headers)
 
     assert response.status_code == 200
     analytics = response.json()
@@ -99,6 +105,7 @@ def test_get_graph_analytics_returns_topology(graph_root: Path) -> None:
 def test_get_state_survives_analytics_failure(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
     save_daemon_state(graph_root, DaemonState(status="idle"))
 
@@ -108,7 +115,7 @@ def test_get_state_survives_analytics_failure(
     monkeypatch.setattr("src.cli.ui_server.compute_graph_analytics", _boom)
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
+        response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
     analytics = response.json()["graph_analytics"]
@@ -120,6 +127,7 @@ def test_get_state_survives_analytics_failure(
 def test_get_state_loads_graph_root_from_repo_dotenv(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
     graph_root = tmp_path / "graph"
     (graph_root / "pages").mkdir(parents=True)
@@ -131,19 +139,22 @@ def test_get_state_loads_graph_root_from_repo_dotenv(
     reload_plumber_dotenv()
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
+        response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
     analytics = response.json()["graph_analytics"]
     assert analytics["total_pages"] == 1
 
 
-def test_get_state_requires_graph_root(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_state_requires_graph_root(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
     monkeypatch.delenv("LOGSEQ_GRAPH_PATH", raising=False)
     monkeypatch.setattr("src.cli.ui_server.reload_plumber_dotenv", lambda: None)
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
+        response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 503
 
@@ -152,6 +163,7 @@ def test_get_config_returns_live_lint_settings(
     tmp_path: Path,
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text(
@@ -185,7 +197,7 @@ def test_get_config_returns_live_lint_settings(
     monkeypatch.setattr("src.cli.ui_server._REPO_ROOT", tmp_path)
 
     with TestClient(app) as client:
-        response = client.get("/api/config")
+        response = client.get("/api/config", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -265,7 +277,10 @@ def test_post_config_updates_dotenv(
     assert "MATRYCA_LINT_PROPERTY_HYGIENE=true" in written
 
 
-def test_get_lm_models_returns_openai_compatible_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_lm_models_returns_openai_compatible_ids(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
     payload = json.dumps(
         {
             "data": [
@@ -294,6 +309,7 @@ def test_get_lm_models_returns_openai_compatible_ids(monkeypatch: pytest.MonkeyP
         response = client.get(
             "/api/lm-models",
             params={"base_url": "http://localhost:1234/v1"},
+            headers=auth_headers,
         )
 
     assert response.status_code == 200
@@ -302,7 +318,10 @@ def test_get_lm_models_returns_openai_compatible_ids(monkeypatch: pytest.MonkeyP
     assert body["models"] == ["gemma-4-e4b-it", "qwen3-8b"]
 
 
-def test_get_lm_models_surfaces_connection_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_lm_models_surfaces_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
     def _fail(*_args: object, **_kwargs: object) -> None:
         raise OSError("connection refused")
 
@@ -315,6 +334,7 @@ def test_get_lm_models_surfaces_connection_errors(monkeypatch: pytest.MonkeyPatc
         response = client.get(
             "/api/lm-models",
             params={"base_url": "http://localhost:1234/v1"},
+            headers=auth_headers,
         )
 
     assert response.status_code == 200
@@ -323,22 +343,27 @@ def test_get_lm_models_surfaces_connection_errors(monkeypatch: pytest.MonkeyPatc
     assert "connection refused" in body["error"]
 
 
-def test_get_lm_models_rejects_unsafe_base_url(graph_root: Path) -> None:
+def test_get_lm_models_rejects_unsafe_base_url(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
     with TestClient(app) as client:
         response = client.get(
             "/api/lm-models",
             params={"base_url": "http://169.254.169.254/latest/meta-data/"},
+            headers=auth_headers,
         )
 
     assert response.status_code == 400
     assert "not allowed" in response.json()["detail"]
 
 
-def test_get_lm_models_rejects_non_http_scheme() -> None:
+def test_get_lm_models_rejects_non_http_scheme(auth_headers: dict[str, str]) -> None:
     with TestClient(app) as client:
         response = client.get(
             "/api/lm-models",
             params={"base_url": "file:///etc/passwd"},
+            headers=auth_headers,
         )
 
     assert response.status_code == 400
@@ -348,6 +373,7 @@ def test_get_lm_models_rejects_non_http_scheme() -> None:
 def test_get_state_does_not_persist_healed_ledger(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
     state = DaemonState(status="running", ai_links_injected=999)
     save_daemon_state(graph_root, state)
@@ -359,14 +385,17 @@ def test_get_state_does_not_persist_healed_ledger(
     monkeypatch.setattr("src.agent.maintenance_daemon.save_daemon_state", _forbidden_save)
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
-        client.get("/api/graph-analytics")
+        response = client.get("/api/state", headers=auth_headers)
+        client.get("/api/graph-analytics", headers=auth_headers)
 
     assert response.status_code == 200
     assert saved == []
 
 
-def test_get_update_check_returns_pypi_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_update_check_returns_pypi_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
     from src.utils.updater import UpdateCheckResult
 
     async def fake_check(*, force_refresh: bool = False) -> UpdateCheckResult:
@@ -380,7 +409,7 @@ def test_get_update_check_returns_pypi_comparison(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr("src.cli.ui_server.check_for_updates", fake_check)
 
     with TestClient(app) as client:
-        response = client.get("/api/system/update-check")
+        response = client.get("/api/system/update-check", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -426,6 +455,27 @@ def test_daemon_start_requires_auth(graph_root: Path) -> None:
     with TestClient(app) as client:
         response = client.post("/api/daemon/start")
     assert response.status_code == 401
+
+
+def test_get_state_requires_ui_token() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/state")
+    assert response.status_code == 401
+
+
+def test_get_config_requires_ui_token() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/config")
+    assert response.status_code == 401
+
+
+def test_get_auth_session_returns_token_without_ui_header() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/auth/session")
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body.get("token"), str)
+    assert len(body["token"]) > 0
 
 
 def test_daemon_start_reports_already_running(
@@ -500,6 +550,7 @@ def test_daemon_stop_invokes_shutdown(
 def test_get_logs_returns_latest_non_empty_lines(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
 ) -> None:
     log_path = graph_root / "ops.log"
     monkeypatch.setenv("MATRYCA_PLUMBER_LOG_PATH", str(log_path))
@@ -507,7 +558,7 @@ def test_get_logs_returns_latest_non_empty_lines(
     log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     with TestClient(app) as client:
-        response = client.get("/api/logs")
+        response = client.get("/api/logs", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
@@ -538,7 +589,10 @@ def test_run_ui_server_opens_dashboard_and_starts_uvicorn() -> None:
     )
 
 
-def test_ui_server_serves_frontend_index_when_dist_exists(tmp_path: Path) -> None:
+def test_ui_server_serves_frontend_index_when_dist_exists(
+    tmp_path: Path,
+    auth_headers: dict[str, str],
+) -> None:
     """GET / must serve the SPA shell when the frontend dist mount is active."""
     from fastapi.staticfiles import StaticFiles
     from src.cli import ui_server
@@ -563,7 +617,7 @@ def test_ui_server_serves_frontend_index_when_dist_exists(tmp_path: Path) -> Non
 
     with TestClient(ui_server.app) as client:
         dashboard = client.get("/")
-        config = client.get("/api/config")
+        config = client.get("/api/config", headers=auth_headers)
 
     assert dashboard.status_code == 200
     assert "text/html" in dashboard.headers.get("content-type", "")

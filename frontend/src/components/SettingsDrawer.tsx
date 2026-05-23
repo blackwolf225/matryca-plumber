@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { LmModelsResponse, PlumberConfig } from '../types/daemon'
-
-const API_BASE =
-  import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '')
+import { MATRYCA_API_BASE, matrycaAuthenticatedFetch } from '../utils/matrycaApiAuth'
 
 interface SettingsDrawerProps {
   open: boolean
@@ -295,10 +293,13 @@ function LmModelField({
     setError(null)
     try {
       const params = new URLSearchParams({ base_url: trimmedUrl })
-      const response = await fetch(`${API_BASE}/api/lm-models?${params.toString()}`, {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      })
+      const response = await matrycaAuthenticatedFetch(
+        `${MATRYCA_API_BASE}/api/lm-models?${params.toString()}`,
+        {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        },
+      )
       if (controller.signal.aborted) {
         return
       }

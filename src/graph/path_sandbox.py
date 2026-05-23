@@ -84,7 +84,14 @@ def normalize_daemon_file_key(graph_root: str | Path, key: str) -> str:
             return ""
     rel = Path(cleaned)
     if ".." in rel.parts:
-        return cleaned
+        try:
+            resolved = (root / rel).resolve(strict=False)
+            root_resolved = root.resolve(strict=False)
+            if not resolved.is_relative_to(root_resolved):
+                return ""
+            return resolved.relative_to(root_resolved).as_posix()
+        except ValueError:
+            return ""
     return rel.as_posix()
 
 

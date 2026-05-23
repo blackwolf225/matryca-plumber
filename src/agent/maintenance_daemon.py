@@ -416,6 +416,10 @@ def normalize_daemon_state_file_keys(graph_root: Path, state: DaemonState) -> bo
     for key, rec in state.files.items():
         new_key = normalize_daemon_file_key(graph_root, key)
         if not new_key:
+            logger.warning(
+                "Dropping unmapped or invalid ledger key during migration: {}",
+                key,
+            )
             changed = True
             continue
         if new_key != key:

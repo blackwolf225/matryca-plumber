@@ -12,6 +12,7 @@ from src.agent.maintenance_daemon import (
     heal_daemon_state_ledger,
     save_daemon_state,
 )
+from src.cli.ui_auth import reset_ui_token_for_tests
 from src.cli.ui_server import app
 from src.graph.alias_index import AliasIndex, purge_stale_alias_entries
 from src.graph.generational_cache import (
@@ -23,6 +24,17 @@ from src.graph.graph_analytics import compute_graph_analytics, reconcile_telemet
 from src.graph.master_catalog import MasterCatalog
 from src.utils.console_sanitize import sanitize_for_console
 from src.utils.token_logger import TokenLogger, format_activity_summary
+
+
+@pytest.fixture(autouse=True)
+def ui_auth_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MATRYCA_UI_TOKEN", "test-ui-token")
+    reset_ui_token_for_tests()
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-Matryca-Token": "test-ui-token"}
 
 
 @pytest.fixture
@@ -161,7 +173,7 @@ def test_compute_graph_analytics_human_links_never_underflow(tmp_path: Path) -> 
     assert metrics.ai_links == 999
 
 
-def test_get_state_self_heals_stale_ledger(graph_root: Path) -> None:
+def test_get_state_self_heals_stale_ledger(graph_root: Path, auth_headers: dict[str, str]) -> None:
     pages = graph_root / "pages"
     pages.mkdir(exist_ok=True)
     (pages / "Human.md").write_text("- note\n", encoding="utf-8")
@@ -170,7 +182,7 @@ def test_get_state_self_heals_stale_ledger(graph_root: Path) -> None:
     save_daemon_state(graph_root, state)
 
     with TestClient(app) as client:
-        response = client.get("/api/state")
+        response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()

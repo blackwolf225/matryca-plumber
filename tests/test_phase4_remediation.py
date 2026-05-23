@@ -120,6 +120,33 @@ def test_normalize_daemon_state_file_keys_migrates_absolute_paths(graph_root: Pa
     assert absolute not in state.files
 
 
+def test_normalize_daemon_state_file_keys_logs_dropped_invalid_key(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    warnings: list[str] = []
+
+    def fake_warning(template: str, *args: object, **kwargs: object) -> None:
+        if args:
+            warnings.append(str(template).format(*args))
+        else:
+            warnings.append(str(template))
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.logger.warning", fake_warning)
+    state = DaemonState(
+        files={
+            "/totally/outside/graph.md": FileState(
+                mtime=1.0,
+                processed_at="2026-01-01T00:00:00+00:00",
+                status="processed",
+            ),
+        },
+    )
+    normalize_daemon_state_file_keys(graph_root, state)
+    assert any("Dropping unmapped or invalid ledger key" in w for w in warnings)
+    assert any("/totally/outside/graph.md" in w for w in warnings)
+
+
 def test_save_daemon_state_persists_relative_file_keys(graph_root: Path) -> None:
     page = graph_root / "pages" / "Gamma.md"
     page.write_text("- gamma\n", encoding="utf-8")
