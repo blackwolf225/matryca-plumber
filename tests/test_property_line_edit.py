@@ -37,7 +37,7 @@ def test_property_line_dry_run(tmp_path: Path) -> None:
     )
     assert out.ok and out.code == "dry_run_ok"
     assert out.match_count == 1
-    assert pages.joinpath("Demo.md").read_text().find("type:: alpha") >= 0
+    assert pages.joinpath("Demo.md").read_text(encoding="utf-8").find("type:: alpha") >= 0
 
 
 def test_property_line_apply_and_backup(tmp_path: Path) -> None:

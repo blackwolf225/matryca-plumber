@@ -94,8 +94,10 @@ def lint_block_refs_in_graph(graph_root: str | Path) -> BlockRefLintResult:
             ],
         )
 
+    from .alias_index import iter_scannable_pages_markdown
+
     graph = LogseqGraph.load_directory(root)
-    pages_scanned = sum(1 for path in pages.rglob("*.md") if path.is_file())
+    pages_scanned = len(iter_scannable_pages_markdown(root))
     all_nodes = graph.query().execute()
     defined_ids = len(all_nodes)
     refs_checked = sum(len(node.block_refs) for node in all_nodes)

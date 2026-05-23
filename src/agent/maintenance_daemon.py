@@ -36,8 +36,16 @@ from ..graph.insights_engine import (
     run_graph_insights_engine,
 )
 from ..graph.logseq_uuid import find_malformed_block_refs, is_malformed_block_ref_error
-from ..graph.markdown_blocks import atomic_write_bytes, bullet_indent_unit, locate_block_by_uuid
+from ..graph.markdown_blocks import (
+    atomic_write_bytes,
+    atomic_write_bytes_if_unchanged,
+    bullet_indent_unit,
+    locate_block_by_uuid,
+    read_file_mtime,
+)
 from ..graph.master_catalog import (
+    SEMANTIC_INDEX_HEADER,
+    SEMANTIC_INDEX_HEADING,
     extract_catalog_fields_from_content,
     is_bootstrap_catalog_complete,
     load_master_catalog,
@@ -104,13 +112,22 @@ ThermalProfile = Literal["none", "bootstrap", "cognitive"]
 STATE_FILENAME = ".matryca_daemon_state.json"
 STATE_TMP_FILENAME = f"{STATE_FILENAME}.tmp"
 PID_FILENAME = ".matryca_plumber_daemon.pid"
-SEMANTIC_INDEX_HEADER = "### Matryca Semantic Index"
-STRUCTURAL_LINT_HEADER = "### Matryca Structural Lint"
+STRUCTURAL_LINT_HEADING = "### Matryca Structural Lint"
+STRUCTURAL_LINT_HEADER = f"- {STRUCTURAL_LINT_HEADING}"
 DEFAULT_MODEL = DEFAULT_LM_MODEL  # backward-compatible alias for CLI/TUI
 DEFAULT_POLL_SECONDS = 30.0
 MATRYCA_GENERATED_PAGE_TITLES = frozenset(
     {"Matryca Master Index", "Matryca Graph Insights"},
 )
+
+
+def _semantic_index_section_present(content: str) -> bool:
+    return SEMANTIC_INDEX_HEADING in content
+
+
+def _structural_lint_section_present(content: str) -> bool:
+    return STRUCTURAL_LINT_HEADING in content
+
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
 _ID_LINE = re.compile(r"^\s*id::\s*(.+?)\s*$", re.IGNORECASE)
@@ -462,14 +479,39 @@ def _stamp_matryca_plumber_property(
     block_end: int,
 ) -> None:
     """Append ``matryca-plumber:: true`` under the modified block (Logseq audit trail)."""
-    for i in range(bullet_idx + 1, min(block_end, len(lines))):
-        if _MATRYCA_PLUMBER_LINE.match(lines[i].rstrip("\n")):
-            return
     stripped = [ln.rstrip("\n") for ln in lines]
-    indent = bullet_indent_unit(stripped, bullet_idx)
-    insert_at = id_idx + 1 if id_idx >= bullet_idx else bullet_idx + 1
-    insert_at = min(insert_at, block_end)
+    insert_at = _direct_property_insert_index(stripped, bullet_idx, block_end)
+    for i in range(bullet_idx + 1, insert_at):
+        if _MATRYCA_PLUMBER_LINE.match(stripped[i]):
+            return
+    bullet_match = _BULLET.match(stripped[bullet_idx])
+    base_ws = bullet_match.group(1) if bullet_match else ""
+    indent = base_ws + bullet_indent_unit(stripped, bullet_idx)
     lines.insert(insert_at, f"{indent}matryca-plumber:: true\n")
+
+
+def _direct_property_insert_index(
+    stripped: list[str],
+    bullet_idx: int,
+    block_end: int,
+) -> int:
+    """Return the line index for a new property (after existing props, before child bullets)."""
+    bullet_match = _BULLET.match(stripped[bullet_idx])
+    if not bullet_match:
+        return bullet_idx + 1
+    child_bullet_min_indent = len(bullet_match.group(1)) + len(
+        bullet_indent_unit(stripped, bullet_idx),
+    )
+    insert_at = bullet_idx + 1
+    for i in range(bullet_idx + 1, min(block_end, len(stripped))):
+        line = stripped[i]
+        child_match = _BULLET.match(line)
+        if child_match:
+            if len(child_match.group(1)) >= child_bullet_min_indent:
+                break
+            break
+        insert_at = i + 1
+    return insert_at
 
 
 def _enumerate_blocks_for_prompt(content: str) -> str:
@@ -649,6 +691,7 @@ class CorrectionOutcome:
     skipped: int = 0
     skip_reasons: list[str] = field(default_factory=list)
     applied_details: list[str] = field(default_factory=list)
+    write_aborted: bool = False
 
 
 def _direct_block_property_lines(
@@ -677,6 +720,7 @@ def apply_semantic_corrections_to_lines(
     if not corrections:
         return outcome
 
+    protected_lines = compute_page_protected_line_indices("".join(lines))
     stripped = [ln.rstrip("\n") for ln in lines]
     pending: list[tuple[int, int, int, SemanticLintCorrection]] = []
     for correction in corrections:
@@ -686,6 +730,12 @@ def apply_semantic_corrections_to_lines(
             outcome.skip_reasons.append(f"uuid_not_found:{correction.block_uuid}")
             continue
         bullet_idx, id_idx, block_end = located
+        if bullet_idx in protected_lines or any(
+            idx in protected_lines for idx in range(bullet_idx, block_end)
+        ):
+            outcome.skipped += 1
+            outcome.skip_reasons.append(f"protected_fence:{correction.block_uuid}")
+            continue
         pending.append((bullet_idx, id_idx, block_end, correction))
 
     for bullet_idx, id_idx, block_end, correction in sorted(
@@ -794,7 +844,10 @@ def append_structural_lint_warning(
     if not page_path.is_file() or not malformed_refs:
         return False
     text = page_path.read_text(encoding="utf-8", errors="replace")
-    if STRUCTURAL_LINT_HEADER in text:
+    baseline_mtime = read_file_mtime(page_path)
+    if baseline_mtime is None:
+        return False
+    if _structural_lint_section_present(text):
         return False
 
     sample = malformed_refs[:5]
@@ -814,13 +867,13 @@ def append_structural_lint_warning(
         ],
     )
     new_text = text.rstrip("\n") + "\n" + "\n".join(section_lines)
-    atomic_write_bytes(
+    return atomic_write_bytes_if_unchanged(
         page_path,
         new_text.encode("utf-8"),
         graph_root=graph_root,
+        baseline_mtime=baseline_mtime,
         validate_block_refs=False,
     )
-    return True
 
 
 def apply_semantic_page_result(
@@ -834,20 +887,40 @@ def apply_semantic_page_result(
     disable_semantic_corrections: bool = True,
 ) -> CorrectionOutcome:
     """Lint blocks surgically, then append the semantic index (one locked transaction)."""
+    from loguru import logger
+
+    lint_outcome = CorrectionOutcome()
     with page_rmw_lock(page_path):
         if page_path.is_file():
             prev = page_path.read_text(encoding="utf-8", errors="replace")
+            baseline_mtime = read_file_mtime(page_path)
         else:
             prev = ""
+            baseline_mtime = None
+        if not prev.strip():
+            return lint_outcome
         lines = prev.splitlines(keepends=True)
         if disable_semantic_corrections:
-            lint_outcome = CorrectionOutcome()
+            pass
         else:
             lint_outcome = apply_semantic_corrections_to_lines(lines, result.semantic_corrections)
         body = "".join(lines)
-        if SEMANTIC_INDEX_HEADER not in body:
+        if not _semantic_index_section_present(body):
             body = body.rstrip("\n") + _format_index_section(result, lint_outcome=lint_outcome)
-        atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
+        if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
+            page_path,
+            body.encode("utf-8"),
+            graph_root=graph_root,
+            baseline_mtime=baseline_mtime,
+        ):
+            logger.warning(
+                "File modified by user during inference, aborting write to prevent data loss: {}",
+                page_path,
+            )
+            lint_outcome.write_aborted = True
+            return lint_outcome
+        if baseline_mtime is None:
+            atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
     patch_generational_caches_for_paths(graph_root, [page_path])
 
     if backpropagate and lint_outcome.applied > 0:
@@ -880,7 +953,7 @@ def append_semantic_index(
     """Append a semantic index section without modifying existing user content."""
     if page_path.is_file():
         prev = page_path.read_text(encoding="utf-8", errors="replace")
-        if SEMANTIC_INDEX_HEADER in prev:
+        if _semantic_index_section_present(prev):
             return
     apply_semantic_page_result(
         graph_root,
@@ -1531,7 +1604,7 @@ def page_needs_phase2_cognitive(
     if rec.status == "error":
         return False
     if rec.status == "skipped":
-        return SEMANTIC_INDEX_HEADER in text
+        return _semantic_index_section_present(text)
     return True
 
 
@@ -1985,7 +2058,7 @@ class MaintenanceDaemon:
                 state=state,
             )
             return True
-        if SEMANTIC_INDEX_HEADER in content and not self.bootstrap_complete:
+        if _semantic_index_section_present(content) and not self.bootstrap_complete:
             state.files[key] = FileState(
                 mtime=mtime,
                 processed_at=datetime.now(tz=UTC).isoformat(),
@@ -2064,7 +2137,7 @@ class MaintenanceDaemon:
                 int(usage.get("prompt_tokens", 0) or 0)
                 + int(usage.get("completion_tokens", 0) or 0)
             ) > 0
-            apply_semantic_page_result(
+            lint_outcome = apply_semantic_page_result(
                 self.graph_root,
                 path,
                 title,
@@ -2073,6 +2146,12 @@ class MaintenanceDaemon:
                 alias_index=alias_index,
                 disable_semantic_corrections=lint_config.disable_semantic_corrections,
             )
+            if lint_outcome.write_aborted:
+                llm_called_from_logger = (
+                    self.token_logger.session_prompt_tokens > prompt_before
+                    or self.token_logger.session_completion_tokens > completion_before
+                )
+                return llm_called_from_usage or llm_called_from_logger
             state.files[key] = FileState(
                 mtime=path.stat().st_mtime,
                 processed_at=datetime.now(tz=UTC).isoformat(),
@@ -2344,8 +2423,8 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
         os._exit(0)
 
     sys.stdin = open(os.devnull)  # noqa: SIM115
-    sys.stdout = open(os.devnull, "w")  # noqa: SIM115
-    sys.stderr = open(os.devnull, "w")  # noqa: SIM115
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
 
     from loguru import logger
 
@@ -2384,6 +2463,8 @@ __all__ = [
     "LintType",
     "MaintenanceDaemon",
     "PID_FILENAME",
+    "SEMANTIC_INDEX_HEADER",
+    "STRUCTURAL_LINT_HEADER",
     "ScanMetrics",
     "SemanticIndexResult",
     "SemanticLintCorrection",

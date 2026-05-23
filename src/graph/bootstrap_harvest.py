@@ -13,7 +13,7 @@ from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
 from .generational_cache import patch_generational_caches_for_paths
 from .hierarchical_summarization import mapreduce_harvest_page_summary
-from .markdown_blocks import atomic_write_bytes
+from .markdown_blocks import atomic_write_bytes, atomic_write_bytes_if_unchanged, read_file_mtime
 from .master_catalog import (
     MASTER_INDEX_PAGE_TITLE,
     SEMANTIC_INDEX_HEADER,
@@ -82,10 +82,12 @@ def _compute_incoming_backlinks(graph_root: Path) -> dict[str, int]:
     """Count incoming wikilink references per page title."""
     wikilink = re.compile(r"\[\[([^\]#|]+)(?:\|[^\]]+)?\]\]")
     incoming: dict[str, int] = {}
+    from .alias_index import iter_scannable_pages_markdown
+
     pages_dir = graph_root / "pages"
     title_to_stem: dict[str, str] = {}
     if pages_dir.is_dir():
-        for path in pages_dir.rglob("*.md"):
+        for path in iter_scannable_pages_markdown(graph_root):
             title = page_title_from_path(graph_root, path)
             title_to_stem[title.casefold()] = path.stem
 
@@ -139,12 +141,24 @@ def _append_minimal_semantic_index(
     with page_rmw_lock(page_path):
         if page_path.is_file():
             prev = page_path.read_text(encoding="utf-8", errors="replace")
+            baseline_mtime = read_file_mtime(page_path)
         else:
             prev = ""
+            baseline_mtime = None
+        if not prev.strip():
+            return
         if SEMANTIC_INDEX_HEADER in prev:
             return
         body = prev.rstrip("\n") + _format_minimal_index_section(summary)
-        atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
+        if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
+            page_path,
+            body.encode("utf-8"),
+            graph_root=graph_root,
+            baseline_mtime=baseline_mtime,
+        ):
+            return
+        if baseline_mtime is None:
+            atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
     patch_generational_caches_for_paths(graph_root, [page_path])
 
 

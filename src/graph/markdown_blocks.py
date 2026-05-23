@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import tempfile
@@ -95,6 +96,42 @@ def bullet_indent_unit(lines: list[str], bullet_idx: int) -> str:
     if depth >= 2 and lines[bullet_idx].startswith("\t"):
         return "\t"
     return "  "
+
+
+def read_file_mtime(file_path: str | Path) -> float | None:
+    """Return ``st_mtime`` for ``file_path``, or ``None`` when the path is unreadable."""
+    try:
+        return Path(file_path).stat().st_mtime
+    except OSError:
+        return None
+
+
+def file_mtime_drifted(file_path: str | Path, baseline_mtime: float) -> bool:
+    """Return whether on-disk mtime differs from ``baseline_mtime`` (user edit during inference)."""
+    current = read_file_mtime(file_path)
+    if current is None:
+        return True
+    return not math.isclose(baseline_mtime, current, rel_tol=0.0, abs_tol=1e-6)
+
+
+def atomic_write_bytes_if_unchanged(
+    file_path: str | Path,
+    data: bytes,
+    *,
+    graph_root: str | Path,
+    baseline_mtime: float,
+    validate_block_refs: bool = True,
+) -> bool:
+    """Commit only when ``baseline_mtime`` still matches. Returns ``True`` when written."""
+    if file_mtime_drifted(file_path, baseline_mtime):
+        return False
+    atomic_write_bytes(
+        file_path,
+        data,
+        graph_root=graph_root,
+        validate_block_refs=validate_block_refs,
+    )
+    return True
 
 
 def atomic_write_bytes(
@@ -194,19 +231,18 @@ def sweep_dangling_atomic_tmp_files(graph_root: str | Path) -> int:
 
 
 def iter_graph_markdown_files(graph_root: str | Path) -> list[Path]:
-    """All ``*.md`` under ``pages/`` and ``journals/`` when present."""
-    root = Path(graph_root).expanduser().resolve(strict=False)
-    out: list[Path] = []
-    for sub in ("pages", "journals"):
-        d = root / sub
-        if d.is_dir():
-            out.extend(sorted(p for p in d.glob("*.md") if p.is_file()))
-    return out
+    """All scannable ``*.md`` under ``pages/`` and ``journals/`` (nested, backup-safe)."""
+    from .alias_index import iter_alias_source_paths
+
+    return iter_alias_source_paths(graph_root)
 
 
 __all__ = [
     "atomic_write_bytes",
+    "atomic_write_bytes_if_unchanged",
     "atomic_write_file",
+    "file_mtime_drifted",
+    "read_file_mtime",
     "block_body_start",
     "block_bullet_index",
     "block_subtree_end",

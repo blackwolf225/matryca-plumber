@@ -7,10 +7,16 @@ import uuid
 from pathlib import Path
 
 from ...graph.generational_cache import patch_generational_caches_for_paths
-from ...graph.markdown_blocks import atomic_write_bytes, graph_safe_page_path, locate_block_by_uuid
+from ...graph.markdown_blocks import (
+    atomic_write_bytes,
+    atomic_write_bytes_if_unchanged,
+    graph_safe_page_path,
+    locate_block_by_uuid,
+    read_file_mtime,
+)
 from ...graph.page_properties import inject_page_property
 from ...graph.page_write_lock import page_rmw_lock
-from ._shared import ModuleOutcome, sanitize_page_title
+from ._shared import ModuleOutcome, is_blank_page_content, sanitize_page_title
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
 _ID_LINE = re.compile(
@@ -60,6 +66,11 @@ def run_auto_split(
 
     with page_rmw_lock(page_path):
         text = page_path.read_text(encoding="utf-8", errors="replace")
+        if is_blank_page_content(text):
+            return outcome
+        baseline_mtime = read_file_mtime(page_path)
+        if baseline_mtime is None:
+            return outcome
         lines = text.splitlines(keepends=True)
         stripped = [ln.rstrip("\n") for ln in lines]
         candidates: list[tuple[int, int, int, str]] = []
@@ -113,7 +124,7 @@ def run_auto_split(
             indent = bullet_match.group(1) if bullet_match else ""
             new_block_uuid = str(uuid.uuid4())
             replacement = (
-                f"{indent}- [[{child_title}]]\n"
+                f"{indent}- {{{{embed [[{child_title}]]}}}}\n"
                 f"{indent}  id:: {new_block_uuid}\n"
                 f"{indent}  matryca-split-from:: [[{page_title}]]\n"
             )
@@ -121,7 +132,13 @@ def run_auto_split(
             outcome.pages_modified.append(page_title)
             outcome.details.append(f"split:{child_title} blocks={block_count}")
 
-        atomic_write_bytes(page_path, "".join(lines).encode("utf-8"), graph_root=graph_root)
+        if not atomic_write_bytes_if_unchanged(
+            page_path,
+            "".join(lines).encode("utf-8"),
+            graph_root=graph_root,
+            baseline_mtime=baseline_mtime,
+        ):
+            return ModuleOutcome()
 
     patch_generational_caches_for_paths(graph_root, [page_path])
     for title in outcome.pages_created:

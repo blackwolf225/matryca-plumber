@@ -23,17 +23,16 @@ class DashboardStats:
     newest_page_mtime_iso: str | None
 
 
-def _iter_page_files(pages: Path) -> list[Path]:
-    if not pages.is_dir():
-        return []
-    return sorted(p for p in pages.rglob("*.md") if p.is_file())
+def _iter_page_files(graph_root: Path) -> list[Path]:
+    from .alias_index import iter_scannable_pages_markdown
+
+    return iter_scannable_pages_markdown(graph_root)
 
 
 def collect_dashboard_stats(graph_root: str | Path) -> DashboardStats:
     """Scan ``pages/**/*.md`` for counts and block-ref lint totals."""
     root = Path(graph_root).expanduser().resolve(strict=False)
-    pages = root / "pages"
-    paths = _iter_page_files(pages)
+    paths = _iter_page_files(root)
 
     id_tally = 0
     newest: float | None = None

@@ -200,10 +200,9 @@ def cached_build_alias_index(graph_root: str | Path) -> AliasIndex:
 
 
 def _bm25_page_paths(root: Path) -> list[Path]:
-    pages = root / "pages"
-    if not pages.is_dir():
-        return []
-    return sorted(p for p in pages.rglob("*.md") if p.is_file())
+    from .alias_index import iter_scannable_pages_markdown
+
+    return iter_scannable_pages_markdown(root)
 
 
 @dataclass(slots=True)

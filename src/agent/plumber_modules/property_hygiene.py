@@ -7,10 +7,10 @@ from pathlib import Path
 import yaml
 
 from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
-from ...graph.markdown_blocks import atomic_write_bytes
+from ...graph.markdown_blocks import atomic_write_bytes_if_unchanged, read_file_mtime
 from ...graph.page_properties import inject_page_properties
 from ...graph.page_write_lock import page_rmw_lock
-from ._shared import ModuleOutcome, extract_inline_tags, page_property_keys
+from ._shared import ModuleOutcome, extract_inline_tags, is_blank_page_content, page_property_keys
 
 _DEFAULT_RULES: dict[str, list[str]] = {
     "project": ["status", "deadline"],
@@ -60,6 +60,8 @@ def run_property_hygiene(
 ) -> ModuleOutcome:
     """Append missing ``key:: value`` property lines inferred from page context."""
     outcome = ModuleOutcome()
+    if is_blank_page_content(content):
+        return outcome
     rules = _load_tag_rules(rules_path)
     tags = extract_inline_tags(content)
     if not tags:
@@ -102,10 +104,21 @@ def run_property_hygiene(
 
     with page_rmw_lock(page_path):
         text = page_path.read_text(encoding="utf-8", errors="replace")
+        if is_blank_page_content(text):
+            return outcome
+        baseline_mtime = read_file_mtime(page_path)
+        if baseline_mtime is None:
+            return outcome
         new_text = inject_page_properties(text, inferred)
         if new_text == text:
             return outcome
-        atomic_write_bytes(page_path, new_text.encode("utf-8"), graph_root=graph_root)
+        if not atomic_write_bytes_if_unchanged(
+            page_path,
+            new_text.encode("utf-8"),
+            graph_root=graph_root,
+            baseline_mtime=baseline_mtime,
+        ):
+            return outcome
 
     outcome.pages_modified.append(page_title)
     outcome.details.append(f"properties:{','.join(sorted(inferred))}")

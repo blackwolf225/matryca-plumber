@@ -28,10 +28,10 @@ def _line_is_atx_markdown_heading(stripped: str) -> bool:
     return bool(re.match(r"^#{2,}\s", stripped))
 
 
-def _iter_page_files(pages: Path) -> list[Path]:
-    if not pages.is_dir():
-        return []
-    return sorted(p for p in pages.rglob("*.md") if p.is_file())
+def _iter_page_files(graph_root: Path) -> list[Path]:
+    from .alias_index import iter_scannable_pages_markdown
+
+    return iter_scannable_pages_markdown(graph_root)
 
 
 def _resolve_target_to_stem(target: str, pages_dir: Path) -> str | None:
@@ -102,7 +102,7 @@ def build_structural_graph(graph_root: str | Path) -> dict[str, set[tuple[str, s
     """Undirected multi-reason adjacency: wikilink, tag, same_type, same_domain."""
     root = Path(graph_root).expanduser().resolve(strict=False)
     pages_dir = root / "pages"
-    paths = _iter_page_files(pages_dir)
+    paths = _iter_page_files(root)
     stems = [p.stem for p in paths]
 
     edges: dict[str, set[tuple[str, str]]] = defaultdict(set)
@@ -215,8 +215,8 @@ def bfs_hops(
 def structural_degrees(graph_root: str | Path) -> dict[str, int]:
     """Undirected degree per page stem (unique neighbors)."""
     adj = build_structural_graph(graph_root)
-    pages_dir = Path(graph_root).expanduser().resolve(strict=False) / "pages"
-    stems = {p.stem for p in _iter_page_files(pages_dir)}
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    stems = {p.stem for p in _iter_page_files(root)}
     out: dict[str, int] = {}
     for s in stems:
         out[s] = len({n for (n, _) in adj.get(s, ())})
@@ -276,12 +276,11 @@ def format_hub_orphan_markdown(
 ) -> str:
     """High-degree hubs and low-degree orphans (structural graph only)."""
     root = Path(graph_root).expanduser().resolve(strict=False)
-    pages_dir = root / "pages"
     deg = structural_degrees(root)
     if not deg:
         return "# Structural hubs / orphans\n\n(No pages under `pages/`.)"
 
-    paths = {p.stem: p for p in _iter_page_files(pages_dir)}
+    paths = {p.stem: p for p in _iter_page_files(root)}
     mtimes: dict[str, float] = {}
     for stem, path in paths.items():
         try:

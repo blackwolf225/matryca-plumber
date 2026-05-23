@@ -12,12 +12,13 @@ from typing import Any
 
 from loguru import logger
 
-from .alias_index import iter_alias_source_paths, page_title_from_path
+from .alias_index import build_alias_index, iter_alias_source_paths, page_title_from_path
 from .markdown_blocks import atomic_write_bytes
 
 CATALOG_FILENAME = "master_catalog.json"
 CATALOG_VERSION = 1
-SEMANTIC_INDEX_HEADER = "### Matryca Semantic Index"
+SEMANTIC_INDEX_HEADING = "### Matryca Semantic Index"
+SEMANTIC_INDEX_HEADER = f"- {SEMANTIC_INDEX_HEADING}"
 MASTER_INDEX_PAGE_TITLE = "Matryca Master Index"
 MATRYCA_GENERATED_INDEX_TITLES = frozenset(
     {MASTER_INDEX_PAGE_TITLE, "Matryca Graph Insights"},
@@ -72,6 +73,7 @@ class MasterCatalog:
     version: int = CATALOG_VERSION
     updated_at: str | None = None
     pages: dict[str, CatalogEntry] = field(default_factory=dict)
+    alias_to_page: dict[str, str] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     @staticmethod
@@ -141,6 +143,28 @@ class MasterCatalog:
                     return title, row
             return None
 
+    def rebuild_alias_index(self) -> None:
+        """Refresh the in-memory alias map from ``alias::`` frontmatter across the graph."""
+        idx = build_alias_index(self.graph_root)
+        with self._lock:
+            self.alias_to_page = dict(idx.alias_to_page)
+
+    def resolve_page_title(self, page_title: str) -> str | None:
+        """Return canonical title when ``page_title`` matches a page or alias (case-insensitive)."""
+        from .page_path import resolve_existing_page_title
+
+        return resolve_existing_page_title(self.graph_root, page_title)
+
+    def resolve_alias(self, alias: str) -> str | None:
+        """Return canonical page title for a known alias, or ``None``."""
+        from .alias_index import normalize_concept_key
+
+        norm = normalize_concept_key(alias)
+        if not norm:
+            return None
+        with self._lock:
+            return self.alias_to_page.get(norm)
+
     def remove(self, page_title: str) -> None:
         with self._lock:
             self.pages.pop(page_title, None)
@@ -193,6 +217,7 @@ def load_master_catalog(graph_root: Path, *, force_reload: bool = False) -> Mast
                     catalog = MasterCatalog.from_json(root, payload)
                 else:
                     catalog = MasterCatalog(graph_root=root)
+        catalog.rebuild_alias_index()
         _loaded[key] = catalog
         return catalog
 
@@ -223,7 +248,7 @@ def _parse_tags(raw: str) -> list[str]:
 
 def extract_catalog_fields_from_content(content: str) -> CatalogEntry | None:
     """Fast regex read of an existing ``### Matryca Semantic Index`` block."""
-    if SEMANTIC_INDEX_HEADER not in content:
+    if SEMANTIC_INDEX_HEADING not in content:
         return None
 
     summary_match = _SUMMARY_LINE.search(content)
@@ -380,6 +405,7 @@ __all__ = [
     "MATRYCA_GENERATED_INDEX_TITLES",
     "MasterCatalog",
     "SEMANTIC_INDEX_HEADER",
+    "SEMANTIC_INDEX_HEADING",
     "build_master_index_markdown",
     "clear_master_catalog_cache",
     "entry_from_page_path",

@@ -8,7 +8,26 @@ from .mldoc_properties import (
     split_logseq_property_list_values,
 )
 
-_MERGE_LIST_KEYS = frozenset({"alias", "tags"})
+_MERGE_LIST_KEYS = frozenset({"alias", "aliases", "tags"})
+_RAW_FRONTMATTER_LIST_KEYS = frozenset({"alias", "aliases", "tags"})
+
+
+def _strip_frontmatter_list_token(raw: str) -> str:
+    """Strip inline Logseq markup from a frontmatter list token (``#tag``, ``[[link]]``)."""
+    token = raw.strip()
+    if token.startswith("[[") and token.endswith("]]"):
+        token = token[2:-2].strip()
+    token = token.lstrip("#").strip()
+    return token
+
+
+def _sanitize_frontmatter_list_value(norm_key: str, value: str) -> str:
+    if norm_key not in _RAW_FRONTMATTER_LIST_KEYS:
+        return value.strip()
+    items = split_logseq_property_list_values(value.strip())
+    cleaned = [_strip_frontmatter_list_token(item) for item in items]
+    cleaned = [item for item in cleaned if item]
+    return ", ".join(cleaned)
 
 
 def _strip_lines(lines: list[str]) -> list[str]:
@@ -81,6 +100,9 @@ def inject_page_property(markdown_text: str, key: str, value: str) -> str:
     norm_key = normalize_logseq_property_key(key)
     if not norm_key or not value.strip():
         return markdown_text
+    if markdown_text and not markdown_text.strip():
+        return markdown_text
+    value = _sanitize_frontmatter_list_value(norm_key, value.strip())
 
     lines = markdown_text.splitlines(keepends=True)
     if not lines:
@@ -95,7 +117,7 @@ def inject_page_property(markdown_text: str, key: str, value: str) -> str:
         line_idx = _find_frontmatter_key_line(stripped, fm_start, fm_end, norm_key)
         if line_idx is None:
             return markdown_text
-        merged = _merge_list_property_value(existing[norm_key], value.strip())
+        merged = _merge_list_property_value(existing[norm_key], value)
         if merged is None:
             return markdown_text
         parsed = parse_logseq_property_line(stripped[line_idx])
@@ -106,7 +128,7 @@ def inject_page_property(markdown_text: str, key: str, value: str) -> str:
         return "".join(lines)
 
     fm_start, fm_end = _frontmatter_span(stripped)
-    prop_line = f"{key}:: {value.strip()}\n"
+    prop_line = f"{key}:: {value}\n"
 
     if fm_end > fm_start:
         insert_at = fm_end

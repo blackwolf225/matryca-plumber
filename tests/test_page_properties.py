@@ -42,6 +42,13 @@ def test_inject_page_property_creates_frontmatter_when_missing() -> None:
     assert not updated.lstrip().startswith("- ")
 
 
+def test_inject_page_property_handles_empty_file_gracefully() -> None:
+    ghost = "   \n\n  "
+    assert inject_page_property(ghost, "type", "progetto") == ghost
+    assert inject_page_property("", "", "") == ""
+    assert inject_page_property("\n", "status", "active") == "\n"
+
+
 def test_inject_page_property_example_shape() -> None:
     original = "- First actual block of text...\n"
     updated = inject_page_properties(
@@ -74,3 +81,14 @@ def test_inject_page_property_alias_skips_duplicate_value() -> None:
     original = "alias:: Artificial Intelligence\n\n- note\n"
     updated = inject_page_property(original, "alias", "Artificial Intelligence")
     assert updated == original
+
+
+def test_inject_page_property_strips_markdown_from_tags_and_alias() -> None:
+    updated = inject_page_property("", "tags", "#Project")
+    assert updated.startswith("tags:: Project")
+
+    updated = inject_page_property("", "alias", "[[My Alias]]")
+    assert updated.startswith("alias:: My Alias")
+
+    merged = inject_page_property("tags:: learning\n", "tags", "#AI, [[Machine Learning]]")
+    assert "tags:: learning, AI, Machine Learning" in merged

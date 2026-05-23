@@ -48,3 +48,15 @@ def test_resolve_existing_page_title_is_case_insensitive(tmp_path: Path) -> None
     assert resolve_existing_page_title(tmp_path, "MACHINE LEARNING") == "Machine Learning"
     assert resolve_existing_page_title(tmp_path, "machine learning") == "Machine Learning"
     assert resolve_existing_page_title(tmp_path, "Missing Page") is None
+
+
+def test_page_title_to_filename_percent_encodes_reserved_chars() -> None:
+    encoded = page_title_to_filename("What is AI?")
+    assert encoded == "What is AI%3F.md"
+    assert filename_to_page_title(encoded) == "What is AI?"
+
+
+def test_page_title_to_filename_encodes_namespace_and_question_mark() -> None:
+    encoded = page_title_to_filename("FAQ/What is AI?")
+    assert encoded == "FAQ___What is AI%3F.md"
+    assert filename_to_page_title(encoded) == "FAQ/What is AI?"

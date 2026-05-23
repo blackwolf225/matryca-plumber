@@ -23,6 +23,7 @@ from src.agent.plumber_modules.auto_split import run_auto_split
 from src.agent.plumber_modules.dangling_healer import run_dangling_healer
 from src.agent.plumber_modules.marpa_framework import run_marpa_framework
 from src.agent.plumber_modules.property_hygiene import run_property_hygiene
+from src.graph.master_catalog import load_master_catalog
 from src.graph.page_write_lock import clear_page_write_locks
 from src.graph.path_sandbox import graph_safe_page_path
 
@@ -182,6 +183,31 @@ def test_dangling_healer_skips_existing_page_case_insensitive(graph_root: Path) 
     assert outcome.pages_created == []
 
 
+def test_dangling_healer_skips_seed_when_target_matches_alias_in_master_catalog(
+    graph_root: Path,
+) -> None:
+    _write_page(
+        graph_root,
+        "Artificial Intelligence",
+        "alias:: AI\n\n- canonical page\n",
+    )
+    catalog = load_master_catalog(graph_root)
+    assert catalog.resolve_alias("AI") == "Artificial Intelligence"
+    assert catalog.resolve_page_title("ai") == "Artificial Intelligence"
+
+    source = _write_page(graph_root, "Source", "- See [[AI]] for background\n")
+    outcome = run_dangling_healer(
+        graph_root,
+        source,
+        "Source",
+        source.read_text(encoding="utf-8"),
+        llm=StubPlumberLLM(),
+        max_words=50,
+    )
+    assert outcome.pages_created == []
+    assert not (graph_root / "pages" / "AI.md").is_file()
+
+
 def test_cognitive_pipeline_skips_marpa_and_property_hygiene_for_journal(
     graph_root: Path,
 ) -> None:
@@ -242,6 +268,7 @@ def test_auto_split_extracts_dense_subtree(graph_root: Path) -> None:
     assert outcome.pages_created
     assert outcome.pages_modified == ["Dense"]
     updated = path.read_text(encoding="utf-8")
+    assert "{{embed" in updated
     assert "[[" in updated
     child = graph_safe_page_path(graph_root, outcome.pages_created[0])
     assert child.is_file()

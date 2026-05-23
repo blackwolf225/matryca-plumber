@@ -50,10 +50,12 @@ def _iter_markdown_files(graph_root: Path) -> list[Path]:
 
 
 MATRYCA_INTERNAL_DIR_NAMES = frozenset({".matryca_semantic_cache"})
+# Logseq backup / recycle trees and VCS metadata must never enter alias or catalog scans.
+EXCLUDED_GRAPH_DIR_NAMES = frozenset({"logseq", ".recycle", ".git"})
 
 
 def is_scannable_graph_markdown(path: Path, graph_root: Path) -> bool:
-    """Return False for hidden path segments and Matryca-internal directories."""
+    """Return False for hidden, internal, backup, recycle, or VCS path segments."""
     try:
         rel = path.relative_to(graph_root)
     except ValueError:
@@ -63,7 +65,20 @@ def is_scannable_graph_markdown(path: Path, graph_root: Path) -> bool:
             return False
         if part in MATRYCA_INTERNAL_DIR_NAMES:
             return False
+        if part in EXCLUDED_GRAPH_DIR_NAMES:
+            return False
     return True
+
+
+def iter_scannable_pages_markdown(graph_root: str | Path) -> list[Path]:
+    """All scannable ``pages/**/*.md`` under ``graph_root`` (stable sort)."""
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    pages = root / "pages"
+    if not pages.is_dir():
+        return []
+    return sorted(
+        p for p in pages.rglob("*.md") if p.is_file() and is_scannable_graph_markdown(p, root)
+    )
 
 
 def page_title_from_path(graph_root: Path, path: Path) -> str:
@@ -337,7 +352,9 @@ __all__ = [
     "collect_relevant_alias_pages",
     "format_alias_index_for_prompt",
     "index_aliases_from_file",
+    "EXCLUDED_GRAPH_DIR_NAMES",
     "is_scannable_graph_markdown",
+    "iter_scannable_pages_markdown",
     "iter_alias_source_paths",
     "normalize_concept_key",
     "page_title_from_path",

@@ -9,10 +9,9 @@ _TOKEN = re.compile(r"[0-9a-z]+", re.IGNORECASE)
 
 
 def _iter_page_files(graph_root: Path) -> list[Path]:
-    pages = graph_root / "pages"
-    if not pages.is_dir():
-        return []
-    return sorted(p for p in pages.rglob("*.md") if p.is_file())
+    from src.graph.alias_index import iter_scannable_pages_markdown
+
+    return iter_scannable_pages_markdown(graph_root)
 
 
 def tokenize(text: str) -> list[str]:

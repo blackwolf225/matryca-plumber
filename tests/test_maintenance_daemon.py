@@ -630,6 +630,64 @@ def test_semantic_correction_stamps_matryca_plumber_property() -> None:
     assert "Learn about [[Redis]] caching" in merged
     assert f"id:: {BLOCK_UUID}" in merged
     assert "matryca-plumber:: true" in merged
+    merged_lines = merged.splitlines()
+    plumber_idx = next(i for i, line in enumerate(merged_lines) if "matryca-plumber:: true" in line)
+    id_idx = next(i for i, line in enumerate(merged_lines) if f"id:: {BLOCK_UUID}" in line)
+    assert plumber_idx == id_idx + 1
+    assert merged_lines[plumber_idx] == "  matryca-plumber:: true"
+
+
+def test_matryca_plumber_property_before_child_bullets() -> None:
+    body = (
+        f"- Learn about Redis caching\n"
+        f"  status:: active\n"
+        f"  id:: {BLOCK_UUID}\n"
+        f"  - child one\n"
+        f"  - child two\n"
+    )
+    lines = body.splitlines(keepends=True)
+    outcome = apply_semantic_corrections_to_lines(
+        lines,
+        [
+            SemanticLintCorrection(
+                block_uuid=BLOCK_UUID,
+                original_text="Learn about Redis caching",
+                corrected_text="Learn about [[Redis]] caching",
+                lint_type="auto_wikilink",
+                reason="Canonical link",
+            ),
+        ],
+    )
+    merged_lines = "".join(lines).splitlines()
+    assert outcome.applied == 1
+    plumber_idx = next(i for i, line in enumerate(merged_lines) if "matryca-plumber:: true" in line)
+    child_idx = next(i for i, line in enumerate(merged_lines) if line.strip() == "- child one")
+    status_idx = next(i for i, line in enumerate(merged_lines) if "status:: active" in line)
+    assert status_idx < plumber_idx < child_idx
+    assert merged_lines[plumber_idx] == "  matryca-plumber:: true"
+
+
+def test_matryca_plumber_property_nested_bullet_indentation() -> None:
+    body = f"  - Learn about Redis caching\n    id:: {BLOCK_UUID}\n    - nested child\n"
+    lines = body.splitlines(keepends=True)
+    outcome = apply_semantic_corrections_to_lines(
+        lines,
+        [
+            SemanticLintCorrection(
+                block_uuid=BLOCK_UUID,
+                original_text="Learn about Redis caching",
+                corrected_text="Learn about [[Redis]] caching",
+                lint_type="auto_wikilink",
+                reason="Canonical link",
+            ),
+        ],
+    )
+    merged_lines = "".join(lines).splitlines()
+    assert outcome.applied == 1
+    plumber_idx = next(i for i, line in enumerate(merged_lines) if "matryca-plumber:: true" in line)
+    child_idx = next(i for i, line in enumerate(merged_lines) if line.strip() == "- nested child")
+    assert plumber_idx < child_idx
+    assert merged_lines[plumber_idx] == "    matryca-plumber:: true"
 
 
 def test_semantic_correction_preserves_block_id_and_sibling_properties() -> None:
@@ -705,6 +763,54 @@ def test_semantic_correction_rejects_destructive_edit() -> None:
     assert outcome.applied == 0
     assert "unsafe_correction" in outcome.skip_reasons[0]
     assert lines[0] == "- Keep this exact sentence\n"
+
+
+def test_optimistic_concurrency_aborts_write_if_mtime_changed(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = _write_page(
+        graph_root,
+        "RaceGuard",
+        f"- Stable note\n  id:: {BLOCK_UUID}\n",
+    )
+    result = SemanticIndexResult(summary="race test")
+
+    monkeypatch.setattr(
+        "src.graph.markdown_blocks.file_mtime_drifted",
+        lambda _path, _baseline: True,
+    )
+
+    outcome = apply_semantic_page_result(graph_root, path, "RaceGuard", result)
+    text = path.read_text(encoding="utf-8")
+
+    assert outcome.write_aborted
+    assert SEMANTIC_INDEX_HEADER not in text
+    assert text.strip() == f"- Stable note\n  id:: {BLOCK_UUID}".strip()
+
+
+def test_surgeon_ignores_text_inside_markdown_code_blocks() -> None:
+    body = f"```python\n- Learn about Redis caching\n  id:: {BLOCK_UUID}\n```\n"
+    lines = body.splitlines(keepends=True)
+    outcome = apply_semantic_corrections_to_lines(
+        lines,
+        [
+            SemanticLintCorrection(
+                block_uuid=BLOCK_UUID,
+                original_text="Learn about Redis caching",
+                corrected_text="Learn about [[Redis]] caching",
+                lint_type="auto_wikilink",
+                reason="Must not touch fenced code",
+            ),
+        ],
+    )
+    merged = "".join(lines)
+
+    assert outcome.applied == 0
+    assert outcome.skipped == 1
+    assert outcome.skip_reasons[0].startswith("protected_fence:")
+    assert "[[Redis]]" not in merged
+    assert "Learn about Redis caching" in merged
 
 
 def test_anomaly_warning_does_not_modify_block(graph_root: Path) -> None:

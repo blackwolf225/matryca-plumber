@@ -9,11 +9,12 @@ from typing import Literal
 
 from ...graph.alias_index import AliasIndex, resolve_canonical_page_title
 from ...graph.generational_cache import patch_generational_caches_for_paths
-from ...graph.markdown_blocks import atomic_write_bytes
+from ...graph.markdown_blocks import atomic_write_bytes_if_unchanged, read_file_mtime
 from ...graph.page_write_lock import page_rmw_lock
 from ._shared import ModuleOutcome, page_file_exists, resolve_page_path
 
-_BACKLINK_HEADER = "### Matryca Backlink Context"
+_BACKLINK_HEADING = "### Matryca Backlink Context"
+_BACKLINK_HEADER = f"- {_BACKLINK_HEADING}"
 _WIKILINK = re.compile(r"\[\[([^\]#|]+)(?:\|[^\]]+)?\]\]")
 _REF_FROM = re.compile(r"^\s*(?:-\s+)?referenced-from::\s*\[\[([^\]]+)\]\]\s*$")
 _SOURCE_BLOCK = re.compile(r"^\s*(?:-\s+)?source-block-uuid::\s*(\S+)\s*$")
@@ -75,6 +76,13 @@ def _line_body(line: str) -> str:
     return line.rstrip("\n")
 
 
+def _normalize_section_heading(line: str) -> str:
+    body = _line_body(line).strip()
+    if body.startswith("- "):
+        body = body[2:].strip()
+    return body
+
+
 def _section_matches(
     section_lines: list[str],
     *,
@@ -127,7 +135,7 @@ def _upsert_backlink_in_content(
 
     while idx < len(lines):
         line = lines[idx]
-        if line.rstrip("\n") != _BACKLINK_HEADER:
+        if _normalize_section_heading(line) != _BACKLINK_HEADING:
             output.append(line)
             idx += 1
             continue
@@ -138,7 +146,8 @@ def _upsert_backlink_in_content(
         section_body: list[str] = []
         while idx < len(lines):
             peek = lines[idx]
-            if peek.rstrip("\n").startswith("### ") and peek.rstrip("\n") != _BACKLINK_HEADER:
+            peek_heading = _normalize_section_heading(peek)
+            if peek_heading.startswith("### ") and peek_heading != _BACKLINK_HEADING:
                 break
             section_body.append(peek)
             output.append(peek)
@@ -218,6 +227,11 @@ def run_backlink_backpropagator(
             modified = False
             with page_rmw_lock(target_path):
                 prev = target_path.read_text(encoding="utf-8", errors="replace")
+                if not prev.strip():
+                    continue
+                baseline_mtime = read_file_mtime(target_path)
+                if baseline_mtime is None:
+                    continue
                 new_text, changed = _upsert_backlink_in_content(
                     prev,
                     source_title=source_title,
@@ -227,7 +241,13 @@ def run_backlink_backpropagator(
                 )
                 if not changed:
                     continue
-                atomic_write_bytes(target_path, new_text.encode("utf-8"), graph_root=graph_root)
+                if not atomic_write_bytes_if_unchanged(
+                    target_path,
+                    new_text.encode("utf-8"),
+                    graph_root=graph_root,
+                    baseline_mtime=baseline_mtime,
+                ):
+                    continue
                 modified = True
             if modified:
                 outcome.pages_modified.append(target)

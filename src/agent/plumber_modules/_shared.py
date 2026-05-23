@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ...graph.alias_index import is_scannable_graph_markdown
 from ...graph.markdown_blocks import graph_safe_page_path
 from ...graph.page_path import filename_to_page_title, resolve_existing_page_title
 from ...graph.page_properties import page_property_keys as _page_property_keys
@@ -99,6 +100,11 @@ def extract_inline_tags(text: str) -> set[str]:
     return {m.group(1).casefold() for m in _TAG.finditer(text)}
 
 
+def is_blank_page_content(text: str) -> bool:
+    """True for 0-byte pages and Logseq ghost files that contain only whitespace."""
+    return not text.strip()
+
+
 def page_property_keys(text: str) -> dict[str, str]:
     return _page_property_keys(text)
 
@@ -110,7 +116,7 @@ def list_existing_page_titles(graph_root: Path) -> set[str]:
         return set()
     titles: set[str] = set()
     for path in pages_dir.rglob("*.md"):
-        if path.is_file():
+        if path.is_file() and is_scannable_graph_markdown(path, root):
             titles.add(filename_to_page_title(path.name))
     return titles
 
@@ -120,6 +126,7 @@ __all__ = [
     "context_around_wikilink",
     "extract_inline_tags",
     "extract_wikilink_targets",
+    "is_blank_page_content",
     "is_journal_page_path",
     "list_existing_page_titles",
     "page_file_exists",

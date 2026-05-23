@@ -188,6 +188,8 @@ def format_regex_search_markdown(graph_path: str, pattern: str, *, limit: int = 
         msg = f"Invalid regex in `query`: {exc}"
         raise ValueError(msg) from exc
 
+    from ..graph.alias_index import is_scannable_graph_markdown
+
     root = Path(graph_path).expanduser().resolve(strict=False)
     pages = root / "pages"
     if not pages.is_dir():
@@ -195,7 +197,7 @@ def format_regex_search_markdown(graph_path: str, pattern: str, *, limit: int = 
 
     hits: list[tuple[str, int, str]] = []
     for path in sorted(pages.rglob("*.md")):
-        if not path.is_file():
+        if not path.is_file() or not is_scannable_graph_markdown(path, root):
             continue
         try:
             body = path.read_text(encoding="utf-8", errors="replace")

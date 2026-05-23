@@ -75,9 +75,11 @@ def _count_bullets(text: str) -> int:
 
 
 def _incoming_backlink_counts(graph_root: Path) -> dict[str, int]:
+    from .alias_index import iter_scannable_pages_markdown
+
     root = graph_root.expanduser().resolve(strict=False)
     pages_dir = root / "pages"
-    stems = {p.stem for p in pages_dir.rglob("*.md")} if pages_dir.is_dir() else set()
+    stems = {p.stem for p in iter_scannable_pages_markdown(root)}
     incoming: dict[str, int] = {}
 
     for path in iter_alias_source_paths(root):

@@ -8,13 +8,17 @@ from typing import Literal
 
 from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.generational_cache import patch_generational_caches_for_paths
-from ...graph.markdown_blocks import atomic_write_bytes
+from ...graph.markdown_blocks import (
+    atomic_write_bytes,
+    atomic_write_bytes_if_unchanged,
+    read_file_mtime,
+)
 from ...graph.page_properties import inject_page_properties, page_property_keys
 from ...graph.page_write_lock import page_rmw_lock
 from ..plumber_llm import MarpaClassificationResult
 from ..prompt_constraints import finalize_system_prompt
 from ..prompt_layout import build_cache_aligned_prompt
-from ._shared import ModuleOutcome
+from ._shared import ModuleOutcome, is_blank_page_content
 
 MarpaDomain = Literal["mappa", "area", "risorsa", "progetto", "archivio"]
 
@@ -68,7 +72,8 @@ def build_marpa_classify_user_prompt(
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
 _MIN_DUP_CHARS = 80
-_MARPA_HEADER = "### Matryca MARPA Validation"
+_MARPA_HEADING = "### Matryca MARPA Validation"
+_MARPA_HEADER = f"- {_MARPA_HEADING}"
 
 
 def detect_marpa_namespace(page_title: str) -> str | None:
@@ -99,11 +104,15 @@ def _scan_ssot_duplication(graph_root: Path, page_path: Path, content: str) -> l
         self_text = page_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         self_text = content
+    from ...graph.alias_index import is_scannable_graph_markdown
+
     pages_dir = graph_root / "pages"
     if not pages_dir.is_dir():
         return flags
 
     for other in pages_dir.rglob("*.md"):
+        if not other.is_file() or not is_scannable_graph_markdown(other, graph_root):
+            continue
         if other.resolve() == page_path.resolve():
             continue
         try:
@@ -135,11 +144,15 @@ def _inject_type_and_properties(
 
 def _strip_marpa_validation_section(text: str) -> str:
     """Remove a trailing MARPA validation section so it can be upserted idempotently."""
-    idx = text.rfind(_MARPA_HEADER)
-    if idx == -1:
-        return text
-    prefix = text[:idx].rstrip("\n")
-    return f"{prefix}\n" if prefix else ""
+    lines = text.splitlines(keepends=True)
+    for i in range(len(lines) - 1, -1, -1):
+        body = lines[i].strip()
+        if body.startswith("- "):
+            body = body[2:].strip()
+        if body == _MARPA_HEADING:
+            prefix = "".join(lines[:i]).rstrip("\n")
+            return f"{prefix}\n" if prefix else ""
+    return text
 
 
 def _upsert_validation_section(
@@ -182,6 +195,8 @@ def run_marpa_framework(
 ) -> ModuleOutcome:
     """Classify page into MARPA domain and inject ``type::`` metadata safely."""
     outcome = ModuleOutcome()
+    if is_blank_page_content(content):
+        return outcome
     if not hasattr(llm, "classify_marpa_page"):
         return outcome
 
@@ -211,8 +226,12 @@ def run_marpa_framework(
     with page_rmw_lock(page_path):
         if page_path.is_file():
             text = page_path.read_text(encoding="utf-8", errors="replace")
+            baseline_mtime = read_file_mtime(page_path)
         else:
             text = content
+            baseline_mtime = None
+        if is_blank_page_content(text):
+            return outcome
         lines = text.splitlines(keepends=True)
         if not has_type:
             text = _inject_type_and_properties(
@@ -225,7 +244,15 @@ def run_marpa_framework(
         new_text = "".join(lines)
         if new_text == text:
             return outcome
-        atomic_write_bytes(page_path, new_text.encode("utf-8"), graph_root=graph_root)
+        if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
+            page_path,
+            new_text.encode("utf-8"),
+            graph_root=graph_root,
+            baseline_mtime=baseline_mtime,
+        ):
+            return outcome
+        if baseline_mtime is None:
+            atomic_write_bytes(page_path, new_text.encode("utf-8"), graph_root=graph_root)
 
     outcome.pages_modified.append(page_title)
     outcome.details.append(f"marpa:{classification.assigned_domain}")
