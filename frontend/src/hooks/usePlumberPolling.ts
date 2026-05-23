@@ -27,6 +27,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
   const [logs, setLogs] = useState<string[]>([])
   const [config, setConfig] = useState<PlumberConfig | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
+  const [connectionError, setConnectionError] = useState<string | null>(null)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [frozen, setFrozen] = useState(true)
   const [engineBusy, setEngineBusy] = useState(false)
@@ -68,10 +69,13 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       const refreshedConfig = await matrycaFetchJson<PlumberConfig>(`${MATRYCA_API_BASE}/api/config`)
       if (mountedRef.current) {
         setConfig(refreshedConfig)
+        setConnectionError(null)
         configOk = true
       }
-    } catch {
+    } catch (error) {
       if (!mountedRef.current) return
+      console.warn('[Matryca Plumber] poll: /api/config failed', error)
+      setConnectionError(error instanceof Error ? error.message : 'config request failed')
     }
 
     try {
@@ -87,7 +91,11 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
           graphAnalytics = normalizeGraphAnalytics(
             await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
           )
-        } catch {
+          if (mountedRef.current) {
+            setConnectionError(null)
+          }
+        } catch (error) {
+          console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
           graphAnalytics = undefined
         }
       }
@@ -99,6 +107,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       if (!mountedRef.current) return
       stateRef.current = nextState
       setState(nextState)
+      setConnectionError(null)
       stateOk = true
 
       if (
@@ -110,8 +119,10 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         frozenRef.current = false
         setFrozen(false)
       }
-    } catch {
+    } catch (error) {
       if (!mountedRef.current) return
+      console.warn('[Matryca Plumber] poll: /api/state failed', error)
+      setConnectionError(error instanceof Error ? error.message : 'state request failed')
     }
 
     if (frozenRef.current) {
@@ -133,9 +144,12 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       const cleaned = nextLogs.filter((line) => line.trim().length > 0)
       logsRef.current = cleaned
       setLogs(cleaned)
+      setConnectionError(null)
       logsOk = true
-    } catch {
+    } catch (error) {
       if (!mountedRef.current) return
+      console.warn('[Matryca Plumber] poll: /api/logs failed', error)
+      setConnectionError(error instanceof Error ? error.message : 'logs request failed')
     }
 
     if (!mountedRef.current) return
@@ -182,10 +196,13 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       const payload = await matrycaFetchJson<PlumberConfig>(`${MATRYCA_API_BASE}/api/config`)
       if (mountedRef.current) {
         setConfig(payload)
+        setConnectionError(null)
       }
-    } catch {
+    } catch (error) {
+      console.warn('[Matryca Plumber] refreshConfig: /api/config failed', error)
       if (mountedRef.current) {
         setConfig(null)
+        setConnectionError(error instanceof Error ? error.message : 'config request failed')
       }
     }
   }, [])
@@ -266,6 +283,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
     logs,
     config,
     connectionStatus,
+    connectionError,
     lastUpdatedAt,
     frozen,
     engineBusy,

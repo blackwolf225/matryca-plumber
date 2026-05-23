@@ -1,6 +1,6 @@
 # Architecture
 
-**matryca-logseq-llm-wiki** connects an LLM agent to **Logseq OG** (pure local Markdown) through **FastMCP**, **Pydantic**, and a **100% headless** data plane powered by **`logseq-matryca-parser==0.3.3`**. This document is the engineering contract: **bounded-work parsing**, **where spatial truth lives**, **how the Headless CRUD & Mutation Plane commits structural edits**, **how X-Ray state persists across stateless invocations**, and **how the repository’s delivery gates stay aligned with runtime behavior**.
+**matryca-plumber** connects an LLM agent to **Logseq OG** (pure local Markdown) through **FastMCP**, **Pydantic**, and a **100% headless** data plane powered by **`logseq-matryca-parser==0.3.3`**. This document is the engineering contract: **bounded-work parsing**, **where spatial truth lives**, **how the Headless CRUD & Mutation Plane commits structural edits**, **how X-Ray state persists across stateless invocations**, and **how the repository’s delivery gates stay aligned with runtime behavior**.
 
 ---
 
@@ -377,12 +377,12 @@ Mechanics:
 
 | Platform | Unit file | Executable |
 |----------|-----------|------------|
-| **macOS** | `~/Library/LaunchAgents/com.matryca.logseq.plist` | `matryca-logseq-llm-wiki` on `PATH` |
+| **macOS** | `~/Library/LaunchAgents/com.matryca.logseq.plist` | `matryca-plumber` on `PATH` |
 | **Linux** | `~/.config/systemd/user/matryca-logseq.service` | same |
 
 Stdio is appended under **`~/.matryca/logs/`**. Install captures **`LOGSEQ_GRAPH_PATH`** and optional Matryca env vars from the **installing shell**. The CLI exposes this as **`matryca service install|uninstall`** (JSON summary on stdout).
 
-**UX invariant:** The service unit must point at a **stable** binary (for example after **`uv tool install matryca-logseq`** → `~/.local/bin/matryca-logseq-llm-wiki`). **`uvx`** uses an ephemeral cache path; a LaunchAgent or systemd unit written from a **`uvx`** invocation will break after cache eviction or reboot.
+**UX invariant:** The service unit must point at a **stable** binary (for example after **`uv tool install matryca-plumber`** → `~/.local/bin/matryca-plumber`). **`uvx`** uses an ephemeral cache path; a LaunchAgent or systemd unit written from a **`uvx`** invocation will break after cache eviction or reboot.
 
 ---
 
@@ -534,7 +534,7 @@ Logseq allows a single logical bullet to span multiple physical lines (Shift+Ent
 Every page spawned by Plumber cognitive modules (dangling healer seed pages, auto-split child pages, backlink contexts) is permanently stamped at creation time:
 
 ```text
-made-by:: matryca plumber v1.5.0
+made-by:: matryca plumber v1.5.1
 ```
 
 **Module:** `src/graph/page_properties.py`

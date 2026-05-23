@@ -304,8 +304,18 @@ def _is_blocked_inference_ip(
     return False
 
 
-def _validate_lm_models_base_url(base_url: str) -> str:
-    """Restrict model discovery to local inference endpoints (SSRF guard)."""
+def assert_safe_lm_proxy_url(base_url: str) -> str:
+    """Validate ``base_url`` for LM Studio / OpenAI-compatible proxy use (SSRF guard).
+
+    Use for model discovery (``GET /api/lm-models``) and for persisting ``LLM_BASE_URL``
+    via ``POST /api/config`` so configuration cannot bypass the same host/DNS checks.
+
+    Returns:
+        Canonical OpenAI-compatible base URL (via :func:`resolve_llm_base_url`).
+
+    Raises:
+        HTTPException: When the URL is not an allowed ``http``/``https`` inference endpoint.
+    """
     parsed = urllib.parse.urlparse(base_url.strip())
     if parsed.scheme not in {"http", "https"}:
         raise HTTPException(status_code=400, detail="base_url must use http or https")
@@ -318,6 +328,11 @@ def _validate_lm_models_base_url(base_url: str) -> str:
     if _host_resolves_to_blocked_ip(hostname):
         raise HTTPException(status_code=400, detail="base_url host is not allowed")
     return resolve_llm_base_url(override=base_url)
+
+
+def _validate_lm_models_base_url(base_url: str) -> str:
+    """Restrict model discovery to local inference endpoints (SSRF guard)."""
+    return assert_safe_lm_proxy_url(base_url)
 
 
 def _fetch_lm_studio_models(base_url: str) -> LmModelsResponse:
@@ -406,10 +421,11 @@ def _redact_log_line(line: str) -> str:
 def _update_dotenv(payload: PlumberConfigResponse) -> None:
     """Persist configuration updates to ``.env`` and the active process environment."""
     env_path = _resolve_dotenv_path()
-    updates = {
-        env_key: serialize_plumber_config_field_for_dotenv(field, getattr(payload, field))
-        for field, env_key in _ENV_KEY_MAP.items()
-    }
+    validated_lm_url = assert_safe_lm_proxy_url(payload.lm_studio_url)
+    updates: dict[str, str] = {}
+    for field, env_key in _ENV_KEY_MAP.items():
+        raw_value = validated_lm_url if field == "lm_studio_url" else getattr(payload, field)
+        updates[env_key] = serialize_plumber_config_field_for_dotenv(field, raw_value)
     updates["MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS"] = (
         "false" if payload.enable_inline_semantic_corrections else "true"
     )
@@ -783,6 +799,12 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = 8000) -> None:
     """Start Uvicorn and open the Plumber control-room dashboard in the default browser."""
     import uvicorn
 
+    if host == "0.0.0.0":
+        logger.warning(
+            "WARNING: Binding to 0.0.0.0 exposes the unauthenticated /api/auth/session "
+            "endpoint to the local network."
+        )
+
     reload_plumber_dotenv()
     _ensure_frontend_built()
     _mount_frontend_assets()
@@ -805,6 +827,7 @@ __all__ = [
     "LmModelsResponse",
     "PlumberConfigResponse",
     "UpdateCheckResponse",
+    "assert_safe_lm_proxy_url",
     "app",
     "get_config",
     "get_graph_analytics",

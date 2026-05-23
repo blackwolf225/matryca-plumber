@@ -12,6 +12,7 @@ import { UpdateGuideModal } from './UpdateGuideModal'
 interface MasterHeaderProps {
   state: DaemonStateResponse | null
   connectionStatus: ConnectionStatus
+  connectionError: string | null
   lastUpdatedAt: Date | null
   config: PlumberConfig | null
   frozen: boolean
@@ -81,6 +82,7 @@ function connectionBadge(connectionStatus: ConnectionStatus): {
 export function MasterHeader({
   state,
   connectionStatus,
+  connectionError,
   lastUpdatedAt,
   config,
   frozen,
@@ -244,6 +246,11 @@ export function MasterHeader({
                   Sync {lastUpdatedAt.toLocaleTimeString()}
                 </p>
               )}
+              {connectionError ? (
+                <p className="max-w-[28rem] truncate text-[10px] text-amber-600 dark:text-amber-400" title={connectionError}>
+                  API: {connectionError}
+                </p>
+              ) : null}
               {frozen && (
                 <p className="text-[10px] text-theme-muted">Telemetry paused — zero client CPU</p>
               )}

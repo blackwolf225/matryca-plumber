@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
 
+import httpx
 import instructor
 from loguru import logger
 from openai import OpenAI
@@ -131,6 +132,8 @@ from .plumber_modules.semantic_cache_router import (
 )
 from .prompt_constraints import ALIAS_FIRST_LINK_CONSTRAINT, finalize_system_prompt
 from .prompt_layout import build_cache_aligned_prompt
+
+_LLM_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=5.0, pool=5.0)
 
 ThermalProfile = Literal["none", "bootstrap", "cognitive"]
 
@@ -1375,7 +1378,11 @@ class InstructorLLMClient:
         self.base_url = resolve_llm_base_url(override=base_url)
         self.model = resolve_llm_model_name(override=model)
         self.api_key = resolve_llm_api_key(override=api_key)
-        self._raw_client: OpenAI = OpenAI(base_url=self.base_url, api_key=self.api_key)
+        self._raw_client: OpenAI = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=_LLM_HTTP_TIMEOUT,
+        )
         self._execution_history: list[ChatMessage] = []
         self._runtime_lint_config: PlumberLintConfig | None = None
 
@@ -1400,7 +1407,11 @@ class InstructorLLMClient:
         self.base_url = resolve_llm_base_url(override=resolved_base)
         self.model = resolve_llm_model_name(override=resolved_model)
         self.api_key = resolve_llm_api_key(override=resolved_api_key)
-        self._raw_client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+        self._raw_client = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            timeout=_LLM_HTTP_TIMEOUT,
+        )
 
     def reset_execution_history(self) -> None:
         """Drop per-page session history (constant memory footprint across daemon uptime)."""

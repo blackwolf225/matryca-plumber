@@ -271,7 +271,10 @@ def test_any_enabled_includes_context_compression(monkeypatch: pytest.MonkeyPatc
 def test_resolve_llm_base_url_preserves_custom_path_suffix() -> None:
     from src.agent.plumber_config import resolve_llm_base_url
 
-    assert resolve_llm_base_url(override="http://localhost:8080/api/v2") == "http://localhost:8080/api/v2"
+    assert (
+        resolve_llm_base_url(override="http://localhost:8080/api/v2")
+        == "http://localhost:8080/api/v2"
+    )
     assert resolve_llm_base_url(override="http://localhost:1234/v1") == "http://localhost:1234/v1"
     assert resolve_llm_base_url(override="http://localhost:1234") == "http://localhost:1234/v1"
 

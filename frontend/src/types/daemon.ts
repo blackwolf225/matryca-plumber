@@ -265,6 +265,8 @@ export interface PlumberPollSnapshot {
   logs: string[]
   config: PlumberConfig | null
   connectionStatus: ConnectionStatus
+  /** Last polling / API connectivity error (cleared after a successful sub-request). */
+  connectionError: string | null
   lastUpdatedAt: Date | null
   frozen: boolean
   engineBusy: boolean

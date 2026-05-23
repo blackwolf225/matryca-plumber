@@ -47,6 +47,7 @@ export default function App() {
     logs,
     config,
     connectionStatus,
+    connectionError,
     lastUpdatedAt,
     frozen,
     engineBusy,
@@ -117,6 +118,7 @@ export default function App() {
       <MasterHeader
         state={state}
         connectionStatus={connectionStatus}
+        connectionError={connectionError}
         lastUpdatedAt={lastUpdatedAt}
         config={config}
         frozen={frozen}

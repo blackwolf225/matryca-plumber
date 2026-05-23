@@ -1,6 +1,6 @@
 # Contributing to Matryca Plumber
 
-Thank you for investing your time in **Matryca Plumber** (`matryca-logseq-llm-wiki`).
+Thank you for investing your time in **Matryca Plumber** (`matryca-plumber`).
 
 This project exists so AI agents can collaborate on **Logseq OG** graphs the right way: **blocks**, **`id::`**, and **local Markdown** — not flattened blobs in someone else's database. Whether you fix a typo, tighten a test, or add an MCP tool, you are helping keep that bar high.
 
@@ -150,7 +150,7 @@ GitHub Actions on pushes and pull requests to **`main`** runs the same gate (see
 
 Never commit secrets (no `.env`, tokens, or private graph paths in git).
 
-**Background service:** `matryca service install` must target a **stable** binary (for example after `uv tool install matryca-logseq`). Do not install the daemon from ephemeral `uvx` — see [README.md](README.md#background-service-matryca-service--persistent-install-only).
+**Background service:** `matryca service install` must target a **stable** binary (for example after `uv tool install matryca-plumber`). Do not install the daemon from ephemeral `uvx` — see [README.md](README.md#background-service-matryca-service--persistent-install-only).
 
 ---
 

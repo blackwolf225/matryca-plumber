@@ -1,6 +1,6 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world bugs crushed** during the evolution of **matryca-logseq-llm-wiki** from a baseline MCP bridge to a production-grade **Ironclad Autonomous Linter OS** with **100% Logseq Datalog parity** (Phase 15). For the engineering contract (modules, data planes, diagrams), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
+This document records **architecture decisions**, **phase milestones**, and **real-world bugs crushed** during the evolution of **matryca-plumber** from a baseline MCP bridge to a production-grade **Ironclad Autonomous Linter OS** with **100% Logseq Datalog parity** (Phase 15). For the engineering contract (modules, data planes, diagrams), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (newest first within each phase summary). When a decision is superseded, add a new entry rather than rewriting history.
 
@@ -387,7 +387,7 @@ Early bridges treated Logseq pages as flat text; parent-child UUID races caused 
 
 ## IP separation: open source vs commercial tier
 
-| Capability | OSS (`matryca-logseq` / **Matryca Plumber**) | Commercial (**Matryca Brain**, Nuitka binary) |
+| Capability | OSS (`matryca-plumber` / **Matryca Plumber**) | Commercial (**Matryca Brain**, Nuitka binary) |
 |------------|------------------------|----------------------------|
 | MARPA domain taxonomy (Mappa/Area/Risorsa/Progetto/Archivio) | ✅ env-gated | ✅ |
 | Dangling healer, entity consolidation, auto-split, property hygiene | ✅ env-gated | ✅ |

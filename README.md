@@ -1,13 +1,13 @@
-# Matryca Logseq LLM Wiki (v1.5 — Ironclad Release)
+# Matryca Plumber
 
-> Agentic Knowledge Management for Logseq OG. An **enterprise-grade, local-first background AI daemon** with a real-time **Sovereign UI** control room — plus a CLI and MCP server that turns your favorite AI into a spatial Knowledge Architect, heavily inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). It treats your vault as a tree of blocks, not a flat document store. **100% native Logseq AST parity**, optimistic concurrency safety, versioned AI authorship stamping, and zero auxiliary databases.
+> **v1.5 — Ironclad Release.** Agentic Knowledge Management for Logseq OG. An **enterprise-grade, local-first background AI daemon** with a real-time **Sovereign UI** control room — plus a CLI and MCP server that turns your favorite AI into a spatial Knowledge Architect, heavily inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). It treats your vault as a tree of blocks, not a flat document store. **100% native Logseq AST parity**, optimistic concurrency safety, versioned AI authorship stamping, and zero auxiliary databases.
 
-[![CI](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-417%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki/actions/workflows/ci.yml)
+[![CI](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-417%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-![Matryca Logseq LLM Wiki — Agentic Knowledge Management for Logseq OG](images/20260519%20Logseq%20Matryca%20LLM%20Wiki%20copertina%20github.jpg)
+![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/20260519%20Logseq%20Matryca%20LLM%20Wiki%20copertina%20github.jpg)
 
 Matryca is a **100% headless, sandboxed** MCP server and CLI that turns your local Logseq graph into a high token-density agentic workspace — **no network APIs and no background desktop app (Logseq OG) required**.
 
@@ -250,9 +250,9 @@ All default **`false`** unless noted. See `src/agent/plumber_config.py`.
 ```json
 {
   "mcpServers": {
-    "matryca-logseq": {
+    "matryca-plumber": {
       "command": "uvx",
-      "args": ["--from", "matryca-logseq", "matryca-logseq-llm-wiki"],
+      "args": ["--from", "matryca-plumber", "matryca-plumber"],
       "env": {
         "LOGSEQ_GRAPH_PATH": "/absolute/path/to/your/Logseq/graph"
       }
@@ -333,13 +333,13 @@ Full MCP tool matrix: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) § Complete
 ## Zero-install execution (`uvx`)
 
 ```bash
-uvx --from matryca-logseq matryca-logseq-llm-wiki
+uvx --from matryca-plumber matryca-plumber
 ```
 
 Bleeding edge from `main`:
 
 ```bash
-uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git matryca-logseq-llm-wiki
+uvx --from git+https://github.com/MarcoPorcellato/matryca-plumber.git matryca-plumber
 ```
 
 ### Background MCP service (`matryca service`)
@@ -347,7 +347,7 @@ uvx --from git+https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git ma
 Install a stable binary first — **not** via ephemeral `uvx`:
 
 ```bash
-uv tool install matryca-logseq
+uv tool install matryca-plumber
 matryca service install
 ```
 
@@ -382,8 +382,8 @@ Point `LOGSEQ_GRAPH_PATH` at a **dedicated test graph** before enabling Plumber 
 ### Install
 
 ```bash
-git clone https://github.com/MarcoPorcellato/matryca-logseq-llm-wiki.git
-cd matryca-logseq-llm-wiki
+git clone https://github.com/MarcoPorcellato/matryca-plumber.git
+cd matryca-plumber
 make install
 cp .env.example .env   # edit LOGSEQ_GRAPH_PATH + LM settings
 cd frontend && npm install && npm run build && cd ..

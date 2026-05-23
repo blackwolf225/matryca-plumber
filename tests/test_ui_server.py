@@ -277,6 +277,47 @@ def test_post_config_updates_dotenv(
     assert "MATRYCA_LINT_PROPERTY_HYGIENE=true" in written
 
 
+def test_post_config_rejects_unsafe_lm_studio_url(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text('LOGSEQ_GRAPH_PATH="/old/path"\n', encoding="utf-8")
+    graph = tmp_path / "graph"
+    (graph / "pages").mkdir(parents=True)
+    monkeypatch.setattr("src.cli.ui_server._REPO_ROOT", tmp_path)
+
+    body = {
+        "logseq_graph_path": str(graph),
+        "lm_studio_url": "http://169.254.169.254/latest/meta-data/",
+        "lm_model": "qwen3-8b",
+        "low_priority_mode": True,
+        "thermal_delay_bootstrap": 2.5,
+        "thermal_delay_cognitive": 1.25,
+        "mapreduce_trigger_chars": 20000,
+        "mapreduce_chunk_chars": 10000,
+        "context_compression": False,
+        "compression_trigger": 90000,
+        "compression_target": 25000,
+        "semantic_routing": True,
+        "entity_consolidation": False,
+        "property_hygiene": True,
+        "marpa_framework": False,
+        "backpropagate_links": True,
+        "heal_dangling": False,
+        "enable_inline_semantic_corrections": True,
+        "auto_split": False,
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/api/config", json=body, headers=auth_headers)
+
+    assert response.status_code == 400
+    assert "not allowed" in response.json()["detail"]
+    assert env_path.read_text(encoding="utf-8") == 'LOGSEQ_GRAPH_PATH="/old/path"\n'
+
+
 def test_get_lm_models_returns_openai_compatible_ids(
     monkeypatch: pytest.MonkeyPatch,
     auth_headers: dict[str, str],
