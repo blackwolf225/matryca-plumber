@@ -115,6 +115,16 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       stateRef.current = nextState
       setState(nextState)
       stateOk = true
+
+      if (
+        frozenRef.current
+        && !telemetryLiveRef.current
+        && (nextState.status === 'running' || nextState.status === 'idle')
+      ) {
+        telemetryLiveRef.current = true
+        frozenRef.current = false
+        setFrozen(false)
+      }
     } catch {
       if (!mountedRef.current) return
     }

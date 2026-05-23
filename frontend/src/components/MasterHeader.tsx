@@ -182,7 +182,7 @@ export function MasterHeader({
               </button>
               <button
                 type="button"
-                disabled={engineBusy || !isRunning}
+                disabled={engineBusy || !isEngineActive(daemonStatus)}
                 onClick={() => void onStopEngine()}
                 className="inline-flex h-9 items-center justify-center rounded-md border border-red-500/60 bg-red-500/10 px-4 text-xs font-medium text-red-500 transition-all hover:border-red-500 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
               >

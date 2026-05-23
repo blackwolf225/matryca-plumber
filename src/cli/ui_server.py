@@ -475,11 +475,11 @@ def _daemon_control_response(result: dict[str, Any]) -> DaemonControlResponse:
     )
 
 
-def _spawn_plumber_daemon_cli(graph_root: Path) -> None:
+def _spawn_plumber_daemon_cli(graph_root: Path) -> subprocess.Popen[bytes]:
     """Launch ``plumber start`` in a fresh interpreter (never fork from Uvicorn threads)."""
     env = os.environ.copy()
     env["LOGSEQ_GRAPH_PATH"] = str(graph_root)
-    subprocess.Popen(
+    return subprocess.Popen(
         [sys.executable, "-m", "src.cli", "plumber", "start"],
         cwd=str(_REPO_ROOT),
         env=env,
@@ -488,6 +488,30 @@ def _spawn_plumber_daemon_cli(graph_root: Path) -> None:
         start_new_session=True,
         close_fds=True,
     )
+
+
+def _verify_daemon_launch(
+    graph_root: Path,
+    proc: subprocess.Popen[bytes],
+    *,
+    settle_s: float = 0.35,
+    verify_timeout_s: float = 2.0,
+) -> tuple[bool, str | None]:
+    """Wait briefly and confirm the daemon child did not exit immediately (lock TOCTOU)."""
+    time.sleep(settle_s)
+    exit_code = proc.poll()
+    if exit_code is not None:
+        return (
+            False,
+            f"Daemon exited immediately with code {exit_code} (lock contention or startup error)",
+        )
+    deadline = time.monotonic() + verify_timeout_s
+    while time.monotonic() < deadline:
+        pid = read_pid_file(graph_root)
+        if pid is not None and is_process_alive(pid):
+            return True, None
+        time.sleep(0.15)
+    return False, "Daemon did not publish a live PID after launch"
 
 
 @app.post("/api/daemon/start", response_model=DaemonControlResponse)
@@ -503,11 +527,20 @@ def start_daemon_endpoint() -> DaemonControlResponse:
             pid=existing,
         )
 
-    _spawn_plumber_daemon_cli(graph_root)
+    proc = _spawn_plumber_daemon_cli(graph_root)
+    ok, failure_message = _verify_daemon_launch(graph_root, proc)
+    if not ok:
+        return DaemonControlResponse(
+            ok=False,
+            code="start_failed",
+            message=failure_message,
+        )
+    pid = read_pid_file(graph_root)
     return DaemonControlResponse(
         ok=True,
         code="starting",
-        message="Daemon launch scheduled",
+        message="Daemon launch verified",
+        pid=pid,
     )
 
 

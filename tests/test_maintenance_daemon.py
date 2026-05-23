@@ -1452,3 +1452,67 @@ def test_phase2_fast_track_does_not_skip_semantic_index_pages(graph_root: Path) 
     state = DaemonState(bootstrap_complete=True)
 
     assert daemon._try_fast_track_cycle_file(path, state) is False
+
+
+def test_try_acquire_daemon_process_lock_windows_fallback(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-POSIX platforms must use exclusive lock files instead of returning a sentinel fd."""
+    from src.agent.maintenance_daemon import (
+        _release_daemon_process_lock,
+        _try_acquire_daemon_process_lock,
+        daemon_lock_path,
+        remove_pid_file,
+    )
+
+    monkeypatch.setattr("src.agent.maintenance_daemon._fcntl", None)
+    first = _try_acquire_daemon_process_lock(graph_root)
+    assert first is not None
+    assert first >= 0
+    assert daemon_lock_path(graph_root).is_file()
+
+    write_pid_file(graph_root)
+    second = _try_acquire_daemon_process_lock(graph_root)
+    assert second is None
+
+    _release_daemon_process_lock(graph_root)
+    remove_pid_file(graph_root)
+    third = _try_acquire_daemon_process_lock(graph_root)
+    assert third is not None
+    _release_daemon_process_lock(graph_root)
+
+
+def test_load_daemon_state_recovers_from_bak_when_primary_corrupt(graph_root: Path) -> None:
+    from src.agent.maintenance_daemon import state_bak_path
+
+    state = DaemonState(
+        status="idle",
+        session_prompt_tokens=42,
+        session_completion_tokens=7,
+    )
+    save_daemon_state(graph_root, state)
+    assert state_bak_path(graph_root).is_file()
+
+    state_path(graph_root).write_text("{not valid json", encoding="utf-8")
+    loaded = load_daemon_state(graph_root)
+    assert loaded.session_prompt_tokens == 42
+    assert loaded.session_completion_tokens == 7
+    restored = json.loads(state_path(graph_root).read_text(encoding="utf-8"))
+    assert restored["session_prompt_tokens"] == 42
+
+
+def test_completion_messages_preserves_cluster_history_without_compression() -> None:
+    """Cluster neighborhood context must survive when context compression is disabled."""
+    client = InstructorLLMClient(base_url="http://localhost:1234/v1")
+    client.bind_lint_config(PlumberLintConfig(context_compression=False))
+    client.inject_cluster_focus_context("neighbor summaries")
+
+    messages = client._completion_messages(
+        system_prompt="system",
+        prompt="current page",
+        stateless=False,
+    )
+    assert messages[1]["content"].startswith("[CLUSTER FOCUS:")
+    assert messages[-1]["content"] == "current page"
+    assert len(client._execution_history) == 2

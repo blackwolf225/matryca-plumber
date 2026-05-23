@@ -355,10 +355,19 @@ def test_daemon_start_schedules_background_launch(
 ) -> None:
     launched: list[Path] = []
 
-    def fake_spawn(root: Path) -> None:
+    class FakeProc:
+        def poll(self) -> None:
+            return None
+
+    def fake_spawn(root: Path) -> FakeProc:
         launched.append(root)
+        return FakeProc()
 
     monkeypatch.setattr("src.cli.ui_server._spawn_plumber_daemon_cli", fake_spawn)
+    monkeypatch.setattr(
+        "src.cli.ui_server._verify_daemon_launch",
+        lambda _graph_root, _proc: (True, None),
+    )
     monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: None)
 
     with TestClient(app) as client:
@@ -386,6 +395,33 @@ def test_daemon_start_reports_already_running(
     assert payload["ok"] is False
     assert payload["code"] == "already_running"
     assert payload["pid"] == 9001
+
+
+def test_daemon_start_reports_launch_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProc:
+        def poll(self) -> int:
+            return 1
+
+    monkeypatch.setattr(
+        "src.cli.ui_server._spawn_plumber_daemon_cli",
+        lambda _root: FakeProc(),
+    )
+    monkeypatch.setattr(
+        "src.cli.ui_server._verify_daemon_launch",
+        lambda _graph_root, _proc: (False, "Daemon exited immediately with code 1"),
+    )
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: None)
+
+    with TestClient(app) as client:
+        response = client.post("/api/daemon/start")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["code"] == "start_failed"
 
 
 def test_daemon_stop_invokes_shutdown(

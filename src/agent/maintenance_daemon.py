@@ -8,6 +8,7 @@ import math
 import os
 import re
 import select
+import shutil
 import signal
 import sys
 import threading
@@ -134,6 +135,7 @@ ThermalProfile = Literal["none", "bootstrap", "cognitive"]
 
 STATE_FILENAME = ".matryca_daemon_state.json"
 STATE_TMP_FILENAME = f"{STATE_FILENAME}.tmp"
+STATE_BAK_FILENAME = f"{STATE_FILENAME}.bak"
 PID_FILENAME = ".matryca_plumber_daemon.pid"
 DAEMON_LOCK_FILENAME = ".matryca_plumber_daemon.lock"
 STRUCTURAL_LINT_HEADING = "### Matryca Structural Lint"
@@ -149,6 +151,12 @@ try:
     import fcntl as _fcntl
 except ImportError:  # pragma: no cover - Windows and other non-Unix platforms
     _fcntl = None
+
+_msvcrt: Any
+try:
+    import msvcrt as _msvcrt
+except ImportError:  # pragma: no cover - non-Windows platforms
+    _msvcrt = None
 
 _daemon_process_lock_fd: int | None = None
 
@@ -439,6 +447,10 @@ def state_path(graph_root: Path) -> Path:
     return graph_root / STATE_FILENAME
 
 
+def state_bak_path(graph_root: Path) -> Path:
+    return graph_root / STATE_BAK_FILENAME
+
+
 def pid_path(graph_root: Path) -> Path:
     return graph_root / PID_FILENAME
 
@@ -447,10 +459,38 @@ def daemon_lock_path(graph_root: Path) -> Path:
     return graph_root / DAEMON_LOCK_FILENAME
 
 
+def _try_acquire_daemon_process_lock_windows(graph_root: Path) -> int | None:
+    """Acquire an exclusive daemon lock on platforms without ``fcntl`` (Windows)."""
+    path = daemon_lock_path(graph_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for _attempt in range(2):
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)
+        except FileExistsError:
+            pid = read_pid_file(graph_root)
+            if pid is None or not is_process_alive(pid):
+                with contextlib.suppress(OSError):
+                    path.unlink(missing_ok=True)
+                continue
+            return None
+        except OSError:
+            return None
+        if _msvcrt is not None:
+            try:
+                _msvcrt.locking(fd, _msvcrt.LK_NBLCK, 1)
+            except OSError:
+                os.close(fd)
+                with contextlib.suppress(OSError):
+                    path.unlink(missing_ok=True)
+                return None
+        return fd
+    return None
+
+
 def _try_acquire_daemon_process_lock(graph_root: Path) -> int | None:
     """Acquire an exclusive daemon lock; return ``None`` when another process holds it."""
     if _fcntl is None:
-        return -1
+        return _try_acquire_daemon_process_lock_windows(graph_root)
     path = daemon_lock_path(graph_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o644)
@@ -469,6 +509,8 @@ def _release_daemon_process_lock(graph_root: Path) -> None:
         with contextlib.suppress(OSError):
             if _fcntl is not None:
                 _fcntl.flock(_daemon_process_lock_fd, _fcntl.LOCK_UN)
+            elif _msvcrt is not None:
+                _msvcrt.locking(_daemon_process_lock_fd, _msvcrt.LK_UNLCK, 1)
             os.close(_daemon_process_lock_fd)
         _daemon_process_lock_fd = None
     lock_path = daemon_lock_path(graph_root)
@@ -509,14 +551,25 @@ def load_daemon_state(graph_root: Path) -> DaemonState:
     from loguru import logger
 
     path = state_path(graph_root)
-    if not path.is_file():
+    bak_path = state_bak_path(graph_root)
+    if not path.is_file() and not bak_path.is_file():
         return sync_daemon_state_from_env(DaemonState())
 
-    payload = _read_daemon_state_payload(path)
+    payload = _read_daemon_state_payload(path) if path.is_file() else None
+    if payload is None and bak_path.is_file():
+        logger.warning(
+            "[METADATA CORRUPTION DETECTED] Primary checkpoint unreadable; "
+            "attempting recovery from .bak backup."
+        )
+        payload = _read_daemon_state_payload(bak_path)
+        if payload is not None:
+            with contextlib.suppress(OSError):
+                shutil.copy2(bak_path, path)
+
     if payload is None:
         logger.warning(
-            "[METADATA CORRUPTION DETECTED] File state was malformed, "
-            "self-healing by initializing a fresh instance."
+            "[METADATA CORRUPTION DETECTED] Checkpoint and backup both unreadable; "
+            "initializing a fresh instance."
         )
         return sync_daemon_state_from_env(DaemonState())
     state = sync_daemon_state_from_env(DaemonState.from_json(payload))
@@ -545,6 +598,9 @@ def save_daemon_state(graph_root: Path, state: DaemonState) -> None:
             os.fsync(handle.fileno())
         os.replace(str(tmp_path), str(path))
         committed = True
+        bak_path = state_bak_path(graph_root)
+        with contextlib.suppress(OSError):
+            shutil.copy2(path, bak_path)
     finally:
         if not committed:
             tmp_path.unlink(missing_ok=True)
@@ -588,7 +644,7 @@ def is_process_alive(pid: int) -> bool:
 
 
 def stop_daemon(graph_root: Path) -> dict[str, Any]:
-    """Gracefully stop a running daemon via SIGTERM."""
+    """Gracefully stop a running daemon via SIGTERM, escalating to SIGKILL when needed."""
     pid = read_pid_file(graph_root)
     if pid is None:
         return {"ok": True, "code": "not_running", "message": "No PID file found"}
@@ -598,13 +654,35 @@ def stop_daemon(graph_root: Path) -> dict[str, Any]:
         state.status = "stopped"
         save_daemon_state(graph_root, state)
         return {"ok": True, "code": "stale_pid_removed", "pid": pid}
+
     os.kill(pid, signal.SIGTERM)
-    pid_file = pid_path(graph_root)
-    for _ in range(20):
-        if not is_process_alive(pid) and not pid_file.is_file():
+    sigkill_sent = False
+    deadline = time.monotonic() + 5.0
+    sigkill_after = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        if not is_process_alive(pid):
             break
+        if not sigkill_sent and time.monotonic() >= sigkill_after:
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGKILL)
+            sigkill_sent = True
         time.sleep(0.1)
-    return {"ok": True, "code": "signaled", "pid": pid, "signal": "SIGTERM"}
+
+    if is_process_alive(pid):
+        return {
+            "ok": False,
+            "code": "stop_failed",
+            "pid": pid,
+            "message": "Daemon process still alive after SIGTERM/SIGKILL",
+        }
+
+    remove_pid_file(graph_root)
+    state = load_daemon_state(graph_root)
+    state.status = "stopped"
+    save_daemon_state(graph_root, state)
+    code = "killed" if sigkill_sent else "signaled"
+    signal_name = "SIGKILL" if sigkill_sent else "SIGTERM"
+    return {"ok": True, "code": code, "pid": pid, "signal": signal_name}
 
 
 def _page_title_from_path(graph_root: Path, path: Path) -> str:
@@ -1224,9 +1302,7 @@ class InstructorLLMClient:
         stateless: bool,
     ) -> list[ChatMessage]:
         """Build chat messages for one completion (Ermes history only when stateful)."""
-        config = load_plumber_lint_config()
-        use_history = config.context_compression and not stateless
-        if not use_history:
+        if stateless:
             self.reset_execution_history()
             return [
                 {"role": "system", "content": system_prompt},
@@ -1373,15 +1449,16 @@ class InstructorLLMClient:
         """
         started = time.perf_counter()
         self.refresh_config()
-        config = load_plumber_lint_config()
+        config = self._active_lint_config()
         messages = self._completion_messages(
             system_prompt=system_prompt,
             prompt=prompt,
             stateless=stateless,
         )
-        use_history = config.context_compression and not stateless
+        use_history = not stateless
+        use_compression = config.context_compression and not stateless
         compression_event = None
-        if use_history:
+        if use_compression:
             messages, compression_event = condense_messages(
                 messages,
                 trigger=config.compression_trigger,
@@ -2063,20 +2140,39 @@ class MaintenanceDaemon:
         if self.bootstrap_complete:
             return
 
-        try:
-            metrics = run_bootstrap_harvest(
-                self.graph_root,
-                llm=self.llm_client,
-                incremental=False,
-                rebuild_index=True,
-                phase1_strict=True,
-            )
-        except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
-            self.token_logger.log_structural_lint_warning(
-                target_file=self.graph_root,
-                message=f"Bootstrap harvest failed: {exc}",
-                malformed_refs=[],
-            )
+        max_attempts = 3
+        backoff_s = 1.0
+        last_exc: Exception | None = None
+        metrics = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                metrics = run_bootstrap_harvest(
+                    self.graph_root,
+                    llm=self.llm_client,
+                    incremental=False,
+                    rebuild_index=True,
+                    phase1_strict=True,
+                )
+                break
+            except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
+                last_exc = exc
+                if attempt >= max_attempts:
+                    self.token_logger.log_structural_lint_warning(
+                        target_file=self.graph_root,
+                        message=(f"Bootstrap harvest failed after {max_attempts} attempts: {exc}"),
+                        malformed_refs=[],
+                    )
+                    return
+                time.sleep(backoff_s)
+                backoff_s *= 2.0
+
+        if metrics is None:
+            if last_exc is not None:
+                self.token_logger.log_structural_lint_warning(
+                    target_file=self.graph_root,
+                    message=f"Bootstrap harvest failed: {last_exc}",
+                    malformed_refs=[],
+                )
             return
 
         master_index = master_index_page_path(self.graph_root)
@@ -2658,6 +2754,15 @@ def start_daemon_foreground(graph_root: Path | None = None) -> None:
     reload_plumber_dotenv()
     configure_loguru()
     root = graph_root or resolve_graph_root()
+    lock_fd = _try_acquire_daemon_process_lock(root)
+    if lock_fd is None:
+        logger.error(
+            "Matryca Plumber daemon already running (lock held) for graph_root={!r}",
+            root,
+        )
+        sys.exit(1)
+    global _daemon_process_lock_fd
+    _daemon_process_lock_fd = lock_fd
     daemon = MaintenanceDaemon(root)
     daemon.run_forever()
 
