@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import threading
 import time
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ from typing import Any
 
 import httpx
 from loguru import logger
+from packaging.version import InvalidVersion, Version
 
 from ..graph.page_properties import get_plumber_version
 
@@ -33,21 +33,18 @@ class UpdateCheckResult:
     pypi_url: str
 
 
-def _version_key(version: str) -> tuple[int, ...]:
+def _parse_version(version: str) -> Version:
     normalized = version.strip().lstrip("v").split("+", 1)[0]
-    parts: list[int] = []
-    for segment in re.split(r"[.-]", normalized):
-        if segment.isdigit():
-            parts.append(int(segment))
-        else:
-            break
-    return tuple(parts or [0])
+    try:
+        return Version(normalized)
+    except InvalidVersion:
+        return Version("0")
 
 
 def _is_newer(latest: str, current: str) -> bool:
     if latest.strip().lower() == "unknown" or current.strip().lower() == "unknown":
         return False
-    return _version_key(latest) > _version_key(current)
+    return _parse_version(latest) > _parse_version(current)
 
 
 def _build_result(*, latest_version: str) -> UpdateCheckResult:

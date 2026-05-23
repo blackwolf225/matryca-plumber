@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface LiveConsoleProps {
   logs: string[]
   telemetry?: ReactNode
+}
+
+interface LogEntry {
+  id: number
+  text: string
 }
 
 const STICK_TO_BOTTOM_THRESHOLD_PX = 48
@@ -11,12 +16,39 @@ const STICK_TO_BOTTOM_THRESHOLD_PX = 48
 export function LiveConsole({ logs, telemetry }: LiveConsoleProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const nextLogIdRef = useRef(0)
+  const [entries, setEntries] = useState<LogEntry[]>([])
+
+  useEffect(() => {
+    setEntries((previous) => {
+      if (logs.length === 0) {
+        return []
+      }
+      if (
+        logs.length >= previous.length
+        && logs.slice(0, previous.length).every((line, index) => line === previous[index]?.text)
+      ) {
+        const appended = logs.slice(previous.length).map((text) => ({
+          id: nextLogIdRef.current++,
+          text,
+        }))
+        return [...previous, ...appended]
+      }
+      return logs.map((text, index) => {
+        const existing = previous[index]
+        if (existing && existing.text === text) {
+          return existing
+        }
+        return { id: nextLogIdRef.current++, text }
+      })
+    })
+  }, [logs])
 
   useEffect(() => {
     const el = scrollRef.current
     if (!el || !stickToBottomRef.current) return
     el.scrollTop = el.scrollHeight
-  }, [logs])
+  }, [entries])
 
   const handleScroll = () => {
     const el = scrollRef.current
@@ -34,16 +66,16 @@ export function LiveConsole({ logs, telemetry }: LiveConsoleProps) {
         onScroll={handleScroll}
         className="markdown-theme terminal-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-theme-base p-4 text-sm"
       >
-        {logs.length === 0 ? (
+        {entries.length === 0 ? (
           <p className="text-theme-muted">Waiting for operational logs from /api/logs…</p>
         ) : (
-          logs.map((line, index) => (
+          entries.map((entry) => (
             <div
-              key={`${index}-${line.slice(0, 24)}`}
+              key={entry.id}
               className="rounded-lg border border-theme-border/45 bg-theme-surface/60 px-3 py-1.5 font-mono text-xs shadow-sm"
             >
               <span className="mr-2 select-none text-emerald-500">›</span>
-              <span className="whitespace-pre-wrap break-all text-theme-text">{line}</span>
+              <span className="whitespace-pre-wrap break-all text-theme-text">{entry.text}</span>
             </div>
           ))
         )}

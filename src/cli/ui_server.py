@@ -118,8 +118,6 @@ class DaemonStateResponse(BaseModel):
         *,
         graph_root: Path | None = None,
     ) -> DaemonStateResponse:
-        if graph_root is not None:
-            heal_daemon_state_ledger(graph_root, state)
         payload = state.to_json()
         if graph_root is not None:
             payload["graph_analytics"] = _safe_graph_analytics(
@@ -144,6 +142,8 @@ class PlumberConfigResponse(BaseModel):
     mapreduce_trigger_chars: int
     mapreduce_chunk_chars: int
     context_compression: bool
+    compression_trigger: int
+    compression_target: int
     semantic_routing: bool
     entity_consolidation: bool
     property_hygiene: bool
@@ -166,6 +166,8 @@ class PlumberConfigResponse(BaseModel):
             mapreduce_trigger_chars=config.mapreduce_trigger_chars,
             mapreduce_chunk_chars=config.mapreduce_chunk_chars,
             context_compression=config.context_compression,
+            compression_trigger=config.compression_trigger,
+            compression_target=config.compression_target,
             semantic_routing=config.semantic_routing,
             entity_consolidation=config.entity_consolidation,
             property_hygiene=config.property_hygiene,
@@ -332,6 +334,8 @@ _ENV_KEY_MAP: dict[str, str] = {
     "mapreduce_trigger_chars": "MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS",
     "mapreduce_chunk_chars": "MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS",
     "context_compression": "MATRYCA_PLUMBER_CONTEXT_COMPRESSION",
+    "compression_trigger": "MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS",
+    "compression_target": "MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS",
     "semantic_routing": "MATRYCA_LINT_SEMANTIC_ROUTING",
     "entity_consolidation": "MATRYCA_LINT_ENTITY_CONSOLIDATION",
     "property_hygiene": "MATRYCA_LINT_PROPERTY_HYGIENE",
@@ -357,6 +361,14 @@ def _serialize_config_value(field: str, value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if field in {"mapreduce_trigger_chars", "mapreduce_chunk_chars"}:
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            return str(int(value))
+        if isinstance(value, str):
+            return str(int(value))
+        return str(value)
+    if field in {"compression_trigger", "compression_target"}:
         if isinstance(value, int):
             return str(value)
         if isinstance(value, float):
@@ -443,6 +455,18 @@ def _resolve_graph_root_or_raise() -> Path:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _heal_daemon_state_in_memory(graph_root: Path, state: DaemonState) -> None:
+    """Reconcile persisted AI counters against live graph totals without writing disk."""
+    heal_daemon_state_ledger(graph_root, state)
+
+
+def _load_healed_daemon_state(graph_root: Path) -> DaemonState:
+    """Load daemon checkpoint and heal AI counters in memory (read-only for GET handlers)."""
+    state = load_daemon_state(graph_root)
+    _heal_daemon_state_in_memory(graph_root, state)
+    return state
+
+
 def _safe_graph_analytics(
     graph_root: Path,
     *,
@@ -471,8 +495,7 @@ def _safe_graph_analytics(
 def get_graph_analytics() -> GraphAnalyticsResponse:
     """Return live graph topology telemetry for the configured ``LOGSEQ_GRAPH_PATH``."""
     graph_root = _resolve_graph_root_or_raise()
-    state = load_daemon_state(graph_root)
-    heal_daemon_state_ledger(graph_root, state)
+    state = _load_healed_daemon_state(graph_root)
     return _safe_graph_analytics(
         graph_root,
         ai_links_injected=state.ai_links_injected,
@@ -484,7 +507,7 @@ def get_graph_analytics() -> GraphAnalyticsResponse:
 def get_state() -> DaemonStateResponse:
     """Return the current daemon checkpoint from ``.matryca_daemon_state.json``."""
     graph_root = _resolve_graph_root_or_raise()
-    state = load_daemon_state(graph_root)
+    state = _load_healed_daemon_state(graph_root)
     return DaemonStateResponse.from_daemon_state(state, graph_root=graph_root)
 
 

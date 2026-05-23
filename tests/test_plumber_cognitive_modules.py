@@ -138,6 +138,7 @@ def test_load_plumber_lint_config_defaults(monkeypatch: pytest.MonkeyPatch) -> N
         "MATRYCA_THERMAL_DELAY_BOOTSTRAP",
         "MATRYCA_THERMAL_DELAY_COGNITIVE",
         "MATRYCA_PLUMBER_LOW_PRIORITY_MODE",
+        "MATRYCA_PLUMBER_CONTEXT_COMPRESSION",
     ):
         monkeypatch.delenv(key, raising=False)
     cfg = load_plumber_lint_config()

@@ -82,6 +82,20 @@ const INFRA_FIELDS: FieldSpec[] = [
     step: '1000',
   },
   {
+    key: 'compression_trigger',
+    label: 'Compression Trigger (tokens)',
+    description: 'Rolling LLM history condenses once estimated tokens exceed this threshold.',
+    type: 'number',
+    step: '1000',
+  },
+  {
+    key: 'compression_target',
+    label: 'Compression Target (tokens)',
+    description: 'Target token budget after context condensation completes.',
+    type: 'number',
+    step: '1000',
+  },
+  {
     key: 'low_priority_mode',
     label: 'Hardware Guard (Low Priority)',
     description: 'POSIX niceness 19 — Plumber yields CPU to foreground work.',
@@ -197,6 +211,8 @@ const NUMERIC_FIELDS = new Set<keyof PlumberConfig>([
   'thermal_delay_cognitive',
   'mapreduce_trigger_chars',
   'mapreduce_chunk_chars',
+  'compression_trigger',
+  'compression_target',
 ])
 
 function parseNumericField(raw: string): number | null {
@@ -222,6 +238,8 @@ function emptyDraft(): PlumberConfig {
     mapreduce_trigger_chars: 25000,
     mapreduce_chunk_chars: 15000,
     context_compression: false,
+    compression_trigger: 100_000,
+    compression_target: 30_000,
     semantic_routing: false,
     entity_consolidation: false,
     property_hygiene: false,

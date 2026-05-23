@@ -26,6 +26,9 @@ def test_is_newer_compares_semver_segments() -> None:
     assert _is_newer("1.5.1", "1.5.0") is True
     assert _is_newer("2.0.0", "1.9.9") is True
     assert _is_newer("unknown", "1.5.0") is False
+    assert _is_newer("1.6.0", "1.6.0rc1") is True
+    assert _is_newer("1.6.0rc2", "1.6.0rc1") is True
+    assert _is_newer("1.6.0rc1", "1.6.0") is False
 
 
 @pytest.mark.asyncio

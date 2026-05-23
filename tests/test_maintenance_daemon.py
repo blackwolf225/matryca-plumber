@@ -1231,9 +1231,36 @@ def test_run_cycle_disables_semantic_routing_until_bootstrap_complete(
 def test_run_cycle_bulk_fast_track_drains_cached_pages_despite_llm_cap(
     graph_root: Path,
 ) -> None:
-    """Instant skips must not be throttled by max_files_per_cycle or poll pacing."""
+    """Instant skips drain fully when the cycle budget covers all pending fast-track files."""
     paths: list[Path] = []
     for index in range(5):
+        paths.append(
+            _write_page(
+                graph_root,
+                f"Cached{index}",
+                f"- body {index}\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: cached\n",
+            ),
+        )
+
+    daemon = MaintenanceDaemon(
+        graph_root,
+        llm_client=StubLLM(),
+        max_files_per_cycle=5,
+    )
+    state = daemon.run_cycle()
+
+    for path in paths:
+        key = graph_relative_path_key(path, graph_root)
+        assert state.files[key].status == "skipped"
+    assert list_pending_files(graph_root, state) == []
+
+
+def test_run_cycle_fast_track_respects_max_files_per_cycle(
+    graph_root: Path,
+) -> None:
+    """Fast-track settlements share the per-cycle file budget with LLM turns."""
+    paths: list[Path] = []
+    for index in range(3):
         paths.append(
             _write_page(
                 graph_root,
@@ -1249,10 +1276,9 @@ def test_run_cycle_bulk_fast_track_drains_cached_pages_despite_llm_cap(
     )
     state = daemon.run_cycle()
 
-    for path in paths:
-        key = graph_relative_path_key(path, graph_root)
-        assert state.files[key].status == "skipped"
-    assert list_pending_files(graph_root, state) == []
+    settled = sum(1 for path in paths if graph_relative_path_key(path, graph_root) in state.files)
+    assert settled == 1
+    assert len(list_pending_files(graph_root, state)) == 2
 
 
 def test_run_cycle_thermal_delay_after_each_atomic_llm_turn(

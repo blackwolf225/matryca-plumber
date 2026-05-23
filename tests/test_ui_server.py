@@ -154,6 +154,8 @@ def test_get_config_returns_live_lint_settings(
                 "MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS=30000",
                 "MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS=12000",
                 "MATRYCA_PLUMBER_CONTEXT_COMPRESSION=true",
+                "MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS=88000",
+                "MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS=22000",
                 "MATRYCA_LINT_SEMANTIC_ROUTING=true",
                 "MATRYCA_LINT_ENTITY_CONSOLIDATION=true",
                 "MATRYCA_LINT_PROPERTY_HYGIENE=true",
@@ -184,6 +186,8 @@ def test_get_config_returns_live_lint_settings(
     assert payload["mapreduce_trigger_chars"] == 30_000
     assert payload["mapreduce_chunk_chars"] == 12_000
     assert payload["context_compression"] is True
+    assert payload["compression_trigger"] == 88_000
+    assert payload["compression_target"] == 22_000
     assert payload["semantic_routing"] is True
     assert payload["entity_consolidation"] is True
     assert payload["property_hygiene"] is True
@@ -212,6 +216,8 @@ def test_post_config_updates_dotenv(
         "mapreduce_trigger_chars": 20000,
         "mapreduce_chunk_chars": 10000,
         "context_compression": False,
+        "compression_trigger": 90000,
+        "compression_target": 25000,
         "semantic_routing": True,
         "entity_consolidation": False,
         "property_hygiene": True,
@@ -230,9 +236,13 @@ def test_post_config_updates_dotenv(
     assert payload["logseq_graph_path"] == "/new/graph"
     assert payload["lm_model"] == "qwen3-8b"
     assert payload["backpropagate_links"] is True
+    assert payload["compression_trigger"] == 90_000
+    assert payload["compression_target"] == 25_000
     assert payload["enable_inline_semantic_corrections"] is True
     written = env_path.read_text(encoding="utf-8")
     assert "LOGSEQ_GRAPH_PATH=/new/graph" in written
+    assert "MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS=90000" in written
+    assert "MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS=25000" in written
     assert "LLM_MODEL_NAME=qwen3-8b" in written
     assert "MATRYCA_LINT_BACKPROPAGATE_LINKS=true" in written
     assert "MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS=false" in written

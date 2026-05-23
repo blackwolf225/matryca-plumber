@@ -25,7 +25,7 @@ export interface GraphAnalytics {
   semantic_links: number
   semantic_cache_mb: number
   context_acceleration: number
-  status?: 'online' | 'offline'
+  status: 'online' | 'offline'
 }
 
 export const DEFAULT_GRAPH_ANALYTICS: GraphAnalytics = {
@@ -41,6 +41,7 @@ export const DEFAULT_GRAPH_ANALYTICS: GraphAnalytics = {
   semantic_links: 0,
   semantic_cache_mb: 0,
   context_acceleration: 94.2,
+  status: 'online',
 }
 
 export interface DaemonImpactCounters {
@@ -75,12 +76,16 @@ function hasExplicitField(source: Record<string, unknown>, snakeKey: string, cam
   return snakeKey in source || camelKey in source
 }
 
-function readOptionalStatus(source: Record<string, unknown>): GraphAnalytics['status'] | undefined {
+function readGraphAnalyticsStatus(source: Record<string, unknown>): GraphAnalytics['status'] {
   const value = source.status
   if (value === 'online' || value === 'offline') {
     return value
   }
-  return undefined
+  return 'online'
+}
+
+function hasExplicitGraphAnalyticsStatus(source: Record<string, unknown>): boolean {
+  return source.status === 'online' || source.status === 'offline'
 }
 
 /** True when the API payload includes an explicit graph analytics object (not UI defaults). */
@@ -89,7 +94,7 @@ export function hasGraphAnalyticsPayload(raw: unknown): boolean {
     return false
   }
   const source = raw as Record<string, unknown>
-  if (readOptionalStatus(source) !== undefined) {
+  if (hasExplicitGraphAnalyticsStatus(source)) {
     return true
   }
   const totalPages = readNumber(source, 'total_pages', 'totalPages')
@@ -123,6 +128,11 @@ export function normalizeGraphAnalytics(raw: unknown): GraphAnalytics {
   const totalLinks = readNumber(source, 'total_links', 'totalLinks')
   const semanticLinks = readNumber(source, 'semantic_links', 'semanticLinks')
   const resolvedTotalLinks = totalLinks > 0 ? totalLinks : semanticLinks
+  const resolvedSemanticLinks = hasExplicitField(source, 'semantic_links', 'semanticLinks')
+    ? semanticLinks
+    : semanticLinks > 0
+      ? semanticLinks
+      : resolvedTotalLinks
   const aiPages = readNumber(source, 'ai_pages', 'aiPages')
   const aiLinks = readNumber(source, 'ai_links', 'aiLinks')
   const humanPages = hasExplicitField(source, 'human_pages', 'humanPages')
@@ -141,11 +151,11 @@ export function normalizeGraphAnalytics(raw: unknown): GraphAnalytics {
     ai_links: aiLinks,
     ai_blocks_healed: readNumber(source, 'ai_blocks_healed', 'aiBlocksHealed'),
     alias_count: readNumber(source, 'alias_count', 'aliasCount'),
-    semantic_links: semanticLinks > 0 ? semanticLinks : resolvedTotalLinks,
+    semantic_links: resolvedSemanticLinks,
     semantic_cache_mb: readNumber(source, 'semantic_cache_mb', 'semanticCacheMb'),
     context_acceleration:
       contextAcceleration > 0 ? contextAcceleration : DEFAULT_GRAPH_ANALYTICS.context_acceleration,
-    status: readOptionalStatus(source),
+    status: readGraphAnalyticsStatus(source),
   }
 }
 
@@ -215,6 +225,8 @@ export interface PlumberConfig {
   mapreduce_trigger_chars: number
   mapreduce_chunk_chars: number
   context_compression: boolean
+  compression_trigger: number
+  compression_target: number
   semantic_routing: boolean
   entity_consolidation: boolean
   property_hygiene: boolean

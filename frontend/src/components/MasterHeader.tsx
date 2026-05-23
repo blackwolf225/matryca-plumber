@@ -94,6 +94,12 @@ export function MasterHeader({
   const [updateModalOpen, setUpdateModalOpen] = useState(false)
   const { data: updateInfo, fetchFailed: updateCheckFailed, checking: updateChecking, refetch: refetchUpdateCheck } =
     useUpdateCheck()
+
+  useEffect(() => {
+    if (!updateInfo?.update_available && updateModalOpen) {
+      setUpdateModalOpen(false)
+    }
+  }, [updateInfo, updateModalOpen])
   const link = connectionBadge(connectionStatus)
   const daemonStatus = state?.status ?? 'stopped'
   const engineRunning = isEngineActive(daemonStatus) && !frozen

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CognitiveProgressCard } from './components/CognitiveProgressCard'
 import { FeatureStatusBar } from './components/FeatureStatusBar'
@@ -58,6 +58,14 @@ export default function App() {
 
   const isDesktopLayout = useDesktopLayout()
   const [sidebarWidth, setSidebarWidth] = useState(readStoredSidebarWidth)
+  const sidebarResizeCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      sidebarResizeCleanupRef.current?.()
+      sidebarResizeCleanupRef.current = null
+    }
+  }, [])
 
   const beginSidebarResize = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -66,6 +74,8 @@ export default function App() {
       }
 
       event.preventDefault()
+      sidebarResizeCleanupRef.current?.()
+
       const startX = event.clientX
       const startWidth = sidebarWidth
       let latestWidth = startWidth
@@ -78,11 +88,18 @@ export default function App() {
         setSidebarWidth(latestWidth)
       }
 
-      const onMouseUp = () => {
+      const cleanup = () => {
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        if (sidebarResizeCleanupRef.current === cleanup) {
+          sidebarResizeCleanupRef.current = null
+        }
+      }
+
+      const onMouseUp = () => {
+        cleanup()
         localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(latestWidth))
       }
 
@@ -90,6 +107,7 @@ export default function App() {
       document.body.style.userSelect = 'none'
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
+      sidebarResizeCleanupRef.current = cleanup
     },
     [isDesktopLayout, sidebarWidth],
   )

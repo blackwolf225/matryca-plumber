@@ -2623,12 +2623,16 @@ class MaintenanceDaemon:
             save_daemon_state(self.graph_root, state)
             return state
 
+        cycle_budget = max(1, self.max_files_per_cycle)
         for path in pending:
             if self._stop_requested:
                 state.status = "stopped"
                 break
+            if cycle_budget <= 0:
+                break
             if self._try_fast_track_cycle_file(path, state):
                 self._save_cycle_checkpoint(state, path=path)
+                cycle_budget -= 1
 
         if self._stop_requested:
             self._prune_stale_catalog_entries()
@@ -2654,7 +2658,7 @@ class MaintenanceDaemon:
             if self._stop_requested:
                 state.status = "stopped"
                 break
-            if llm_turns_this_cycle >= self.max_files_per_cycle:
+            if llm_turns_this_cycle >= cycle_budget:
                 break
             if cluster_cycle:
                 self._begin_cluster_context(cluster_id, cluster_paths)
@@ -2669,7 +2673,7 @@ class MaintenanceDaemon:
                 if self._stop_requested:
                     state.status = "stopped"
                     break
-                if llm_turns_this_cycle >= self.max_files_per_cycle:
+                if llm_turns_this_cycle >= cycle_budget:
                     break
                 llm_called_this_turn = self._process_llm_cycle_file(
                     path,

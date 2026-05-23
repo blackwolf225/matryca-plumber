@@ -24,6 +24,7 @@ export function FeatureStatusBar({ daemonStatus, config, frozen }: FeatureStatus
         {PLUMBER_MODULE_SPECS.map((module) => {
           const configured = isPlumberModuleEnabled(config, module.configKey)
           const running = configured && engineLive
+          const highlighted = configured && !frozen
           return (
             <div
               key={module.id}
@@ -31,11 +32,13 @@ export function FeatureStatusBar({ daemonStatus, config, frozen }: FeatureStatus
                 running
                   ? ' — enabled in .env, engine running'
                   : configured
-                    ? ' — enabled in .env'
+                    ? frozen
+                      ? ' — enabled in .env, telemetry frozen'
+                      : ' — enabled in .env'
                     : ' — disabled in .env'
               }`}
               className={`group inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all duration-300 ${
-                configured
+                highlighted
                   ? `border-theme-accent/60 bg-theme-accent-bg/30 text-theme-accent ${
                       running ? 'ring-1 ring-theme-accent/30' : 'opacity-80'
                     }`
@@ -45,7 +48,7 @@ export function FeatureStatusBar({ daemonStatus, config, frozen }: FeatureStatus
               <span className="text-xs" aria-hidden>
                 {module.emoji}
               </span>
-              <span className={configured ? 'text-theme-accent' : 'text-theme-muted'}>{module.icon}</span>
+              <span className={highlighted ? 'text-theme-accent' : 'text-theme-muted'}>{module.icon}</span>
               <span className="hidden text-[10px] font-medium uppercase tracking-wider lg:inline">
                 {module.label}
               </span>

@@ -245,6 +245,37 @@ def test_load_plumber_config_compression_defaults(monkeypatch: pytest.MonkeyPatc
     assert cfg.lm_model == DEFAULT_LLM_MODEL_NAME
 
 
+def test_load_plumber_config_clamps_negative_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", "-1")
+    monkeypatch.setenv("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", "-500")
+    monkeypatch.setenv("MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", "-100")
+    monkeypatch.setenv("MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", "-50")
+    from src.agent.plumber_config import load_plumber_lint_config
+
+    cfg = load_plumber_lint_config()
+    assert cfg.compression_trigger == 0
+    assert cfg.compression_target == 0
+    assert cfg.mapreduce_trigger_chars == 0
+    assert cfg.mapreduce_chunk_chars == 0
+
+
+def test_any_enabled_includes_context_compression(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MATRYCA_PLUMBER_CONTEXT_COMPRESSION", "true")
+    from src.agent.plumber_config import load_plumber_lint_config
+
+    cfg = load_plumber_lint_config()
+    assert cfg.context_compression is True
+    assert cfg.any_enabled is True
+
+
+def test_resolve_llm_base_url_preserves_custom_path_suffix() -> None:
+    from src.agent.plumber_config import resolve_llm_base_url
+
+    assert resolve_llm_base_url(override="http://localhost:8080/api/v2") == "http://localhost:8080/api/v2"
+    assert resolve_llm_base_url(override="http://localhost:1234/v1") == "http://localhost:1234/v1"
+    assert resolve_llm_base_url(override="http://localhost:1234") == "http://localhost:1234/v1"
+
+
 def test_resolve_lm_model_respects_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.agent.plumber_config import DEFAULT_LLM_MODEL_NAME, resolve_llm_model_name
 

@@ -6,6 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_LLM_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_LLM_MODEL_NAME = "local-model"
@@ -89,16 +90,20 @@ def resolve_lm_model(*, override: str | None = None) -> str:
 
 
 def resolve_llm_base_url(*, override: str | None = None) -> str:
-    """Resolve OpenAI-compatible base URL (always ends with ``/v1``)."""
+    """Resolve OpenAI-compatible base URL (appends ``/v1`` only for bare host roots)."""
     if override is not None and override.strip():
         raw = override.strip()
     else:
         canonical = os.environ.get("LLM_BASE_URL", "").strip()
         raw = canonical if canonical else _env_str("MATRYCA_LM_BASE_URL", DEFAULT_LLM_BASE_URL)
     base = raw.rstrip("/")
-    if not base.endswith("/v1"):
-        base = f"{base}/v1"
-    return base
+    if base.endswith("/v1"):
+        return base
+    parsed = urlparse(base)
+    path = (parsed.path or "").rstrip("/")
+    if path:
+        return base
+    return f"{base}/v1"
 
 
 def resolve_lm_base_url(*, override: str | None = None) -> str:
@@ -152,6 +157,7 @@ class PlumberLintConfig:
             or self.property_hygiene
             or self.backpropagate_links
             or self.semantic_routing
+            or self.context_compression
         )
 
 
@@ -167,6 +173,15 @@ def _safe_thermal_seconds(seconds: float) -> float:
     except (TypeError, ValueError):
         return 0.0
     return max(0.0, value)
+
+
+def _safe_nonneg_int(value: int, *, default: int) -> int:
+    """Clamp integer thresholds to a non-negative value (guards bad env / UI input)."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(0, parsed)
 
 
 def apply_thermal_pause_bootstrap(config: PlumberLintConfig | None = None) -> None:
@@ -219,13 +234,25 @@ def load_plumber_lint_config(*, reload_env: bool = False) -> PlumberLintConfig:
             True,
         ),
         context_compression=_env_bool("MATRYCA_PLUMBER_CONTEXT_COMPRESSION"),
-        compression_trigger=_env_int("MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", 100_000),
-        compression_target=_env_int("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
+        compression_trigger=_safe_nonneg_int(
+            _env_int("MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS", 100_000),
+            default=100_000,
+        ),
+        compression_target=_safe_nonneg_int(
+            _env_int("MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS", 30_000),
+            default=30_000,
+        ),
         thermal_delay_bootstrap=_env_float("MATRYCA_THERMAL_DELAY_BOOTSTRAP", 2.0),
         thermal_delay_cognitive=_env_float("MATRYCA_THERMAL_DELAY_COGNITIVE", 2.0),
         low_priority_mode=_env_bool("MATRYCA_PLUMBER_LOW_PRIORITY_MODE", True),
-        mapreduce_trigger_chars=_env_int("MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", 25_000),
-        mapreduce_chunk_chars=_env_int("MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", 15_000),
+        mapreduce_trigger_chars=_safe_nonneg_int(
+            _env_int("MATRYCA_PLUMBER_MAPREDUCE_TRIGGER_CHARS", 25_000),
+            default=25_000,
+        ),
+        mapreduce_chunk_chars=_safe_nonneg_int(
+            _env_int("MATRYCA_PLUMBER_MAPREDUCE_CHUNK_CHARS", 15_000),
+            default=15_000,
+        ),
     )
 
 
