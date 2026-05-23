@@ -1,0 +1,142 @@
+name: Bug Report
+description: Report unexpected behavior, data loss risk, or a crash in Matryca Plumber
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping harden Matryca Plumber before and after launch.
+
+        **Redact secrets** — never paste API keys, `LOGSEQ_API_TOKEN`, or private graph paths.
+        Attach **zipped Loguru logs** from your graph or repo `logs/` directory (rotated files are named like `matryca_plumber.log.*.zip`).
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing what went wrong.
+      placeholder: "Plumber skipped a write after cognitive lint even though the page was unchanged."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so a maintainer can replay the issue.
+      placeholder: |
+        1. Set LOGSEQ_GRAPH_PATH to ...
+        2. Run `matryca plumber start --foreground`
+        3. Edit the same page in Logseq while lint runs
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include terminal output, stack traces, or cockpit screenshots if useful.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os_detail
+    attributes:
+      label: OS version
+      description: e.g. Windows 11 23H2, macOS 15.4, Ubuntu 24.04
+      placeholder: "macOS 15.4"
+    validations:
+      required: true
+
+  - type: input
+    id: logseq_version
+    attributes:
+      label: Logseq version
+      description: Logseq → Help → About (or desktop app version string)
+      placeholder: "Logseq 0.10.x desktop"
+    validations:
+      required: true
+
+  - type: input
+    id: lm_studio_model
+    attributes:
+      label: LM Studio model
+      description: Model name and quant loaded in LM Studio (or N/A if not using local LLM)
+      placeholder: "google/gemma-3-4b-it-GGUF Q4_K_M"
+    validations:
+      required: true
+
+  - type: input
+    id: plumber_version
+    attributes:
+      label: Matryca Plumber version
+      description: Package version, git tag, or commit SHA
+      placeholder: "1.5.0 or abc1234"
+    validations:
+      required: true
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python version
+      description: Output of `uv run python --version`
+      placeholder: "Python 3.12.x"
+    validations:
+      required: true
+
+  - type: input
+    id: mcp_host
+    attributes:
+      label: MCP host (if applicable)
+      placeholder: "Cursor, Claude Desktop, CLI only, matryca plumber daemon"
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration (redacted)
+      description: Relevant `.env` keys or `matryca-wiki.yml` snippets — replace secrets with placeholders.
+      render: shell
+      placeholder: |
+        LOGSEQ_GRAPH_PATH=/path/to/graph
+        MATRYCA_LINT_PROPERTY_HYGIENE=true
+
+  - type: checkboxes
+    id: logs_attached
+    attributes:
+      label: Diagnostic attachments
+      options:
+        - label: I attached zipped Loguru log files from `logs/matryca_plumber.log` (and rotated `.zip` archives if present)
+          required: true
+        - label: I ran `make check` locally (or CI-equivalent commands) before opening this issue
+          required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Minimal vault snippet, tool name, or link to related docs/issues.
+    validations:
+      required: false
