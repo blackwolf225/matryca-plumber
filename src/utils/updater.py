@@ -13,8 +13,8 @@ from packaging.version import InvalidVersion, Version
 
 from ..graph.page_properties import get_plumber_version
 
-_PYPI_JSON_URL = "https://pypi.org/pypi/matryca-logseq/json"
-_PYPI_PROJECT_URL = "https://pypi.org/project/matryca-logseq/"
+_PYPI_JSON_URL = "https://pypi.org/pypi/matryca-plumber/json"
+_PYPI_PROJECT_URL = "https://pypi.org/project/matryca-plumber/"
 _REQUEST_TIMEOUT_SECONDS = 5.0
 _CACHE_TTL_SECONDS = 3600.0
 

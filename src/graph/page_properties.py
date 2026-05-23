@@ -17,7 +17,7 @@ PLUMBER_CREATED_BY_KEY = "created-by"
 PLUMBER_CREATED_BY_VALUE = "plumber"
 PLUMBER_MADE_BY_KEY = "made-by"
 PLUMBER_MADE_BY_PREFIX = "matryca plumber"
-_PACKAGE_NAME = "matryca-logseq"
+_PACKAGE_NAME = "matryca-plumber"
 
 
 @functools.lru_cache(maxsize=1)
