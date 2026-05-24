@@ -88,12 +88,12 @@ def test_update_check_to_dict_serializes_result() -> None:
             current_version="1.5.0",
             latest_version="1.6.0",
             update_available=True,
-            pypi_url="https://pypi.org/project/matryca-logseq/",
+            pypi_url="https://pypi.org/project/matryca-plumber/",
         )
     )
     assert payload == {
         "current_version": "1.5.0",
         "latest_version": "1.6.0",
         "update_available": True,
-        "pypi_url": "https://pypi.org/project/matryca-logseq/",
+        "pypi_url": "https://pypi.org/project/matryca-plumber/",
     }

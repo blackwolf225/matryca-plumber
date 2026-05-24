@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from src.graph.service_manager import manage_matryca_service
 
-_FAKE_EXE = "/opt/bin/matryca-logseq-llm-wiki"
+_FAKE_EXE = "/opt/bin/matryca-plumber"
 
 
 def _which_matryca(_name: str) -> str:

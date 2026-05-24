@@ -23,7 +23,7 @@ const INSTALL_METHODS: InstallMethod[] = [
       'matryca plumber stop',
       '',
       '# 2. Upgrade the stable binary',
-      'uv tool upgrade matryca-logseq',
+      'uv tool upgrade matryca-plumber',
       '',
       '# 3. Restart the control room',
       'matryca plumber status',

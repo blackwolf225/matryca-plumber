@@ -23,9 +23,10 @@ _LINUX_UNIT_NAME = "matryca-logseq.service"
 
 
 def _matryca_executable() -> str | None:
-    found = shutil.which("matryca-logseq-llm-wiki")
-    if found:
-        return found
+    for name in ("matryca-plumber", "matryca-logseq-llm-wiki"):
+        found = shutil.which(name)
+        if found:
+            return found
     return None
 
 
@@ -95,7 +96,7 @@ def _install_macos() -> dict[str, Any]:
             "ok": False,
             "platform": "darwin",
             "code": "executable_not_found",
-            "error": "matryca-logseq-llm-wiki not found on PATH; install the package first",
+            "error": "matryca-plumber not found on PATH; install the package first",
         }
     env = _service_environment()
     if not env.get("LOGSEQ_GRAPH_PATH"):
@@ -167,7 +168,7 @@ def _install_linux() -> dict[str, Any]:
             "ok": False,
             "platform": "linux",
             "code": "executable_not_found",
-            "error": "matryca-logseq-llm-wiki not found on PATH; install the package first",
+            "error": "matryca-plumber not found on PATH; install the package first",
         }
     env = _service_environment()
     if not env.get("LOGSEQ_GRAPH_PATH"):

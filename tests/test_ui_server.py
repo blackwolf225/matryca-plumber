@@ -444,7 +444,7 @@ def test_get_update_check_returns_pypi_comparison(
             current_version="1.5.0",
             latest_version="1.6.0",
             update_available=True,
-            pypi_url="https://pypi.org/project/matryca-logseq/",
+            pypi_url="https://pypi.org/project/matryca-plumber/",
         )
 
     monkeypatch.setattr("src.cli.ui_server.check_for_updates", fake_check)
@@ -457,7 +457,7 @@ def test_get_update_check_returns_pypi_comparison(
     assert payload["current_version"] == "1.5.0"
     assert payload["latest_version"] == "1.6.0"
     assert payload["update_available"] is True
-    assert payload["pypi_url"] == "https://pypi.org/project/matryca-logseq/"
+    assert payload["pypi_url"] == "https://pypi.org/project/matryca-plumber/"
 
 
 def test_daemon_start_schedules_background_launch(
