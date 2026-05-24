@@ -13,7 +13,7 @@ Matryca Plumber is a **100% headless, sandboxed** **standalone daemon + CLI** th
 
 **Matryca Plumber** is not a one-shot script — it is an **enterprise-grade, local-first background AI daemon for Logseq**. It polls your graph on a duty cycle, calls a local LLM (LM Studio or Ollama), appends semantic indexes, runs optional cognitive lint modules, and logs every token transaction — **while you edit the same `.md` files in Logseq or leave the vault idle**. Optional **MCP-attached** sessions reuse the identical mutation plane for interactive queries; they are **not** required for background operation. Every write path mirrors Logseq's on-disk AST contract: page frontmatter at line 0, block properties contiguous to their parent bullet, namespace filenames encoded exactly like Logseq's Clojure Datalog layer, and **optimistic concurrency control** that aborts stale writes when you type during inference.
 
-**Matryca Plumber** is an enterprise-grade, local-first background AI daemon for Logseq. It turns your local graph into a high token-density agentic workspace by continuously polling your notes, running local LLMs (like LM Studio or Ollama), appending semantic indexes, and healing broken links—all completely offline, while you work or sleep.
+**Matryca Plumber** turns your local graph into a high token-density agentic workspace by continuously polling your notes, running local LLMs (like LM Studio or Ollama), appending semantic indexes, and healing broken links—all completely offline, while you work or sleep.
 
 **Zero Cloud. Zero Data Leaks. 100% Native Logseq AST.**
 
