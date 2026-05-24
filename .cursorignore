@@ -38,6 +38,7 @@ logs/
 # --- 🔒 Segreti e Configurazioni Locali ---
 .env
 .env.*
+!.env.example
 matryca-wiki.yml
 
 # --- 📝 Logseq (Evita di intasare Cursor con il tuo vero grafo) ---
