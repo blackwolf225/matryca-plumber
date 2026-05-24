@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 
 from .cli import main as cli_main
-from .main import main as mcp_main
 
 _PLUMBER_SHORTHAND: frozenset[str] = frozenset(
     {"start", "status", "stop", "ui", "audit", "cluster"},
@@ -43,6 +42,8 @@ def main() -> None:
     if cli_argv is not None:
         cli_main(cli_argv)
         return
+    from .main import main as mcp_main
+
     mcp_main()
 
 

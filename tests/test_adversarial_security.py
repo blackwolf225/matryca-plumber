@@ -81,4 +81,5 @@ async def test_guard_mcp_tool_surfaces_path_traversal_value_error() -> None:
 
     out = await blocked()
     assert out["ok"] is False
+    assert out["code"] == "security_violation"
     assert "Security Violation" in str(out["error"])

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -11,7 +13,7 @@ from fastapi.testclient import TestClient
 from src.agent.maintenance_daemon import DaemonState, FileState, save_daemon_state
 from src.agent.plumber_config import reload_plumber_dotenv
 from src.cli.ui_auth import reset_ui_token_for_tests
-from src.cli.ui_server import LmModelsResponse, app
+from src.cli.ui_server import LmModelsResponse, _verify_daemon_launch, app
 
 
 @pytest.fixture(autouse=True)
@@ -517,6 +519,43 @@ def test_get_auth_session_returns_token_without_ui_header() -> None:
     body = response.json()
     assert isinstance(body.get("token"), str)
     assert len(body["token"]) > 0
+
+
+def test_verify_daemon_launch_accepts_successful_launcher_exit(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProc:
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: 4242)
+    monkeypatch.setattr("src.cli.ui_server.is_plumber_process", lambda _pid: True)
+
+    ok, message = _verify_daemon_launch(
+        graph_root,
+        cast(subprocess.Popen[bytes], FakeProc()),
+        settle_s=0.0,
+    )
+    assert ok is True
+    assert message is None
+
+
+def test_verify_daemon_launch_rejects_nonzero_launcher_exit(
+    graph_root: Path,
+) -> None:
+    class FakeProc:
+        def poll(self) -> int:
+            return 1
+
+    ok, message = _verify_daemon_launch(
+        graph_root,
+        cast(subprocess.Popen[bytes], FakeProc()),
+        settle_s=0.0,
+    )
+    assert ok is False
+    assert message is not None
+    assert "code 1" in message
 
 
 def test_daemon_start_reports_already_running(

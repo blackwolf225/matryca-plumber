@@ -143,7 +143,6 @@ STATE_BAK_FILENAME = f"{STATE_FILENAME}.bak"
 PID_FILENAME = ".matryca_plumber_daemon.pid"
 DAEMON_LOCK_FILENAME = ".matryca_plumber_daemon.lock"
 PLUMBER_PID_MARKER = "matryca-plumber-daemon"
-_PLUMBER_CMD_MARKERS = ("src.cli", "maintenance_daemon", "matryca", "plumber")
 DEFAULT_STOP_GRACE_SECONDS = 130.0
 DEFAULT_STOP_SIGKILL_AFTER_SECONDS = 125.0
 SHUTDOWN_INFLIGHT_TIMEOUT_SECONDS = 120.0
@@ -697,7 +696,9 @@ def is_plumber_process(pid: int) -> bool:
     cmd = _process_command_line(pid).lower()
     if not cmd:
         return False
-    return any(marker in cmd for marker in _PLUMBER_CMD_MARKERS)
+    if "maintenance_daemon" in cmd:
+        return True
+    return "src.cli" in cmd and "plumber" in cmd
 
 
 def write_pid_file(graph_root: Path) -> None:
@@ -2571,6 +2572,7 @@ class MaintenanceDaemon:
         write_aborted = False
         self._begin_phase2_write()
         try:
+            baseline_mtime = occ_snapshot(path)
             content = path.read_text(encoding="utf-8", errors="replace")
             cognitive_outcome: CognitiveLintOutcome | None = None
             if self.bootstrap_complete and lint_config.any_enabled:
@@ -2596,10 +2598,19 @@ class MaintenanceDaemon:
                 )
                 self._save_cycle_checkpoint(state, path=path)
                 content = path.read_text(encoding="utf-8", errors="replace")
+                refreshed_mtime = occ_snapshot(path)
+                if refreshed_mtime is not None:
+                    baseline_mtime = refreshed_mtime
             alias_index = self._compiled_alias_index() if self.bootstrap_complete else None
             enable_semantic_routing = self.bootstrap_complete and lint_config.semantic_routing
             enable_backprop = self.bootstrap_complete and lint_config.backpropagate_links
-            baseline_mtime = occ_snapshot(path)
+            if baseline_mtime is not None and file_mtime_drifted(path, baseline_mtime):
+                logger.warning(
+                    "OCC Conflict: User modified {} during inference. Aborting write.",
+                    path,
+                )
+                write_aborted = True
+                return False
             result, usage = self.llm_client.index_page(
                 title,
                 content,
@@ -2959,6 +2970,13 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
             "message": f"Matryca Plumber daemon already running (pid {existing})",
         }
     if existing is not None and is_process_alive(existing):
+        return {
+            "ok": False,
+            "code": "foreign_pid",
+            "pid": existing,
+            "message": f"PID file references a live non-plumber process (pid {existing})",
+        }
+    if existing is not None:
         remove_pid_file(root)
 
     env = os.environ.copy()

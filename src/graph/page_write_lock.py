@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -27,7 +28,7 @@ except ImportError:  # pragma: no cover - Windows and other non-Unix platforms
     _fcntl = None
 
 _registry_guard = threading.Lock()
-_page_locks: dict[str, threading.Lock] = {}
+_page_locks: OrderedDict[str, threading.Lock] = OrderedDict()
 _MAX_PAGE_LOCK_REGISTRY = 4096
 
 
@@ -50,11 +51,21 @@ def _sidecar_lock_path(page_path: str | Path) -> Path:
 def _lock_for_key(key: str) -> threading.Lock:
     with _registry_guard:
         lock = _page_locks.get(key)
-        if lock is None:
-            if len(_page_locks) >= _MAX_PAGE_LOCK_REGISTRY:
-                _page_locks.clear()
-            lock = threading.Lock()
-            _page_locks[key] = lock
+        if lock is not None:
+            _page_locks.move_to_end(key)
+            return lock
+        while len(_page_locks) >= _MAX_PAGE_LOCK_REGISTRY:
+            evicted = False
+            for old_key in list(_page_locks):
+                old_lock = _page_locks[old_key]
+                if not old_lock.locked():
+                    del _page_locks[old_key]
+                    evicted = True
+                    break
+            if not evicted:
+                break
+        lock = threading.Lock()
+        _page_locks[key] = lock
         return lock
 
 

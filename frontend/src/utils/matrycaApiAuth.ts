@@ -1,7 +1,20 @@
 /** Shared Matryca Plumber UI API base URL and zero-trust token handling. */
 
-export const MATRYCA_API_BASE =
-  import.meta.env.VITE_API_BASE ?? (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '')
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_BASE
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim().replace(/\/$/, '')
+  }
+  if (import.meta.env.DEV) {
+    return 'http://127.0.0.1:8000'
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  return ''
+}
+
+export const MATRYCA_API_BASE = resolveApiBase()
 
 /** Default timeout for Matryca API ``fetch`` calls (milliseconds). */
 export const MATRYCA_FETCH_TIMEOUT_MS = 10_000
@@ -12,6 +25,20 @@ export function invalidateMatrycaAuthToken(): void {
   cachedAuthToken = null
 }
 
+function mergeAbortSignals(timeoutSignal: AbortSignal, userSignal: AbortSignal): AbortSignal {
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([timeoutSignal, userSignal])
+  }
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  timeoutSignal.addEventListener('abort', abort, { once: true })
+  userSignal.addEventListener('abort', abort, { once: true })
+  if (timeoutSignal.aborted || userSignal.aborted) {
+    controller.abort()
+  }
+  return controller.signal
+}
+
 /** Merge default timeout with any caller-provided ``AbortSignal``. */
 function fetchInitWithTimeout(init: RequestInit | undefined, timeoutMs: number): RequestInit {
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
@@ -19,7 +46,7 @@ function fetchInitWithTimeout(init: RequestInit | undefined, timeoutMs: number):
   if (!userSignal) {
     return { ...init, signal: timeoutSignal }
   }
-  return { ...init, signal: AbortSignal.any([timeoutSignal, userSignal]) }
+  return { ...init, signal: mergeAbortSignals(timeoutSignal, userSignal) }
 }
 
 async function fetchFreshSessionToken(): Promise<string> {
@@ -33,32 +60,30 @@ async function fetchFreshSessionToken(): Promise<string> {
     ),
   )
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+    throw new Error(`Auth session bootstrap failed: HTTP ${response.status}`)
   }
-  const session = (await response.json()) as { token: string }
-  cachedAuthToken = session.token
+  const session = (await response.json()) as { token?: string }
+  const token = typeof session.token === 'string' ? session.token.trim() : ''
+  if (!token) {
+    throw new Error('Auth session bootstrap failed: empty token')
+  }
+  cachedAuthToken = token
   return cachedAuthToken
 }
 
-export async function resolveMatrycaAuthToken(): Promise<string | null> {
+export async function resolveMatrycaAuthToken(): Promise<string> {
   if (cachedAuthToken) {
     return cachedAuthToken
   }
-  try {
-    return await fetchFreshSessionToken()
-  } catch {
-    return null
-  }
+  return fetchFreshSessionToken()
 }
 
-function buildAuthenticatedHeaders(init: RequestInit | undefined, token: string | null): Headers {
+function buildAuthenticatedHeaders(init: RequestInit | undefined, token: string): Headers {
   const headers = new Headers(init?.headers)
   if (!headers.has('Accept')) {
     headers.set('Accept', 'application/json')
   }
-  if (token) {
-    headers.set('X-Matryca-Token', token)
-  }
+  headers.set('X-Matryca-Token', token)
   return headers
 }
 

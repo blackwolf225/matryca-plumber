@@ -235,12 +235,16 @@ def atomic_write_bytes_if_unchanged(
     """Commit only when ``baseline_mtime`` still matches. Returns ``True`` when written."""
     if file_mtime_drifted(file_path, baseline_mtime):
         return False
-    atomic_write_bytes(
-        file_path,
-        data,
-        graph_root=graph_root,
-        validate_block_refs=validate_block_refs,
-    )
+    try:
+        atomic_write_bytes(
+            file_path,
+            data,
+            graph_root=graph_root,
+            validate_block_refs=validate_block_refs,
+            baseline_mtime=baseline_mtime,
+        )
+    except OCCConflictError:
+        return False
     return True
 
 
@@ -250,6 +254,7 @@ def atomic_write_bytes(
     *,
     graph_root: str | Path,
     validate_block_refs: bool = True,
+    baseline_mtime: float | None = None,
 ) -> None:
     """Write ``data`` to ``file_path`` via temp file, ``fsync``, and atomic ``os.replace``.
 
@@ -262,12 +267,8 @@ def atomic_write_bytes(
     """
     is_markdown = Path(file_path).suffix.lower() == ".md"
     if validate_block_refs and is_markdown and b"((" in data:
-        try:
-            text = data.decode("utf-8", errors="replace")
-        except UnicodeDecodeError:
-            pass
-        else:
-            assert_valid_block_refs_in_markdown(text)
+        text = data.decode("utf-8", errors="replace")
+        assert_valid_block_refs_in_markdown(text)
 
     path = assert_path_within_graph(file_path, graph_root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -303,8 +304,16 @@ def atomic_write_bytes(
     last_exc: OSError | None = None
     for attempt in range(IO_RETRY_ATTEMPTS):
         try:
+            if baseline_mtime is not None and file_mtime_drifted(file_path, baseline_mtime):
+                raise OCCConflictError(
+                    file_path,
+                    baseline_mtime=baseline_mtime,
+                    current_mtime=read_file_mtime(file_path),
+                )
             _commit_once()
             return
+        except OCCConflictError:
+            raise
         except OSError as exc:
             last_exc = exc
             if attempt >= IO_RETRY_ATTEMPTS - 1:

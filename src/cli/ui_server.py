@@ -8,6 +8,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from dotenv import dotenv_values, load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -57,6 +58,8 @@ LOCAL_DEV_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "tauri://localhost",
 ]
 
@@ -398,6 +401,57 @@ def _resolve_dotenv_path() -> Path:
     return _REPO_ROOT / ".env"
 
 
+def _ui_allow_lan() -> bool:
+    raw = os.environ.get("MATRYCA_UI_ALLOW_LAN", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _is_loopback_client_host(host: str | None) -> bool:
+    if not host:
+        return False
+    normalized = host.strip().lower()
+    if normalized in {"127.0.0.1", "localhost", "::1", "testclient"}:
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_loopback_client(request: Request) -> None:
+    if _ui_allow_lan():
+        return
+    client = request.client
+    if client is not None and _is_loopback_client_host(client.host):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Auth session is only available to loopback clients",
+    )
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write UTF-8 text atomically (temp file + ``os.replace``)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    tmp_path = Path(tmp_name)
+    committed = False
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+        committed = True
+    finally:
+        if not committed:
+            tmp_path.unlink(missing_ok=True)
+
+
 def _require_ui_token(
     x_matryca_token: Annotated[str | None, Header(alias="X-Matryca-Token")] = None,
 ) -> None:
@@ -457,7 +511,7 @@ def _update_dotenv(payload: PlumberConfigResponse) -> None:
         if key not in seen:
             new_lines.append(f"{key}={format_dotenv_value(value)}")
 
-    env_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
+    _atomic_write_text(env_path, "\n".join(new_lines).rstrip() + "\n")
     for key, value in updates.items():
         os.environ[key] = value
     load_dotenv(env_path, override=True)
@@ -526,8 +580,9 @@ def _safe_graph_analytics(
 
 
 @app.get("/api/auth/session", response_model=AuthSessionResponse)
-def get_auth_session() -> AuthSessionResponse:
+def get_auth_session(request: Request) -> AuthSessionResponse:
     """Return the local UI bearer token for loopback clients."""
+    _require_loopback_client(request)
     return AuthSessionResponse(token=resolve_ui_token())
 
 
@@ -564,11 +619,12 @@ def get_config(_: None = Depends(_require_ui_token)) -> PlumberConfigResponse:
     env_path = _resolve_dotenv_path()
     if env_path.is_file():
         file_vars = dotenv_values(env_path, interpolate=True)
-        merged: dict[str, str] = dict(os.environ)
-        for key, value in file_vars.items():
-            if value is not None:
-                merged[key] = value
-        return PlumberConfigResponse.from_lint_config(load_plumber_lint_config_from_environ(merged))
+        merged: dict[str, str] = {
+            key: value for key, value in file_vars.items() if value is not None
+        }
+        return PlumberConfigResponse.from_lint_config(
+            load_plumber_lint_config_from_environ(merged),
+        )
     return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
 
 
@@ -641,10 +697,15 @@ def _verify_daemon_launch(
     settle_s: float = 0.35,
     verify_timeout_s: float = 5.0,
 ) -> tuple[bool, str | None]:
-    """Wait briefly and confirm the daemon child did not exit immediately (lock TOCTOU)."""
+    """Wait briefly and confirm the daemon published a live PID (or failed fast)."""
     time.sleep(settle_s)
     exit_code = proc.poll()
     if exit_code is not None:
+        if exit_code == 0:
+            pid = read_pid_file(graph_root)
+            if pid is not None and is_plumber_process(pid):
+                return True, None
+            return False, "Daemon launcher exited but no live PID was published"
         return (
             False,
             f"Daemon exited immediately with code {exit_code} (lock contention or startup error)",
@@ -654,6 +715,16 @@ def _verify_daemon_launch(
         pid = read_pid_file(graph_root)
         if pid is not None and is_plumber_process(pid):
             return True, None
+        if proc.poll() is not None:
+            exit_code = proc.poll()
+            if exit_code == 0:
+                pid = read_pid_file(graph_root)
+                if pid is not None and is_plumber_process(pid):
+                    return True, None
+            return (
+                False,
+                f"Daemon launcher exited with code {exit_code} before publishing a PID",
+            )
         time.sleep(0.15)
     return False, "Daemon did not publish a live PID after launch"
 
@@ -799,10 +870,15 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = 8000) -> None:
     """Start Uvicorn and open the Plumber control-room dashboard in the default browser."""
     import uvicorn
 
+    if host == "0.0.0.0" and not _ui_allow_lan():
+        raise ValueError(
+            "Refusing to bind UI server to 0.0.0.0 without MATRYCA_UI_ALLOW_LAN=1 "
+            "(the /api/auth/session endpoint exposes the bearer token)."
+        )
     if host == "0.0.0.0":
         logger.warning(
             "WARNING: Binding to 0.0.0.0 exposes the unauthenticated /api/auth/session "
-            "endpoint to the local network."
+            "endpoint to the local network (MATRYCA_UI_ALLOW_LAN is enabled)."
         )
 
     reload_plumber_dotenv()
