@@ -114,6 +114,22 @@ def resolve_lm_base_url(*, override: str | None = None) -> str:
     return resolve_llm_base_url(override=override)
 
 
+def resolve_validated_llm_base_url(*, override: str | None = None) -> str:
+    """Resolve and SSRF-validate the active OpenAI-compatible inference base URL."""
+    from ..utils.llm_url_policy import validate_llm_proxy_url
+
+    canonical = os.environ.get("LLM_BASE_URL", "").strip()
+    raw = (
+        override.strip()
+        if override is not None and override.strip()
+        else canonical
+        if canonical
+        else _env_str("MATRYCA_LM_BASE_URL", DEFAULT_LLM_BASE_URL)
+    )
+    configured_anchor = canonical if canonical else raw
+    return validate_llm_proxy_url(raw, configured_base_url=configured_anchor)
+
+
 def resolve_llm_api_key(*, override: str | None = None) -> str:
     """Resolve API key for OpenAI-compatible local providers (often ignored server-side)."""
     if override is not None and override.strip():
@@ -245,20 +261,16 @@ def _resolve_llm_model_name_from_env(env: Mapping[str, str]) -> str:
 
 
 def _resolve_llm_base_url_from_env(env: Mapping[str, str]) -> str:
+    from ..utils.llm_url_policy import validate_llm_proxy_url
+
     canonical = (env.get("LLM_BASE_URL") or "").strip()
     raw = (
         canonical
         if canonical
         else _map_str_nonempty(env, "MATRYCA_LM_BASE_URL", DEFAULT_LLM_BASE_URL)
     )
-    base = raw.rstrip("/")
-    if base.endswith("/v1"):
-        return base
-    parsed = urlparse(base)
-    path = (parsed.path or "").rstrip("/")
-    if path:
-        return base
-    return f"{base}/v1"
+    configured_for_host = raw
+    return validate_llm_proxy_url(raw, configured_base_url=configured_for_host)
 
 
 def _resolve_llm_api_key_from_env(env: Mapping[str, str]) -> str:
@@ -336,7 +348,6 @@ def format_dotenv_value(value: str) -> str:
 
 def serialize_plumber_config_field_for_dotenv(field: str, value: object) -> str:
     """Serialize one Plumber UI field to a scalar string safe for ``KEY=value`` lines."""
-    from ..graph.graph_path_validate import validate_logseq_graph_path
 
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -389,7 +400,9 @@ def serialize_plumber_config_field_for_dotenv(field: str, value: object) -> str:
             raise ValueError(f"{field} must be non-negative")
         return str(thermal)
     if field == "logseq_graph_path":
-        return str(validate_logseq_graph_path(str(value)))
+        from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
+
+        return str(validate_logseq_graph_path_for_config(str(value)))
     return str(value).strip()
 
 
@@ -416,6 +429,7 @@ __all__ = [
     "reload_plumber_dotenv",
     "resolve_llm_api_key",
     "resolve_llm_base_url",
+    "resolve_validated_llm_base_url",
     "resolve_llm_model_name",
     "resolve_lm_base_url",
     "resolve_lm_model",

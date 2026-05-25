@@ -6,7 +6,7 @@ function resolveApiBase(): string {
     return configured.trim().replace(/\/$/, '')
   }
   if (import.meta.env.DEV) {
-    return 'http://127.0.0.1:8000'
+    return 'http://127.0.0.1:8500'
   }
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin

@@ -165,7 +165,8 @@ async def test_guard_mcp_tool_returns_clean_dict_error() -> None:
     out = await boom()
     assert out["ok"] is False
     assert out["code"] == "tool_error"
-    assert "domain failure" in str(out["error"])
+    assert "domain failure" not in str(out["error"])
+    assert "RuntimeError" in str(out["error"])
 
 
 @pytest.mark.asyncio
@@ -178,7 +179,8 @@ async def test_guard_mcp_tool_returns_clean_text_error() -> None:
     out = await boom()
     assert isinstance(out, str)
     assert out.startswith("Tool failed:")
-    assert "read failed" in out
+    assert "read failed" not in out
+    assert "Filesystem error" in out
 
 
 def test_format_tool_error_text_and_dict() -> None:

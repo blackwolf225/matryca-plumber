@@ -5,7 +5,6 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
-import socket
 import subprocess
 import sys
 import tempfile
@@ -23,10 +22,10 @@ from dotenv import dotenv_values, load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from ..agent.maintenance_daemon import (
     DEFAULT_STOP_GRACE_SECONDS,
@@ -49,6 +48,7 @@ from ..agent.plumber_config import (
 )
 from ..graph.graph_analytics import compute_graph_analytics
 from ..utils.console_sanitize import sanitize_for_console
+from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 from ..utils.updater import UpdateCheckResult, check_for_updates, update_check_to_dict
 from .ui_auth import resolve_ui_token, verify_ui_token
@@ -56,13 +56,15 @@ from .ui_auth import resolve_ui_token, verify_ui_token
 FileStatus = Literal["processed", "skipped", "error", "pending"]
 DaemonStatusValue = Literal["running", "idle", "stopped", "error"]
 
+DEFAULT_UI_PORT = 8500
+
 LOCAL_DEV_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
+    f"http://localhost:{DEFAULT_UI_PORT}",
+    f"http://127.0.0.1:{DEFAULT_UI_PORT}",
     "tauri://localhost",
 ]
 
@@ -219,95 +221,10 @@ class UpdateCheckResponse(BaseModel):
         return cls.model_validate(payload)
 
 
-_LOCAL_LM_PROXY_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-_BLOCKED_SSRF_HOSTS = frozenset(
-    {
-        "169.254.169.254",
-        "metadata.google.internal",
-        "metadata.google.internal.",
-    },
-)
-
-
-def _normalize_lm_proxy_host(host: str) -> str:
-    normalized = host.strip().lower()
-    if normalized.startswith("[") and normalized.endswith("]"):
-        return normalized[1:-1]
-    return normalized
-
-
-def _is_safe_lm_proxy_host(host: str, *, configured_host: str) -> bool:
-    normalized = _normalize_lm_proxy_host(host)
-    if normalized in _BLOCKED_SSRF_HOSTS:
-        return False
-    if normalized in _LOCAL_LM_PROXY_HOSTS:
-        return True
-    configured = _normalize_lm_proxy_host(configured_host)
-    return bool(configured) and normalized == configured
-
-
-def _host_resolves_to_blocked_ip(hostname: str) -> bool:
-    """Reject link-local, metadata, and other non-routable inference targets."""
-    normalized = _normalize_lm_proxy_host(hostname)
-    if normalized in _BLOCKED_SSRF_HOSTS:
-        return True
-    try:
-        literal = ipaddress.ip_address(normalized)
-    except ValueError:
-        literal = None
-
-    if literal is not None:
-        return _is_blocked_inference_ip(literal, hostname=normalized)
-
-    try:
-        for info in socket.getaddrinfo(normalized, None, type=socket.SOCK_STREAM):
-            sockaddr = info[4]
-            if not sockaddr:
-                continue
-            resolved = ipaddress.ip_address(sockaddr[0])
-            if _is_blocked_inference_ip(resolved, hostname=normalized):
-                return True
-    except OSError:
-        return True
-    return False
-
-
 class AuthSessionResponse(BaseModel):
     """Bootstrap token for the local Sovereign UI (loopback-only)."""
 
     token: str
-
-
-def _normalize_inference_ip(
-    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
-) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
-        return address.ipv4_mapped
-    return address
-
-
-def _is_blocked_inference_ip(
-    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
-    *,
-    hostname: str,
-) -> bool:
-    address = _normalize_inference_ip(address)
-    if str(address) == "169.254.169.254":
-        return True
-    if address.is_loopback:
-        return _normalize_lm_proxy_host(hostname) not in _LOCAL_LM_PROXY_HOSTS
-    if (
-        address.is_link_local
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-    ):
-        return True
-    if isinstance(address, ipaddress.IPv4Address) and address.is_private:
-        return _normalize_lm_proxy_host(hostname) not in _LOCAL_LM_PROXY_HOSTS
-    if isinstance(address, ipaddress.IPv6Address) and address.is_site_local:
-        return _normalize_lm_proxy_host(hostname) not in _LOCAL_LM_PROXY_HOSTS
-    return False
 
 
 def assert_safe_lm_proxy_url(base_url: str) -> str:
@@ -316,24 +233,16 @@ def assert_safe_lm_proxy_url(base_url: str) -> str:
     Use for model discovery (``GET /api/lm-models``) and for persisting ``LLM_BASE_URL``
     via ``POST /api/config`` so configuration cannot bypass the same host/DNS checks.
 
-    Returns:
-        Canonical OpenAI-compatible base URL (via :func:`resolve_llm_base_url`).
-
     Raises:
         HTTPException: When the URL is not an allowed ``http``/``https`` inference endpoint.
     """
-    parsed = urllib.parse.urlparse(base_url.strip())
-    if parsed.scheme not in {"http", "https"}:
-        raise HTTPException(status_code=400, detail="base_url must use http or https")
-    hostname = parsed.hostname
-    if not hostname:
-        raise HTTPException(status_code=400, detail="base_url must include a host")
-    configured_host = urllib.parse.urlparse(load_plumber_lint_config().lm_base_url).hostname or ""
-    if not _is_safe_lm_proxy_host(hostname, configured_host=configured_host):
-        raise HTTPException(status_code=400, detail="base_url host is not allowed")
-    if _host_resolves_to_blocked_ip(hostname):
-        raise HTTPException(status_code=400, detail="base_url host is not allowed")
-    return resolve_llm_base_url(override=base_url)
+    try:
+        return validate_llm_proxy_url(
+            base_url,
+            configured_base_url=load_plumber_lint_config().lm_base_url,
+        )
+    except UnsafeLlmProxyUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _validate_lm_models_base_url(base_url: str) -> str:
@@ -437,7 +346,7 @@ def _ui_docs_enabled() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
-def _ui_rate_limit_per_minute() -> int:
+def _ui_rate_limit_authenticated_per_minute() -> int:
     raw = os.environ.get("MATRYCA_UI_RATE_LIMIT_PER_MINUTE", "120").strip()
     try:
         return max(10, int(raw))
@@ -445,19 +354,40 @@ def _ui_rate_limit_per_minute() -> int:
         return 120
 
 
-class _UiRateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple per-client IP cap for authenticated API routes."""
+def _ui_rate_limit_unauthenticated_per_minute() -> int:
+    raw = os.environ.get("MATRYCA_UI_RATE_LIMIT_UNAUTH_PER_MINUTE", "30").strip()
+    try:
+        return max(5, int(raw))
+    except ValueError:
+        return 30
 
-    def __init__(self, app: Any, *, max_per_minute: int) -> None:
+
+class _UiRateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-client IP cap; authenticated callers get a higher budget than anonymous."""
+
+    def __init__(
+        self,
+        app: Any,
+        *,
+        max_authenticated_per_minute: int,
+        max_unauthenticated_per_minute: int,
+    ) -> None:
         super().__init__(app)
-        self._max_per_minute = max_per_minute
+        self._max_authenticated = max_authenticated_per_minute
+        self._max_unauthenticated = max_unauthenticated_per_minute
         self._guard = threading.Lock()
         self._hits: dict[str, deque[float]] = defaultdict(deque)
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:
         path = request.url.path
-        if not path.startswith("/api/") or path == "/api/health":
+        if not path.startswith("/api/") or path in {"/api/health", "/api/auth/session"}:
             return await call_next(request)
+        token = request.headers.get("x-matryca-token")
+        limit = (
+            self._max_authenticated
+            if verify_ui_token(token)
+            else self._max_unauthenticated
+        )
         client = request.client
         key = client.host if client is not None else "unknown"
         now = time.monotonic()
@@ -465,7 +395,7 @@ class _UiRateLimitMiddleware(BaseHTTPMiddleware):
             bucket = self._hits[key]
             while bucket and now - bucket[0] > 60.0:
                 bucket.popleft()
-            if len(bucket) >= self._max_per_minute:
+            if len(bucket) >= limit:
                 return JSONResponse(
                     status_code=429,
                     content={"detail": "Rate limit exceeded; retry shortly."},
@@ -582,7 +512,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(_UiRateLimitMiddleware, max_per_minute=_ui_rate_limit_per_minute())
+app.add_middleware(
+    _UiRateLimitMiddleware,
+    max_authenticated_per_minute=_ui_rate_limit_authenticated_per_minute(),
+    max_unauthenticated_per_minute=_ui_rate_limit_unauthenticated_per_minute(),
+)
 
 
 def _resolve_graph_root_or_raise() -> Path:
@@ -901,7 +835,7 @@ def _schedule_browser_open(
     url: str,
     *,
     host: str = "127.0.0.1",
-    port: int = 8000,
+    port: int = DEFAULT_UI_PORT,
     timeout_seconds: float = 15.0,
 ) -> None:
     """Open the dashboard after the API responds on ``/openapi.json``."""
@@ -922,7 +856,7 @@ def _schedule_browser_open(
     threading.Thread(target=_open_when_ready, daemon=True).start()
 
 
-def run_ui_server(*, host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_ui_server(*, host: str = "127.0.0.1", port: int = DEFAULT_UI_PORT) -> None:
     """Start Uvicorn and open the Plumber control-room dashboard in the default browser."""
     import uvicorn
 
@@ -952,6 +886,7 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = 8000) -> None:
 
 
 __all__ = [
+    "DEFAULT_UI_PORT",
     "DaemonControlResponse",
     "DaemonStateResponse",
     "FileStateResponse",

@@ -22,4 +22,13 @@ def validate_logseq_graph_path(raw: str) -> Path:
     return path
 
 
-__all__ = ["validate_logseq_graph_path"]
+def validate_logseq_graph_path_for_config(raw: str) -> Path:
+    """Like :func:`validate_logseq_graph_path` but restricted to allowed config roots."""
+    from ..utils.config_paths import assert_graph_path_allowed_for_config
+
+    path = validate_logseq_graph_path(raw)
+    assert_graph_path_allowed_for_config(path)
+    return path
+
+
+__all__ = ["validate_logseq_graph_path", "validate_logseq_graph_path_for_config"]

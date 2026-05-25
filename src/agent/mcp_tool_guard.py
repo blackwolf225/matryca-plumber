@@ -10,6 +10,7 @@ from typing import Any, cast
 from loguru import logger
 
 from ..graph.path_sandbox import PathTraversalSecurityError
+from .mcp_telemetry import _matryca_debug_enabled
 
 
 def _tool_returns_text(fn: Callable[..., Any]) -> bool:
@@ -21,6 +22,21 @@ def _tool_returns_text(fn: Callable[..., Any]) -> bool:
     return isinstance(ann, str) and ann.split("[", 1)[0].strip() == "str"
 
 
+def _public_tool_error_message(exc: Exception) -> str:
+    """Return a client-safe error string (full detail only when ``MATRYCA_DEBUG=true``)."""
+    if _matryca_debug_enabled():
+        return str(exc).strip() or exc.__class__.__name__
+    if isinstance(exc, PathTraversalSecurityError):
+        return str(exc).strip() or exc.__class__.__name__
+    if isinstance(exc, ValueError):
+        return str(exc).strip() or exc.__class__.__name__
+    if isinstance(exc, (OSError, FileNotFoundError)):
+        return "Filesystem error; verify LOGSEQ_GRAPH_PATH and file permissions."
+    if isinstance(exc, (RuntimeError, ImportError)):
+        return f"{exc.__class__.__name__}: operation failed"
+    return exc.__class__.__name__
+
+
 def format_tool_error(
     exc: Exception,
     *,
@@ -29,7 +45,7 @@ def format_tool_error(
     hint: str = "Check inputs and environment, then retry.",
 ) -> str | dict[str, Any]:
     """Map an exception to a concise MCP tool response."""
-    message = str(exc).strip() or exc.__class__.__name__
+    message = _public_tool_error_message(exc)
     if as_text:
         return f"Tool failed: {message}"
     return {

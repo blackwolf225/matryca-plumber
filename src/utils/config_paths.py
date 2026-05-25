@@ -83,6 +83,50 @@ def resolve_plumber_log_path(raw: str | None = None) -> Path:
     return Path(__file__).resolve().parents[2] / _DEFAULT_OPS_LOG
 
 
+def graph_config_allowed_roots() -> list[Path]:
+    """Roots permitted for ``LOGSEQ_GRAPH_PATH`` updates via UI or ``.env`` writes."""
+    roots: list[Path] = [
+        Path.home().resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+    ]
+    repo = Path(__file__).resolve().parents[2]
+    if repo.is_dir():
+        roots.append(repo.resolve(strict=False))
+    candidate = _graph_root_candidate()
+    if candidate is not None:
+        roots.append(candidate)
+    extra = os.environ.get("MATRYCA_ALLOWED_GRAPH_ROOTS", "").strip()
+    if extra:
+        for part in extra.split(os.pathsep):
+            cleaned = part.strip()
+            if cleaned:
+                roots.append(Path(cleaned).expanduser().resolve(strict=False))
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def assert_graph_path_allowed_for_config(path: Path) -> None:
+    """Raise ``ValueError`` when ``path`` is outside :func:`graph_config_allowed_roots`."""
+    resolved = path.expanduser().resolve(strict=False)
+    for root in graph_config_allowed_roots():
+        try:
+            resolved.relative_to(root)
+            return
+        except ValueError:
+            continue
+    msg = (
+        "LOGSEQ_GRAPH_PATH must lie under your home directory, the Matryca repo, "
+        "the current graph path, or a path listed in MATRYCA_ALLOWED_GRAPH_ROOTS"
+    )
+    raise ValueError(msg)
+
+
 def resolve_loguru_log_path(raw: str | None = None) -> Path:
     """Resolve Loguru log paths under allowed roots; fall back to repo ``logs/``."""
     if raw is None:
@@ -97,6 +141,8 @@ def resolve_loguru_log_path(raw: str | None = None) -> Path:
 
 
 __all__ = [
+    "assert_graph_path_allowed_for_config",
+    "graph_config_allowed_roots",
     "is_path_under_allowed_roots",
     "resolve_loguru_log_path",
     "resolve_optional_path_under_allowed_roots",

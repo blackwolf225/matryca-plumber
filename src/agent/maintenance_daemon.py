@@ -107,8 +107,8 @@ from .plumber_config import (
     load_plumber_lint_config,
     reload_plumber_dotenv,
     resolve_llm_api_key,
-    resolve_llm_base_url,
     resolve_llm_model_name,
+    resolve_validated_llm_base_url,
 )
 from .plumber_llm import (
     BootstrapSummaryResult,
@@ -1378,7 +1378,7 @@ class InstructorLLMClient:
         self._explicit_model = model
         self._explicit_base_url = base_url
         self._explicit_api_key = api_key
-        self.base_url = resolve_llm_base_url(override=base_url)
+        self.base_url = resolve_validated_llm_base_url(override=base_url)
         self.model = resolve_llm_model_name(override=model)
         self.api_key = resolve_llm_api_key(override=api_key)
         self._raw_client: OpenAI = OpenAI(
@@ -1407,7 +1407,7 @@ class InstructorLLMClient:
         resolved_model = model if model is not None else self._explicit_model
         resolved_base = base_url if base_url is not None else self._explicit_base_url
         resolved_api_key = api_key if api_key is not None else self._explicit_api_key
-        self.base_url = resolve_llm_base_url(override=resolved_base)
+        self.base_url = resolve_validated_llm_base_url(override=resolved_base)
         self.model = resolve_llm_model_name(override=resolved_model)
         self.api_key = resolve_llm_api_key(override=resolved_api_key)
         self._raw_client = OpenAI(

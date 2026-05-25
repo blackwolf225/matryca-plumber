@@ -10,6 +10,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..utils.regex_policy import validate_regex_pattern
 from .alias_index import normalize_concept_key
 from .global_fence_scanner import compute_page_protected_line_indices
 from .markdown_blocks import (
@@ -28,7 +29,6 @@ from .markdown_blocks import (
 from .mldoc_properties import is_logseq_block_property_line, split_logseq_property_list_values
 from .page_properties import inject_page_property
 from .page_write_lock import page_rmw_lock
-from ..utils.regex_policy import validate_regex_pattern
 
 
 def _property_line_indices(lines: list[str], start: int, end: int) -> list[int]:

@@ -17,6 +17,23 @@ We aim to acknowledge valid reports in a reasonable timeframe and coordinate dis
 
 Examples include unauthorized file access outside the intended graph, credential leakage via logs or error messages, unsafe defaults that enable destructive writes without user intent, and protocol or transport issues in the daemon, HTTP surfaces, or optional MCP sidecar that could harm the host machine.
 
+## Operator hardening (built-in)
+
+Matryca Plumber ships several **defense-in-depth** controls you should configure via `.env` (see `.env.example`):
+
+| Control | Variable | Default | Purpose |
+|---------|----------|---------|---------|
+| MCP stdio gate | `MATRYCA_MCP_ENABLED` | `false` | Prevents accidental FastMCP startup unless you explicitly enable Claude Desktop / Cursor integration. |
+| UI bearer token | `MATRYCA_UI_TOKEN` | auto per process | Set a long random value if you enable LAN binding. |
+| LAN UI bind | `MATRYCA_UI_ALLOW_LAN` | `false` | Refuses `0.0.0.0` unless set; `/api/auth/session` stays loopback-only even when LAN is on. |
+| LLM SSRF guard | `LLM_BASE_URL` / `MATRYCA_LM_BASE_URL` | localhost | Shared validation in UI and daemon blocks cloud metadata and arbitrary egress URLs. |
+| Graph path allowlist | `MATRYCA_ALLOWED_GRAPH_ROOTS` | (optional) | Settings UI cannot point `LOGSEQ_GRAPH_PATH` outside home, repo, temp, or declared roots. |
+| UI rate limits | `MATRYCA_UI_RATE_LIMIT_*` | 120 / 30 | Separate budgets for authenticated vs probing traffic on `/api/*`. |
+| Log redaction | `MATRYCA_PLUMBER_LOG_REDACT_SECRETS` | `true` | Masks Bearer tokens, `sk-*` keys, and JWT-shaped material in ops logs. |
+| MCP error sanitization | `MATRYCA_DEBUG` | `false` | When off, MCP tools do not return raw OS paths in error strings. |
+
+**Recommended local setup:** loopback UI only, `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host, test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`.
+
 ## Non-goals
 
 Misconfiguration on your machine (for example sharing your `.env`, running untrusted optional MCP hosts, or exposing the daemon to untrusted networks) is outside the scope of this policy, though documentation improvements to reduce that risk are welcome as regular contributions.

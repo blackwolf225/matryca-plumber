@@ -3,7 +3,7 @@
 > **v1.5 — Ironclad Release.** Agentic Knowledge Management for Logseq OG. An **enterprise-grade, local-first background AI daemon** with a real-time **Sovereign UI** control room, a **typed CLI**, and **direct Logseq Markdown AST** mutation (no Logseq HTTP API, no auxiliary database). The default experience is **autonomous**: the daemon and Python workers poll your graph, run structured local-LLM passes, and commit indexes and lint artifacts while you work or sleep. An **optional FastMCP stdio sidecar** exposes the same headless mutation plane to external clients (for example Claude Desktop) — same `graph_dispatch` contract, not a separate data path. Heavily inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, optimistic concurrency safety, versioned AI authorship stamping.
 
 [![CI](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-437%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-453%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
@@ -59,7 +59,7 @@ uv tool install matryca-plumber
 # 1. Start the daemon in the background
 matryca plumber start
 
-# 2. Open the Sovereign UI control room ([http://127.0.0.1:8000](http://127.0.0.1:8000))
+# 2. Open the Sovereign UI control room ([http://127.0.0.1:8500](http://127.0.0.1:8500))
 matryca plumber status
 ```
 
@@ -79,18 +79,20 @@ Unlike generic scripts, Matryca is a continuous background engine. When paired w
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively.
+- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively. Set `MATRYCA_MCP_ENABLED=true` in `.env` (stdio MCP is off by default).
 
 ---
 
 ## 🖥️ The Sovereign UI
 
 Matryca is 100% headless, but it comes with a **Sovereign UI Cockpit** (`matryca plumber status`). 
-It's a local React dashboard running on `http://127.0.0.1:8000` that provides:
+It's a local React dashboard running on `http://127.0.0.1:8500` that provides:
 - **Live Graph Telemetry**: See exactly what the AI is indexing in real-time.
 - **Dynamic Impact**: Mathematically separates *Organic Human Mind* (your notes) from *Agent Cognition* (AI enhancements).
-- **Zero-Trust Security**: Every REST call requires a Bearer token. No anonymous access, even on localhost.
+- **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
 - **Trust & Safety Drawer**: Visually toggle what the AI is allowed to edit (Safe Mode, Augmented Mode, Surgeon Mode).
+
+See [`SECURITY.md`](SECURITY.md) for the full operator hardening matrix (`MATRYCA_MCP_ENABLED`, graph path allowlist, shared LLM SSRF policy, log redaction).
 
 ---
 
@@ -124,9 +126,12 @@ Copy `.env.example` to `.env`. The only **required** variable is your graph path
 LOGSEQ_GRAPH_PATH=/absolute/path/to/your/Logseq/graph
 MATRYCA_LM_BASE_URL=http://localhost:1234/v1   # LM Studio or Ollama endpoint
 MATRYCA_LM_MODEL=qwen2.5-coder-7b              # Exact model name loaded
+
+# Optional: Claude Desktop / Cursor MCP (off by default)
+MATRYCA_MCP_ENABLED=true
 ```
 
-*(See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for advanced thermal pacing, context compression, and deep linter settings).*
+*(See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for advanced thermal pacing, context compression, and deep linter settings. Copy the full template from `.env.example` — it documents UI auth, rate limits, graph allowlists, and log redaction.)*
 
 ---
 
@@ -142,7 +147,7 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (437 passing, 0 Mypy strict issues)
+# Run tests (453 passing, 0 Mypy strict issues)
 make check
 ```
 
@@ -156,6 +161,7 @@ make check
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking rationale. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
+| [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |
 
 ## License
 Apache-2.0 — see [LICENSE](LICENSE).

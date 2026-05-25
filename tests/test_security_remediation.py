@@ -101,3 +101,38 @@ def test_property_rules_path_must_be_under_allowed_roots() -> None:
 def test_git_status_sensitive_path_detection() -> None:
     assert _status_includes_sensitive_paths("?? .env\n")
     assert not _status_includes_sensitive_paths("?? pages/Note.md\n")
+
+
+def test_graph_path_for_config_rejects_outside_allowed_roots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.graph.graph_path_validate import validate_logseq_graph_path_for_config
+    from src.utils import config_paths
+
+    allowed = tmp_path / "allowed"
+    (allowed / "pages").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    (outside / "pages").mkdir(parents=True)
+    monkeypatch.setattr(
+        config_paths,
+        "graph_config_allowed_roots",
+        lambda: [allowed.resolve()],
+    )
+
+    with pytest.raises(ValueError, match="LOGSEQ_GRAPH_PATH must lie under"):
+        validate_logseq_graph_path_for_config(str(outside))
+
+
+def test_mcp_tool_guard_hides_oserror_paths_when_debug_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.agent.mcp_tool_guard import format_tool_error
+
+    monkeypatch.delenv("MATRYCA_DEBUG", raising=False)
+    payload = format_tool_error(
+        OSError("/secret/path/denied"),
+        as_text=False,
+    )
+    assert isinstance(payload, dict)
+    assert "/secret/path" not in str(payload.get("error", ""))

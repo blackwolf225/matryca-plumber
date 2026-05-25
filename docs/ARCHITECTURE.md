@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.5.15 (Ironclad)  
+**Version:** 1.5.17 (Ironclad)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -22,7 +22,7 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 
 **FastMCP is auxiliary.** The product’s center of gravity is `matryca plumber start` plus the Sovereign UI. MCP attaches the identical read/write path when an external host spawns `matryca-plumber` without CLI-shaped arguments.
 
-**Quality bar (v1.5.15):** **437** pytest targets passing, **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`.
+**Quality bar (v1.5.17):** **453** pytest targets passing, **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`.
 
 ---
 
@@ -42,7 +42,7 @@ Persistent artifacts at the graph root include `.matryca_daemon_state.json` (che
 
 ### 2. Sovereign UI (React + FastAPI control room)
 
-**Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8000`
+**Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8500`
 
 A **monolithic** Uvicorn process serves:
 
@@ -89,7 +89,7 @@ graph TD
 
   subgraph ui["Sovereign UI"]
     REACT["React SPA\nfrontend/dist"]
-    API["FastAPI ui_server.py\n:8000 loopback"]
+    API["FastAPI ui_server.py\n:8500 loopback"]
     REACT <-->|"1 Hz · X-Matryca-Token"| API
   end
 
@@ -278,7 +278,12 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | Path traversal | `path_sandbox.assert_path_within_graph` |
 | Credential leakage into graph | `quality_gate.outline_security_violations` |
 | L1 rules path escape | `l1_memory.py` — reads only under `$HOME` or temp |
-| UI loopback exfiltration | SSRF filters on `/api/lm-models`; `X-Matryca-Token` gate |
+| LLM egress / SSRF | `utils/llm_url_policy.validate_llm_proxy_url` — UI **and** daemon |
+| UI graph path hijack | `validate_logseq_graph_path_for_config` + `config_paths.graph_config_allowed_roots` |
+| UI loopback exfiltration | SSRF on `/api/lm-models` + `POST /api/config`; `X-Matryca-Token` gate |
+| UI abuse / probing | Split rate limits (`MATRYCA_UI_RATE_LIMIT_*`); session route loopback-only |
+| MCP stdio exposure | `MATRYCA_MCP_ENABLED` gate in `plumber_entry.py` (default off) |
+| MCP error leakage | `mcp_tool_guard._public_tool_error_message` unless `MATRYCA_DEBUG` |
 | Daemon exclusivity | `.matryca_plumber_daemon.lock` (POSIX flock / Windows `msvcrt`) |
 | Ledger durability | `save_daemon_state` tmp + fsync + replace + `.bak` + `json_flock` |
 
@@ -331,8 +336,11 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/graph/markdown_blocks.py` | `atomic_write_bytes*`, OCC helpers |
 | `src/agent/mcp_server.py` | `@mcp.tool()` handlers |
 | `src/agent/mcp_telemetry.py` | Loguru bridge, `id(ctx)` session map |
-| `src/agent/mcp_tool_guard.py` | Tool error boundary |
+| `src/agent/mcp_tool_guard.py` | Tool error boundary (sanitized client messages) |
+| `src/utils/llm_url_policy.py` | Shared SSRF policy for inference base URLs |
+| `src/utils/config_paths.py` | Graph/log path allowlists for config writes |
 | `src/graph/path_sandbox.py` | Graph-root confinement |
+| `src/graph/graph_path_validate.py` | `pages/` validation + config allowlist wrapper |
 | `frontend/` | Sovereign UI React sources → `frontend/dist/` |
 
 ---
@@ -347,7 +355,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **14** | Matryca Plumber OS | `MaintenanceDaemon`, Louvain GraphRAG, React cockpit |
 | **15** | Logseq-native parity | Namespace encoding, OCC, frontmatter discipline, Trust UI |
 | **16** | Enterprise Ironclad | Zero-Trust UI, subprocess daemon, SSRF guards, cross-platform lock |
-| **1.5.15** | Ironclad consolidation | `plumber_entry` routing, MCP log bridge pickling fix, OCC ordering, atomic `.env`, UI launch validation, LRU page locks, **437** tests |
+| **1.5.15** | Ironclad consolidation | `plumber_entry` routing, MCP log bridge pickling fix, OCC ordering, atomic `.env`, UI launch validation, LRU page locks |
+| **1.5.17** | Security depth pass | Shared LLM SSRF, graph path allowlist, MCP gate, split UI rate limits, **453** tests |
 
 ---
 

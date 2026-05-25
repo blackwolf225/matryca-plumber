@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 from .cli import main as cli_main
@@ -36,12 +37,23 @@ def _normalize_cli_argv(argv: list[str]) -> list[str] | None:
     return argv
 
 
+def _mcp_stdio_enabled() -> bool:
+    raw = os.environ.get("MATRYCA_MCP_ENABLED", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def main() -> None:
     """CLI entrypoint for the ``matryca-plumber`` console script."""
     cli_argv = _normalize_cli_argv(sys.argv[1:])
     if cli_argv is not None:
         cli_main(cli_argv)
         return
+    if not _mcp_stdio_enabled():
+        sys.stderr.write(
+            "Matryca Plumber MCP stdio server is disabled. "
+            "Set MATRYCA_MCP_ENABLED=true in the environment to enable it.\n",
+        )
+        raise SystemExit(2)
     from .main import main as mcp_main
 
     mcp_main()

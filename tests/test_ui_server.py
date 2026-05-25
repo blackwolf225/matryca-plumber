@@ -657,14 +657,14 @@ def test_run_ui_server_opens_dashboard_and_starts_uvicorn() -> None:
         ui_server.run_ui_server()
 
     mock_schedule.assert_called_once_with(
-        "http://127.0.0.1:8000/",
+        "http://127.0.0.1:8500/",
         host="127.0.0.1",
-        port=8000,
+        port=8500,
     )
     mock_run.assert_called_once_with(
         "src.cli.ui_server:app",
         host="127.0.0.1",
-        port=8000,
+        port=8500,
         log_level="info",
     )
 

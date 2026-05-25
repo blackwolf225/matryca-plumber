@@ -4,7 +4,7 @@ Thank you for investing your time in **Matryca Plumber** (`matryca-plumber`).
 
 This project exists so humans and **autonomous local systems** can collaborate on **Logseq OG** graphs the right way: **blocks**, **`id::`**, and **local Markdown** — not flattened blobs in someone else's database. Whether you fix a typo, tighten a test, extend a **`MaintenanceDaemon`** cognitive module, or harden the **`graph_dispatch`** + **`logseq-matryca-parser`** headless CRUD plane, you are helping keep the **Ironclad** bar high.
 
-**Surfaces, one contract:** the **Sovereign UI** (FastAPI + React on `:8000`), the **`matryca` / `matryca plumber` CLI**, and the **optional FastMCP stdio sidecar** are different doors into the **same** sandboxed graph semantics. New work should default **daemon-first** — autonomous duty cycles and direct file I/O — not “stdio MCP as the product.”
+**Surfaces, one contract:** the **Sovereign UI** (FastAPI + React on `:8500`), the **`matryca` / `matryca plumber` CLI**, and the **optional FastMCP stdio sidecar** are different doors into the **same** sandboxed graph semantics. New work should default **daemon-first** — autonomous duty cycles and direct file I/O — not “stdio MCP as the product.”
 
 ---
 
@@ -143,9 +143,11 @@ After `make install`, validate changes the way operators run the **Agentic OS** 
    uv run matryca plumber status
    ```
 
-   Browse to **`http://127.0.0.1:8000`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`), and watch **1 Hz** telemetry while the daemon works.
+   Browse to **`http://127.0.0.1:8500`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`, loopback-only), and watch **1 Hz** telemetry while the daemon works.
 
-**Optional MCP stdio** — reach for a live MCP host only when you touch `mcp_server.py`, tool schemas, or host-specific serialization. Most graph and daemon behavior is proven faster with **`make test` / `make check`** plus the loop above — without wiring Claude Desktop.
+Ensure your repo **`.env`** includes the Ironclad security block from **`.env.example`** (at minimum `MATRYCA_MCP_ENABLED=true` if you use MCP hosts). See [`SECURITY.md`](SECURITY.md) for the full matrix.
+
+**Optional MCP stdio** — set `MATRYCA_MCP_ENABLED=true` before invoking bare `matryca-plumber` (stdio MCP is off by default). Reach for a live MCP host only when you touch `mcp_server.py`, tool schemas, or host-specific serialization. Most graph and daemon behavior is proven faster with **`make test` / `make check`** plus the loop above — without wiring Claude Desktop.
 
 6. List Make targets:
 

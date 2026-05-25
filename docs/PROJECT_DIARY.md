@@ -1,12 +1,38 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI, **v1.5.15**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI, **v1.5.17**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-05-25] Security depth pass (post-audit hardening)
+
+### Context
+
+A full-repository security review identified gaps where **SSRF policy applied only to the Sovereign UI** (not the maintenance daemon’s `InstructorLLMClient`), where **`LOGSEQ_GRAPH_PATH` could be repointed** to any directory with a `pages/` folder via authenticated UI saves, and where **MCP stdio started unconditionally** for any host spawning bare `matryca-plumber`.
+
+### Milestones shipped
+
+1. **`src/utils/llm_url_policy.py`** — Single `validate_llm_proxy_url()` used by `ui_server.assert_safe_lm_proxy_url`, `plumber_config` env load, and `resolve_validated_llm_base_url()` in the daemon LLM client.
+
+2. **Graph config allowlist** — `validate_logseq_graph_path_for_config()` + `graph_config_allowed_roots()` (home, repo, temp, current graph, `MATRYCA_ALLOWED_GRAPH_ROOTS`).
+
+3. **UI rate-limit tiers** — Authenticated vs unauthenticated per-IP budgets; `/api/health` and loopback `/api/auth/session` exempt.
+
+4. **`MATRYCA_MCP_ENABLED`** — Default **off**; `plumber_entry` refuses MCP stdio until explicitly enabled (documented in `.env.example`, `CONTRIBUTING.md`, `SECURITY.md`).
+
+5. **MCP tool error sanitization** — Filesystem paths and raw runtime text hidden from MCP clients unless `MATRYCA_DEBUG=true`.
+
+6. **Test bar** — **453** pytest targets; new coverage in `tests/test_llm_url_policy.py` and security remediation cases.
+
+### Status
+
+**Shipped** on `main` working tree. Operators enabling Claude Desktop should set `MATRYCA_MCP_ENABLED=true` in `.env`. See [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`.
 
 ---
 
@@ -36,7 +62,7 @@ This sprint hardens the **operational glue** between the three runtime surfaces 
 
 8. **Page-lock registry LRU** — At 4096 entries, evict **unlocked** locks LRU-style instead of clearing the entire registry — stable hot-path locking on large vaults.
 
-9. **Codebase hardening bar** — **437** pytest targets passing; **Mypy strict** clean on `src` and `tests`; Ruff lint/format via `make check`. CI badge and README aligned to this count.
+9. **Codebase hardening bar** — **453** pytest targets passing (was 437 at v1.5.15); **Mypy strict** clean on `src` and `tests`; Ruff lint/format via `make check`.
 
 ### Architectural outcome
 
@@ -103,7 +129,8 @@ Shipped. Test bar at phase close: **349+** passing (later superseded by 437).
 | **14d** | Context Acceleration | TRIZ payload + prompt prefix alignment + `reload_plumber_dotenv` |
 | **15** | Logseq-native parity | OCC, namespaces, frontmatter, Trust UI |
 | **16** | Enterprise Ironclad | Zero-Trust UI, subprocess daemon, SSRF, cross-platform lock |
-| **1.5.15** | Ironclad consolidation | `plumber_entry`, MCP log bridge, UI launch fix, OCC ordering, atomic `.env`, LRU locks, **437** tests |
+| **1.5.15** | Ironclad consolidation | `plumber_entry`, MCP log bridge, UI launch fix, OCC ordering, atomic `.env`, LRU locks |
+| **1.5.17** | Security depth pass | `llm_url_policy`, graph path allowlist, `MATRYCA_MCP_ENABLED`, UI rate tiers, **453** tests |
 
 Phases **9–14** narrative detail remains in [`ARCHITECTURE.md`](ARCHITECTURE.md) § Phase evolution.
 
@@ -141,7 +168,7 @@ Retire fragmented Rich TUI; validate on a graph growing **1,426 → 3,862** conn
 
 ### Status
 
-Shipped. `matryca plumber status` → Uvicorn `:8000` + `frontend/dist/`.
+Shipped. `matryca plumber status` → Uvicorn `:8500` + `frontend/dist/`.
 
 ---
 
