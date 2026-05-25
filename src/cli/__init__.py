@@ -11,6 +11,8 @@ import json
 import sys
 from typing import Any
 
+from ..utils.secret_redaction import secret_violations_in_text
+
 from ..agent.graph_dispatch import (
     dispatch_lint,
     dispatch_mutate,
@@ -181,12 +183,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _redact_text_if_sensitive(text: str) -> str:
+    if secret_violations_in_text(text):
+        return "[REDACTED: sensitive content]"
+    return text
+
+
+def _sanitize_for_output(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _sanitize_for_output(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_for_output(item) for item in value]
+    if isinstance(value, str):
+        return _redact_text_if_sensitive(value)
+    return value
+
+
 def _emit_result(result: str | dict[str, Any]) -> None:
     if isinstance(result, dict):
-        sys.stdout.write(json.dumps(result, ensure_ascii=False, indent=2))
+        safe_result = _sanitize_for_output(result)
+        sys.stdout.write(json.dumps(safe_result, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
     else:
-        sys.stdout.write(result)
+        sys.stdout.write(_redact_text_if_sensitive(result))
         if not result.endswith("\n"):
             sys.stdout.write("\n")
 
