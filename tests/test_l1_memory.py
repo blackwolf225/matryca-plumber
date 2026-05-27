@@ -7,10 +7,16 @@ from pathlib import Path
 import pytest
 from src.agent.l1_memory import (
     collect_l1_markdown_paths,
+    ensure_matryca_l1_dir,
     read_l1_memory_async,
     read_l1_memory_text,
 )
 from src.config import MatrycaWikiConfig
+
+
+@pytest.fixture(autouse=True)
+def _isolate_l1_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MATRYCA_L1_PATH", raising=False)
 
 
 def test_collect_l1_single_file(tmp_path: Path) -> None:
@@ -28,6 +34,18 @@ def test_collect_l1_directory_sorted(tmp_path: Path) -> None:
     (tmp_path / "skip.txt").write_text("n", encoding="utf-8")
     paths = collect_l1_markdown_paths(matryca_l1_path=str(tmp_path), logseq_graph_path="")
     assert [p.name for p in paths] == ["a.md", "b.md"]
+
+
+def test_ensure_matryca_l1_then_collect_fallback(tmp_path: Path) -> None:
+    """Bootstrap creates sibling ``matryca-l1`` so fallback collection works."""
+    graph = tmp_path / "vault"
+    (graph / "pages").mkdir(parents=True)
+    ensure_matryca_l1_dir(logseq_graph_path=str(graph))
+    l1 = tmp_path / "matryca-l1"
+    note = l1 / "z.md"
+    note.write_text("z", encoding="utf-8")
+    paths = collect_l1_markdown_paths(matryca_l1_path="", logseq_graph_path=str(graph))
+    assert note in paths
 
 
 def test_collect_l1_fallback_next_to_graph(tmp_path: Path) -> None:

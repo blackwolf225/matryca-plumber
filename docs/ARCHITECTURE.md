@@ -38,7 +38,7 @@ The daemon polls `pages/` and `journals/` under `LOGSEQ_GRAPH_PATH`, calls a loc
 - **Cognitive modules** — `src/agent/plumber_modules/` (env-gated: MARPA, dangling healer, property hygiene, auto-split, …)
 - **OCC + `page_rmw_lock`** — lost-update prevention and cross-process serialization per page file
 
-Persistent artifacts at the graph root include `.matryca_daemon_state.json` (checkpoint + AI impact ledger), `.matryca_plumber_daemon.lock` / `.pid`, and optional `.matryca_semantic_cache/`.
+Persistent artifacts at the graph root include `.matryca_daemon_state.json` (checkpoint + AI impact ledger), `.matryca_plumber_daemon.lock` / `.pid`, and `.matryca_semantic_cache/`. **Before** the first harvest or lint cycle, `prepare_matryca_runtime()` (see [Runtime bootstrap](#runtime-bootstrap)) ensures log directories, the sibling `matryca-l1/` folder, cache/templates paths, and an optional seeded `matryca-wiki.yml` exist.
 
 ### 2. Sovereign UI (React + FastAPI control room)
 
@@ -240,6 +240,24 @@ graph LR
 
 ---
 
+## Runtime bootstrap
+
+Every Matryca surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **`prepare_matryca_runtime()`** in `src/utils/runtime_bootstrap.py` after environment load and **before** graph processing. The helper is idempotent.
+
+| Provisioned at startup | Location | Motivation |
+|------------------------|----------|------------|
+| Ops + app log parent dirs | `MATRYCA_*_LOG_PATH` or repo `logs/` | First JSONL / Loguru write must not fail on missing folders |
+| L1 memory | Default: `<parent-of-vault>/matryca-l1/` | Session rules outside L2 wiki index; shareable across vaults ([`docs/openspec/l1-l2-routing.md`](openspec/l1-l2-routing.md)) |
+| Semantic cache dir | `<vault>/.matryca_semantic_cache/` | Catalog / cluster JSON; excluded from `pages/` scans |
+| Templates dir | `<vault>/templates/` (or YAML `templates_subdir`) | `read_logseq_template` |
+| Wiki orchestration | `<vault>/matryca-wiki.yml` | Seeded from `matryca-wiki.example.yml` when missing |
+
+**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
+
+Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md).
+
+---
+
 ## Sandboxing and safety
 
 ### Strict AST parity and Line-0 frontmatter preservation
@@ -277,7 +295,8 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 |---------|----------------|
 | Path traversal | `path_sandbox.assert_path_within_graph` |
 | Credential leakage into graph | `quality_gate.outline_security_violations` |
-| L1 rules path escape | `l1_memory.py` — reads only under `$HOME` or temp |
+| L1 rules path escape | `l1_memory.py` — reads only under `$HOME` or temp; `README.md` excluded from LLM payload |
+| Startup filesystem | `runtime_bootstrap.py` — logs, L1, cache, templates, optional `matryca-wiki.yml` before harvest |
 | LLM egress / SSRF | `utils/llm_url_policy.validate_llm_proxy_url` — UI **and** daemon |
 | UI graph path hijack | `validate_logseq_graph_path_for_config` + `config_paths.graph_config_allowed_roots` |
 | UI loopback exfiltration | SSRF on `/api/lm-models` + `POST /api/config`; `X-Matryca-Token` gate |

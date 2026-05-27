@@ -18,6 +18,7 @@ from .graph.markdown_blocks import sweep_dangling_atomic_tmp_files
 from .graph.page_write_lock import clear_page_write_locks
 from .graph.path_sandbox import resolved_graph_root
 from .utils.logging_config import configure_loguru
+from .utils.runtime_bootstrap import prepare_matryca_runtime
 
 configure_loguru()
 install_loguru_mcp_bridge()
@@ -36,9 +37,12 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[AppContext]:
     load_dotenv()
     wiki_config = load_matryca_wiki_config()
     graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+    resolved_root = None
     if graph_path:
         resolved_root = resolved_graph_root(graph_path)
         os.chdir(str(resolved_root))
+    prepare_matryca_runtime(graph_root=resolved_root, wiki_config=wiki_config)
+    if resolved_root is not None:
         swept = await asyncio.to_thread(sweep_dangling_atomic_tmp_files, str(resolved_root))
         if swept:
             logger.bind(graph=str(resolved_root), removed=swept).info(

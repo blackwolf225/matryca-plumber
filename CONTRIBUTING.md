@@ -119,6 +119,8 @@ Optional git snapshots on the graph repo are fine; they remain files on disk.
 
    Set **`LOGSEQ_GRAPH_PATH`** to your Logseq graph root (folder containing `pages/`). Matryca is headless — no Logseq desktop app required for most tests.
 
+   On the first daemon/CLI/UI/MCP start, **`prepare_matryca_runtime()`** provisions log dirs, sibling **`matryca-l1/`**, **`.matryca_semantic_cache/`**, **`templates/`**, and an optional **`matryca-wiki.yml`** (see [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md)).
+
 ### Daemon-first dev loop (recommended)
 
 After `make install`, validate changes the way operators run the **Agentic OS** (use the `.env` from step **5** — same `LOGSEQ_GRAPH_PATH` and LM settings you use for tests):
@@ -227,6 +229,12 @@ Most regressions are caught by exercising **`MaintenanceDaemon`**, **`plumber_mo
 - **`src/`** must satisfy **strict mypy**; tests may relax annotations per Ruff `per-file-ignores` for `tests/**`.
 
 When you add or change behavior on the **Agentic OS** path, **extend or add tests under [`tests/`](tests/)** so Ironclad invariants stay pinned before review.
+
+---
+
+## Releases
+
+User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]`. To ship a version, follow [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) (local bump + tag; CI publishes PyPI and GitHub notes from the changelog).
 
 ---
 

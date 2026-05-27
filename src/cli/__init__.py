@@ -11,8 +11,6 @@ import json
 import sys
 from typing import Any
 
-from ..utils.secret_redaction import secret_violations_in_text
-
 from ..agent.graph_dispatch import (
     dispatch_lint,
     dispatch_mutate,
@@ -38,6 +36,8 @@ from ..agent.maintenance_daemon import (
 from ..agent.plumber_config import reload_plumber_dotenv
 from ..config import load_matryca_wiki_config
 from ..graph.service_manager import manage_matryca_service
+from ..utils.runtime_bootstrap import try_prepare_matryca_runtime_from_env
+from ..utils.secret_redaction import secret_violations_in_text
 from .ui_server import run_ui_server
 
 READ_TARGETS: tuple[ReadGraphTarget, ...] = (
@@ -301,6 +301,7 @@ async def run_cli(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint: load ``.env``, parse args, run async dispatch."""
     reload_plumber_dotenv()
+    try_prepare_matryca_runtime_from_env()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "plumber" and args.plumber_action in {"status", "ui"}:

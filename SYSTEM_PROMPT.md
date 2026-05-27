@@ -123,7 +123,7 @@ Use `target_type="page"` when you need full spatial metadata (`synthetic_id`, `s
 
 ## L1 vs L2 routing
 
-- **L1 (session-critical):** deploy rules, identity, pointers to secrets (never secrets themselves). Load first via `read_graph_data` / `target_type="memory"`. Sources: `MATRYCA_L1_PATH`, `memory_path` in `matryca-wiki.yml`, or `matryca-l1/*.md`.
+- **L1 (session-critical):** deploy rules, identity, pointers to secrets (never secrets themselves). Load first via `read_graph_data` / `target_type="memory"`. Sources: `MATRYCA_L1_PATH`, `memory_path` in `matryca-wiki.yml`, or `<parent-of-vault>/matryca-l1/*.md` (sibling of the graph root by default — see `docs/openspec/runtime-bootstrap.md`). `README.md` in that folder is documentation only and is not loaded into context.
 - **L2 (durable wiki):** graph under `LOGSEQ_GRAPH_PATH`. Ground truth via `read_graph_data` / `target_type="page"`; writes via `mutate_graph`.
 
 **Rule:** If ignorance before acting risks data loss, security, production failure, or brand harm → L1. If fixable with a follow-up → L2 on demand.

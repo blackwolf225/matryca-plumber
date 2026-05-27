@@ -14,22 +14,118 @@ from .llm_context_payload import cap_llm_payload_chars
 _MAX_FILES = 32
 _MAX_BYTES_PER_FILE = 64 * 1024
 _MAX_BYTES_TOTAL = 256 * 1024
+_L1_SKIP_FILENAMES = frozenset({"readme.md"})
 
 
 def _expand(path: str) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
-def _is_allowed_l1_path(path: Path) -> bool:
-    """Restrict L1 memory reads to paths under the user home or system temp directory."""
-    resolved = path.resolve()
+def _l1_markdown_files_in_dir(directory: Path) -> list[Path]:
+    """Return sorted ``*.md`` in ``directory``, excluding bootstrap ``README.md``."""
+    files = [
+        path
+        for path in directory.glob("*.md")
+        if path.is_file() and path.name.lower() not in _L1_SKIP_FILENAMES
+    ]
+    return sorted(files)[:_MAX_FILES]
+
+
+def _l1_path_under_allowed_root(path: Path) -> bool:
+    """Return whether ``path`` resolves under the user home or system temp directory."""
+    resolved = path.expanduser().resolve(strict=False)
     for root in (Path.home().resolve(), Path(tempfile.gettempdir()).resolve()):
         try:
             resolved.relative_to(root)
-            return path.exists()
+            return True
         except ValueError:
             continue
     return False
+
+
+def _is_allowed_l1_path(path: Path) -> bool:
+    """Restrict L1 memory reads to allowed roots and existing paths."""
+    return _l1_path_under_allowed_root(path) and path.exists()
+
+
+_L1_README = """# Matryca L1 memory
+
+Small Markdown files in this folder are loaded first each session (deploy rules, identity, gotchas).
+
+- Default location is **next to** your Logseq vault (`<parent-of-vault>/matryca-l1/`), not inside `pages/`,
+  so session rules stay outside the wiki index (L2). To store L1 inside the vault, set `MATRYCA_L1_PATH`
+  to `<vault>/matryca-l1` or `memory_path` in `matryca-wiki.yml`.
+- Add one or more `*.md` files here (`README.md` is documentation only and is not loaded into context).
+- Keep secrets out of L1; store pointers only. Deep wiki content belongs in the Logseq graph (L2).
+- See `SYSTEM_PROMPT.md` in the Matryca Plumber repo for L1 vs L2 routing.
+"""
+
+_L1_STARTER = """# Session rules (L1)
+
+- Replace this stub with your deploy rules, identity, and operational gotchas.
+- Never store credentials here; reference secret locations only.
+"""
+
+
+def resolve_matryca_l1_directory(
+    *,
+    matryca_l1_path: str | None = None,
+    logseq_graph_path: str | None = None,
+    memory_path_from_yaml: str | None = None,
+) -> Path | None:
+    """Resolve the L1 directory to provision (``None`` when using a single ``.md`` file)."""
+    l1_raw = (
+        matryca_l1_path if matryca_l1_path is not None else os.environ.get("MATRYCA_L1_PATH", "")
+    ).strip()
+    if not l1_raw and memory_path_from_yaml:
+        l1_raw = memory_path_from_yaml.strip()
+    if l1_raw:
+        p = _expand(l1_raw)
+        if not _l1_path_under_allowed_root(p):
+            return None
+        if p.is_file():
+            return None
+        return p
+
+    graph_raw = (
+        logseq_graph_path
+        if logseq_graph_path is not None
+        else os.environ.get("LOGSEQ_GRAPH_PATH", "")
+    ).strip()
+    if graph_raw:
+        return _expand(graph_raw).parent / "matryca-l1"
+    return None
+
+
+def ensure_matryca_l1_dir(
+    *,
+    matryca_l1_path: str | None = None,
+    logseq_graph_path: str | None = None,
+    memory_path_from_yaml: str | None = None,
+) -> Path | None:
+    """Create the resolved L1 directory and starter files when missing.
+
+    Returns:
+        The directory path when created or already present under allowed roots, else ``None``.
+    """
+    target = resolve_matryca_l1_directory(
+        matryca_l1_path=matryca_l1_path,
+        logseq_graph_path=logseq_graph_path,
+        memory_path_from_yaml=memory_path_from_yaml,
+    )
+    if target is None or not _l1_path_under_allowed_root(target):
+        return None
+
+    target.mkdir(parents=True, exist_ok=True)
+    readme = target / "README.md"
+    if not readme.is_file():
+        readme.write_text(_L1_README, encoding="utf-8")
+    content_mds = [p for p in target.glob("*.md") if p.name.lower() != "readme.md"]
+    if not content_mds:
+        starter = target / "session-rules.md"
+        if not starter.is_file():
+            starter.write_text(_L1_STARTER, encoding="utf-8")
+    return target
 
 
 def collect_l1_markdown_paths(
@@ -43,7 +139,7 @@ def collect_l1_markdown_paths(
     Resolution order:
 
     1. ``MATRYCA_L1_PATH`` — if it points to a ``.md`` file, that file alone; if a
-       directory, all ``*.md`` in that directory (non-recursive), sorted by name.
+       directory, all ``*.md`` in that directory except ``README.md`` (non-recursive).
     2. Else ``memory_path_from_yaml`` (from ``matryca-wiki.yml``) when non-empty.
     3. Else ``<parent of LOGSEQ_GRAPH_PATH>/matryca-l1/*.md`` when that directory
        exists.
@@ -68,7 +164,7 @@ def collect_l1_markdown_paths(
         if p.is_file():
             return [p] if p.suffix.lower() == ".md" else []
         if p.is_dir():
-            return sorted(p.glob("*.md"))[:_MAX_FILES]
+            return _l1_markdown_files_in_dir(p)
 
     graph_raw = (
         logseq_graph_path
@@ -78,7 +174,7 @@ def collect_l1_markdown_paths(
     if graph_raw:
         fallback = _expand(graph_raw).parent / "matryca-l1"
         if _is_allowed_l1_path(fallback) and fallback.is_dir():
-            return sorted(fallback.glob("*.md"))[:_MAX_FILES]
+            return _l1_markdown_files_in_dir(fallback)
 
     return []
 
@@ -157,7 +253,9 @@ async def read_l1_memory_async(
 
 __all__ = [
     "collect_l1_markdown_paths",
+    "ensure_matryca_l1_dir",
     "read_l1_memory_async",
     "read_l1_memory_from_env",
     "read_l1_memory_text",
+    "resolve_matryca_l1_directory",
 ]

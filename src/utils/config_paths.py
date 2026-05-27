@@ -127,6 +127,15 @@ def assert_graph_path_allowed_for_config(path: Path) -> None:
     raise ValueError(msg)
 
 
+def ensure_plumber_log_directories() -> tuple[Path, Path]:
+    """Create parent directories for ops JSONL and Loguru log files (idempotent)."""
+    ops_path = resolve_plumber_log_path()
+    loguru_path = resolve_loguru_log_path()
+    ops_path.parent.mkdir(parents=True, exist_ok=True)
+    loguru_path.parent.mkdir(parents=True, exist_ok=True)
+    return ops_path, loguru_path
+
+
 def resolve_loguru_log_path(raw: str | None = None) -> Path:
     """Resolve Loguru log paths under allowed roots; fall back to repo ``logs/``."""
     if raw is None:
@@ -142,6 +151,7 @@ def resolve_loguru_log_path(raw: str | None = None) -> Path:
 
 __all__ = [
     "assert_graph_path_allowed_for_config",
+    "ensure_plumber_log_directories",
     "graph_config_allowed_roots",
     "is_path_under_allowed_roots",
     "resolve_loguru_log_path",

@@ -38,8 +38,9 @@ def configure_loguru(*, level: str = "INFO", stderr: bool = True) -> None:
             diagnose=False,
         )
 
-    log_path = resolve_loguru_log_path()
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    from .config_paths import ensure_plumber_log_directories
+
+    log_path, _ops_path = ensure_plumber_log_directories()
     logger.add(
         str(log_path),
         level=level,

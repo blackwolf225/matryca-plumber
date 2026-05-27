@@ -131,6 +131,14 @@ MATRYCA_LM_MODEL=qwen2.5-coder-7b              # Exact model name loaded
 MATRYCA_MCP_ENABLED=true
 ```
 
+On first start (daemon, CLI, MCP, or UI), Matryca **automatically creates** anything missing for a healthy runtime:
+
+- **`logs/`** (or paths from `MATRYCA_PLUMBER_LOG_PATH` / `MATRYCA_LOGURU_LOG_PATH`)
+- **`<parent-of-your-vault>/matryca-l1/`** — session rules beside the vault (not inside `pages/`); optional override via `MATRYCA_L1_PATH`
+- **`<vault>/.matryca_semantic_cache/`**, **`templates/`**, and **`matryca-wiki.yml`** (from `matryca-wiki.example.yml` when absent)
+
+See [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) for rationale (L1 vs L2, idempotency, and what is intentionally *not* auto-created).
+
 *(See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for advanced thermal pacing, context compression, and deep linter settings. Copy the full template from `.env.example` — it documents UI auth, rate limits, graph allowlists, and log redaction.)*
 
 ---
@@ -159,6 +167,8 @@ make check
 |----------|-------------|
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, `made-by::` authorship, OCC rules. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking rationale. |
+| [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
+| [`docs/openspec/l1-l2-routing.md`](docs/openspec/l1-l2-routing.md) | L1 memory vs L2 graph routing for agents. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |
