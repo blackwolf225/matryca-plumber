@@ -11,6 +11,7 @@ from src.utils.config_paths import ensure_plumber_log_directories
 from src.utils.runtime_bootstrap import (
     ensure_graph_runtime_directories,
     ensure_matryca_wiki_config_file,
+    ensure_repo_dotenv_from_example,
     prepare_matryca_runtime,
     try_prepare_matryca_runtime_from_env,
 )
@@ -108,6 +109,20 @@ def test_ensure_matryca_wiki_config_from_example(tmp_path: Path) -> None:
     assert created.is_file()
     text = created.read_text(encoding="utf-8")
     assert f"memory_path: {l1}" in text
+
+
+def test_ensure_repo_dotenv_from_example_creates_file(tmp_path: Path) -> None:
+    example = tmp_path / ".env.example"
+    example.write_text("LOGSEQ_GRAPH_PATH=/tmp/graph\n", encoding="utf-8")
+    target = tmp_path / ".env"
+    assert not target.is_file()
+
+    created = ensure_repo_dotenv_from_example(repo_root=tmp_path)
+
+    assert created is True
+    assert target.is_file()
+    assert target.read_text(encoding="utf-8") == example.read_text(encoding="utf-8")
+    assert ensure_repo_dotenv_from_example(repo_root=tmp_path) is False
 
 
 def test_try_prepare_from_env_without_graph(

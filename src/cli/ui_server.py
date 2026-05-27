@@ -53,6 +53,7 @@ from ..config import load_matryca_wiki_config
 from ..graph.graph_analytics import compute_graph_analytics
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
+from ..utils.preflight import run_preflight_checks
 from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 from ..utils.updater import UpdateCheckResult, check_for_updates, update_check_to_dict
@@ -220,6 +221,27 @@ class AuthSessionResponse(BaseModel):
     """Bootstrap token for the local Sovereign UI (loopback-only)."""
 
     token: str
+
+
+PreflightStatusValue = Literal["pass", "fail", "warn"]
+
+
+class PreflightCheckResponse(BaseModel):
+    """One row in the Sovereign UI pre-flight checklist."""
+
+    id: str
+    title: str
+    status: PreflightStatusValue
+    message: str
+    detail: str | None = None
+
+
+class PreflightResponse(BaseModel):
+    """Aggregated readiness for enabling Start Engine."""
+
+    ready: bool
+    env_created_from_example: bool = False
+    checks: list[PreflightCheckResponse] = Field(default_factory=list)
 
 
 def assert_safe_lm_proxy_url(base_url: str) -> str:
@@ -490,6 +512,9 @@ def _ensure_graph_root_env_loaded() -> None:
     """Load repo ``.env`` when ``LOGSEQ_GRAPH_PATH`` is missing from the process env."""
     if os.environ.get("LOGSEQ_GRAPH_PATH", "").strip():
         return
+    from ..utils.runtime_bootstrap import ensure_repo_dotenv_from_example
+
+    ensure_repo_dotenv_from_example()
     reload_plumber_dotenv()
 
 
@@ -564,6 +589,13 @@ def _safe_graph_analytics(
 def get_health() -> dict[str, str]:
     """Minimal liveness probe (no auth, no schema disclosure)."""
     return {"status": "ok"}
+
+
+@app.get("/api/preflight", response_model=PreflightResponse)
+def get_preflight(_: None = Depends(_require_ui_token)) -> PreflightResponse:
+    """Validate graph, L1, and local LLM readiness before starting the daemon."""
+    report = run_preflight_checks(repo_root=_REPO_ROOT)
+    return PreflightResponse.model_validate(report.to_dict())
 
 
 @app.get("/api/auth/session", response_model=AuthSessionResponse)
@@ -657,7 +689,7 @@ def post_config(
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
     config = load_plumber_lint_config()
-    graph_raw = config.logseq_graph_path.strip() if config.logseq_graph_path else ""
+    graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
     graph_root = None
     if graph_raw:
         try:

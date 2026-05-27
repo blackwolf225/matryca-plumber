@@ -1055,6 +1055,8 @@ def test_load_daemon_state_overrides_stale_cached_model(
 def test_instructor_client_refresh_config_uses_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    monkeypatch.delenv("LLM_BASE_URL", raising=False)
     monkeypatch.setenv("MATRYCA_LM_MODEL", "gemma-4-e4b-it")
     client = InstructorLLMClient(base_url="http://localhost:1234/v1")
     assert client.model == "gemma-4-e4b-it"

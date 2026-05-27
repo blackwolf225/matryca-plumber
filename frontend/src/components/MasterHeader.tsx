@@ -6,6 +6,8 @@ import type { ConnectionStatus, DaemonStateResponse, PlumberConfig } from '../ty
 import { isEngineActive } from '../types/daemon'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { basenameFromPath } from '../utils/metrics'
+import { usePreflight } from '../hooks/usePreflight'
+import { PreFlightModal } from './PreFlightModal'
 import { SettingsDrawer } from './SettingsDrawer'
 import { UpdateGuideModal } from './UpdateGuideModal'
 
@@ -94,6 +96,9 @@ export function MasterHeader({
 }: MasterHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [updateModalOpen, setUpdateModalOpen] = useState(false)
+  const [preflightOpen, setPreflightOpen] = useState(true)
+  const { report: preflightReport, loading: preflightLoading, error: preflightError, preflightReady, refreshPreflight } =
+    usePreflight()
   const { data: updateInfo, fetchFailed: updateCheckFailed, checking: updateChecking, refetch: refetchUpdateCheck } =
     useUpdateCheck()
 
@@ -190,9 +195,23 @@ export function MasterHeader({
                 </button>
               ) : null}
               <ThemeToggleButton />
+              {!preflightReady ? (
+                <button
+                  type="button"
+                  onClick={() => setPreflightOpen(true)}
+                  className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-300"
+                >
+                  Pre-flight
+                </button>
+              ) : null}
               <button
                 type="button"
-                disabled={engineBusy || engineRunning}
+                disabled={engineBusy || engineRunning || !preflightReady}
+                title={
+                  preflightReady
+                    ? 'Start the maintenance daemon'
+                    : 'Complete the pre-flight checklist before starting'
+                }
                 onClick={() => void onStartEngine()}
                 className="inline-flex items-center justify-center rounded-xl border border-theme-accent/80 bg-theme-accent px-4 py-2.5 text-sm font-medium text-theme-accent-foreground transition hover:bg-theme-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -259,11 +278,35 @@ export function MasterHeader({
         </div>
       </header>
 
+      <PreFlightModal
+        open={preflightOpen}
+        report={preflightReport}
+        loading={preflightLoading}
+        error={preflightError}
+        onRefresh={refreshPreflight}
+        onOpenSettings={() => {
+          setPreflightOpen(false)
+          setDrawerOpen(true)
+        }}
+        onDismissWhenReady={() => setPreflightOpen(false)}
+      />
+
       <SettingsDrawer
         open={drawerOpen}
         config={config}
-        onClose={() => setDrawerOpen(false)}
-        onSave={onSaveConfig}
+        onClose={() => {
+          setDrawerOpen(false)
+          void refreshPreflight().then((latest) => {
+            if (!latest?.ready) {
+              setPreflightOpen(true)
+            }
+          })
+        }}
+        onSave={async (payload) => {
+          const updated = await onSaveConfig(payload)
+          await refreshPreflight()
+          return updated
+        }}
       />
 
       {updateInfo?.update_available ? (

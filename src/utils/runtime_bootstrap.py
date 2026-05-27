@@ -10,13 +10,14 @@ Provisioned on every Matryca Plumber startup (MCP lifespan, daemon, UI, CLI):
 
 Created lazily on first use (not at bootstrap): ``.matryca_daemon_state.json``,
 ``.matryca_xray_state.json``, daemon PID/lock files, catalog JSON bodies.
-Repo ``.env`` is operator-managed (``cp .env.example .env``).
+Repo ``.env`` is copied from ``.env.example`` on first startup when missing.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import shutil
 from pathlib import Path
 
 from loguru import logger
@@ -26,8 +27,37 @@ from ..config import MatrycaWikiConfig, load_matryca_wiki_config
 from .config_paths import ensure_plumber_log_directories
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_ENV_FILE = _REPO_ROOT / ".env"
+_ENV_EXAMPLE = _REPO_ROOT / ".env.example"
 _WIKI_EXAMPLE = _REPO_ROOT / "matryca-wiki.example.yml"
 _SEMANTIC_CACHE_DIR = ".matryca_semantic_cache"
+
+
+def ensure_repo_dotenv_from_example(*, repo_root: Path | None = None) -> bool:
+    """Copy ``.env.example`` to ``.env`` when missing (idempotent).
+
+    Returns:
+        ``True`` when a new ``.env`` was created from the example template.
+    """
+    if repo_root is None and os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    root = repo_root or _REPO_ROOT
+    env_path = root / ".env"
+    example_path = root / ".env.example"
+    if env_path.is_file():
+        return False
+    if not example_path.is_file():
+        logger.warning(
+            "Cannot provision .env: .env.example is missing at {}",
+            example_path,
+        )
+        return False
+    shutil.copy2(example_path, env_path)
+    logger.info(
+        "Created repository .env from .env.example — review LOGSEQ_GRAPH_PATH and "
+        "LLM settings in Settings before running on a production vault",
+    )
+    return True
 
 
 def ensure_graph_runtime_directories(
@@ -97,6 +127,10 @@ def prepare_matryca_runtime(
 
 def try_prepare_matryca_runtime_from_env() -> None:
     """Provision runtime dirs from the current process environment (idempotent)."""
+    ensure_repo_dotenv_from_example()
+    from ..agent.plumber_config import reload_plumber_dotenv
+
+    reload_plumber_dotenv()
     wiki_config = load_matryca_wiki_config()
     graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
     if not graph_raw:
@@ -115,6 +149,7 @@ def try_prepare_matryca_runtime_from_env() -> None:
 __all__ = [
     "ensure_graph_runtime_directories",
     "ensure_matryca_wiki_config_file",
+    "ensure_repo_dotenv_from_example",
     "prepare_matryca_runtime",
     "try_prepare_matryca_runtime_from_env",
 ]

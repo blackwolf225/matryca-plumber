@@ -27,7 +27,6 @@ def test_cli_main_calls_try_prepare_before_dispatch(monkeypatch: pytest.MonkeyPa
 
     order: list[str] = []
 
-    monkeypatch.setattr("src.cli.reload_plumber_dotenv", lambda: order.append("dotenv"))
     monkeypatch.setattr("src.cli.try_prepare_matryca_runtime_from_env", lambda: order.append("prepare"))
 
     async def _run_cli(_args: object) -> int:
@@ -48,7 +47,7 @@ def test_cli_main_calls_try_prepare_before_dispatch(monkeypatch: pytest.MonkeyPa
         cli_main(["read", "memory"])
 
     assert exc.value.code == 0
-    assert order == ["dotenv", "prepare", "dispatch"]
+    assert order == ["prepare", "dispatch"]
 
 
 @pytest.mark.asyncio

@@ -15,9 +15,11 @@ Matryca Plumber provisions **directories and optional config files** before harv
 | **Maintenance daemon** | `start_daemon_foreground` and `MaintenanceDaemon.run_forever` (before bootstrap harvest) |
 | **MCP stdio** | `app_lifespan` in `src/main.py` (after `load_dotenv`, before graph hygiene sweeps) |
 | **CLI** | `cli.main` immediately after `reload_plumber_dotenv()` |
-| **Sovereign UI** | FastAPI lifespan on server start; `POST /api/config`; `POST /api/daemon/start` |
+| **Sovereign UI** | FastAPI lifespan on server start; `POST /api/config`; `POST /api/daemon/start`; `GET /api/preflight` |
 
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
+
+On first startup, if repo **`.env`** is missing and **`.env.example`** exists, Matryca copies the example to `.env` (logged at INFO) before loading environment variables.
 
 ---
 
@@ -82,7 +84,7 @@ or `memory_path` in `matryca-wiki.yml`. Bootstrap will create that path and seed
 
 | Artifact | Reason |
 |----------|--------|
-| Repo **`.env`** | Operator secrets and machine-specific paths — copy from `.env.example` manually |
+| Repo **`.env`** (pre-existing) | Never overwritten; auto-created from `.env.example` only when `.env` is absent |
 | **`pages/` / `journals/`** | A valid Logseq graph must already exist; Matryca does not fabricate vault structure |
 | **`.matryca_daemon_state.json`**, **`.matryca_xray_state.json`** | Runtime ledgers — created on first checkpoint / X-Ray session |
 | **Daemon PID / lock files** | Created when the daemon process starts |

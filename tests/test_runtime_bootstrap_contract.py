@@ -159,6 +159,7 @@ def test_try_prepare_from_env_with_valid_graph(tmp_path: Path, monkeypatch: pyte
     graph = _minimal_graph(tmp_path)
     monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
     monkeypatch.delenv("MATRYCA_L1_PATH", raising=False)
+    monkeypatch.setattr("src.agent.plumber_config.reload_plumber_dotenv", lambda **_kw: None)
 
     try_prepare_matryca_runtime_from_env()
 
