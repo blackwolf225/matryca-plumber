@@ -114,7 +114,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 
 3. **Local LLM** — Start an OpenAI-compatible server (LM Studio, Ollama, etc.). In Settings set the base URL (e.g. `http://localhost:1234/v1`) and the **exact** model id, then **Refresh models** to confirm discovery.
 
-   **Matryca Plumber** (by Marco Porcellato · Matryca.ai) is built for **offline, CPU-only** use on a typical **16 GB RAM** machine — no cloud subscription or discrete GPU required. The **recommended and tested** model is **Gemma 4-E4b Instruct** — set the exact id `gemma-4-e4b-it` in Settings, then **Refresh models**. For responsive CPU inference (about **15–30 tokens/second**), prefer **GGUF** weights at **`Q4_K_M`** or **`Q5_K_M`**. We are actively testing additional open models to improve CPU-only, 16 GB setups; Gemma 4-E4b Instruct is our current default. Avoid large **MoE** models (e.g. Llama 4 Scout): full weights still require 60GB+ RAM.
+   **Matryca Plumber** (by Marco Porcellato · Matryca.ai) is built for **offline, CPU-only** use on a typical **16 GB RAM** machine — no cloud subscription or discrete GPU required. The **recommended and tested** model is **Gemma 4-E4b Instruct** — set the exact id `gemma-4-e4b-it` in Settings, then **Refresh models**. For CPU inference, prefer **GGUF** weights at **`Q4_K_M`** or **`Q5_K_M`**. We are actively testing additional open models to improve CPU-only, 16 GB setups; Gemma 4-E4b Instruct is our current default. Avoid large **MoE** models (e.g. Llama 4 Scout): full weights still require 60GB+ RAM.
 
 4. **First-run expectations** — **Phase 1** catalogs the entire graph (can take a long time on large vaults). **Phase 2** processes roughly one LLM-heavy page per poll interval by default.
 
