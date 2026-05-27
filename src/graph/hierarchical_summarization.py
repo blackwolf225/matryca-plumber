@@ -7,8 +7,8 @@ import threading
 from pathlib import Path
 
 from ..agent.plumber_config import PlumberLintConfig, apply_thermal_pause_bootstrap
-from .bootstrap_stop import BootstrapHarvestStopped
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
+from .bootstrap_stop import BootstrapHarvestStopped
 
 _ROOT_BULLET = re.compile(r"^[-*+]\s+")
 

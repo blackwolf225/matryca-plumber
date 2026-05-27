@@ -39,7 +39,10 @@ def test_provision_matryca_l1_sibling_creates_next_to_vault(
     )
     monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
     monkeypatch.setenv("MATRYCA_L1_PATH", "/absolute/path/to/matryca-l1")
-    monkeypatch.setattr("src.utils.provision_l1.load_matryca_wiki_config", lambda: MatrycaWikiConfig())
+    monkeypatch.setattr(
+        "src.utils.provision_l1.load_matryca_wiki_config",
+        lambda: MatrycaWikiConfig(),
+    )
 
     l1_dir = provision_matryca_l1_sibling(graph_root=graph, repo_root=tmp_path)
 

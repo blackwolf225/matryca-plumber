@@ -27,7 +27,10 @@ def test_cli_main_calls_try_prepare_before_dispatch(monkeypatch: pytest.MonkeyPa
 
     order: list[str] = []
 
-    monkeypatch.setattr("src.cli.try_prepare_matryca_runtime_from_env", lambda: order.append("prepare"))
+    monkeypatch.setattr(
+        "src.cli.try_prepare_matryca_runtime_from_env",
+        lambda: order.append("prepare"),
+    )
 
     async def _run_cli(_args: object) -> int:
         order.append("dispatch")
@@ -71,8 +74,9 @@ async def test_mcp_lifespan_calls_prepare_before_yield(
         pass
 
     assert len(calls) == 1
-    assert calls[0]["graph_root"] is not None
-    assert calls[0]["graph_root"].resolve() == graph.resolve()
+    graph_root = calls[0]["graph_root"]
+    assert isinstance(graph_root, Path)
+    assert graph_root.resolve() == graph.resolve()
 
 
 def test_start_daemon_foreground_calls_prepare(
@@ -89,7 +93,10 @@ def test_start_daemon_foreground_calls_prepare(
     monkeypatch.setattr("src.agent.maintenance_daemon.prepare_matryca_runtime", _prepare)
     monkeypatch.setattr("src.agent.maintenance_daemon.configure_loguru", lambda: None)
     monkeypatch.setattr("src.agent.maintenance_daemon.reload_plumber_dotenv", lambda: None)
-    monkeypatch.setattr("src.agent.maintenance_daemon._try_acquire_daemon_process_lock", lambda _r: 42)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon._try_acquire_daemon_process_lock",
+        lambda _r: 42,
+    )
     monkeypatch.setattr("src.agent.maintenance_daemon.MaintenanceDaemon", lambda root, **kw: daemon)
 
     start_daemon_foreground(graph)
@@ -112,7 +119,10 @@ def test_daemon_run_forever_prepares_before_bootstrap_pipeline(
     monkeypatch.setattr(MaintenanceDaemon, "_register_daemon_signal_handlers", lambda self: None)
     monkeypatch.setattr("src.agent.maintenance_daemon.write_pid_file", lambda _r: None)
     monkeypatch.setattr("src.agent.maintenance_daemon.load_daemon_state", lambda _r: MagicMock())
-    monkeypatch.setattr("src.agent.maintenance_daemon.load_plumber_lint_config", lambda: MagicMock())
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.load_plumber_lint_config",
+        lambda: MagicMock(),
+    )
     monkeypatch.setattr(MaintenanceDaemon, "_sync_runtime_config", lambda self, s: s)
     monkeypatch.setattr(MaintenanceDaemon, "_hydrate_bootstrap_phase", lambda self, s: None)
     monkeypatch.setattr(MaintenanceDaemon, "_hydrate_token_logger_from_state", lambda self, s: None)

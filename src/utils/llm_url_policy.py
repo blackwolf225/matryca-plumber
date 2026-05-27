@@ -129,11 +129,7 @@ def validate_llm_proxy_url(
     hostname = parsed.hostname
     if not hostname:
         _reject("base_url must include a host")
-    configured_host = (
-        configured_lm_proxy_host(configured_base_url)
-        if configured_base_url
-        else ""
-    )
+    configured_host = configured_lm_proxy_host(configured_base_url) if configured_base_url else ""
     if not _is_safe_lm_proxy_host(hostname, configured_host=configured_host):
         _reject("base_url host is not allowed")
     if host_resolves_to_blocked_ip(hostname):

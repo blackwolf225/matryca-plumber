@@ -34,8 +34,8 @@ def test_run_preflight_all_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     env_example = tmp_path / ".env.example"
     env_example.write_text(
         f'LOGSEQ_GRAPH_PATH="{graph}"\n'
-        'MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n'
-        'MATRYCA_LM_MODEL=test-model\n',
+        "MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n"
+        "MATRYCA_LM_MODEL=test-model\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -84,8 +84,8 @@ def test_get_preflight_endpoint(
     env_example = tmp_path / ".env.example"
     env_example.write_text(
         f'LOGSEQ_GRAPH_PATH="{graph}"\n'
-        'MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n'
-        'MATRYCA_LM_MODEL=test-model\n',
+        "MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n"
+        "MATRYCA_LM_MODEL=test-model\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("src.cli.ui_server._REPO_ROOT", tmp_path)
@@ -130,8 +130,8 @@ def test_run_preflight_l1_passes_when_matryca_l1_path_is_template(
     env_path.write_text(
         f'LOGSEQ_GRAPH_PATH="{graph}"\n'
         'MATRYCA_L1_PATH="/absolute/path/to/matryca-l1"\n'
-        'MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n'
-        'MATRYCA_LM_MODEL=test-model\n',
+        "MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n"
+        "MATRYCA_LM_MODEL=test-model\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -155,4 +155,5 @@ def test_run_preflight_l1_passes_when_matryca_l1_path_is_template(
 
     l1_check = next(check for check in report.checks if check.id == "l1_memory")
     assert l1_check.status == "pass"
+    assert l1_check.detail is not None
     assert Path(l1_check.detail) == tmp_path / "matryca-l1"

@@ -5,7 +5,8 @@ from __future__ import annotations
 import sys
 
 import pytest
-from src.plumber_entry import _mcp_stdio_enabled, _normalize_cli_argv, main as plumber_entry_main
+from src.plumber_entry import _mcp_stdio_enabled, _normalize_cli_argv
+from src.plumber_entry import main as plumber_entry_main
 
 
 @pytest.mark.parametrize(
@@ -46,10 +47,12 @@ def test_plumber_entry_status_opens_ui_without_starting_daemon(
         ui_calls.append(True)
 
     monkeypatch.setattr("src.cli.run_ui_server", _run_ui_server)
-    monkeypatch.setattr(
-        "src.cli.start_daemon_detached",
-        lambda *_args, **_kwargs: start_calls.append(True) or {"ok": True},
-    )
+
+    def _start_detached(*_args: object, **_kwargs: object) -> dict[str, bool]:
+        start_calls.append(True)
+        return {"ok": True}
+
+    monkeypatch.setattr("src.cli.start_daemon_detached", _start_detached)
     monkeypatch.setattr(
         "src.cli.start_daemon_foreground",
         lambda *_args, **_kwargs: start_calls.append(True),

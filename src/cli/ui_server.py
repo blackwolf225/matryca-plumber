@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from ..agent.l1_memory import default_matryca_l1_directory_for_graph
 from ..agent.maintenance_daemon import (
     DEFAULT_STOP_GRACE_SECONDS,
     DaemonState,
@@ -51,11 +52,10 @@ from ..agent.plumber_config import (
 )
 from ..config import load_matryca_wiki_config
 from ..graph.graph_analytics import compute_graph_analytics
-from ..utils.console_sanitize import sanitize_for_console
-from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
-from ..agent.l1_memory import default_matryca_l1_directory_for_graph
 from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
+from ..utils.console_sanitize import sanitize_for_console
 from ..utils.env_placeholders import is_template_env_path
+from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
 from ..utils.preflight import run_preflight_checks
 from ..utils.provision_l1 import provision_matryca_l1_sibling
 from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
@@ -434,11 +434,7 @@ class _UiRateLimitMiddleware(BaseHTTPMiddleware):
         }:
             return await call_next(request)
         token = request.headers.get("x-matryca-token")
-        limit = (
-            self._max_authenticated
-            if verify_ui_token(token)
-            else self._max_unauthenticated
-        )
+        limit = self._max_authenticated if verify_ui_token(token) else self._max_unauthenticated
         client = request.client
         key = client.host if client is not None else "unknown"
         now = time.monotonic()
@@ -670,13 +666,14 @@ def post_provision_l1(_: None = Depends(_require_ui_token)) -> ProvisionL1Respon
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to provision matryca-l1: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to provision matryca-l1: {exc}",
+        ) from exc
 
     created = not existed_before
     message = (
-        f"Created matryca-l1 at {l1_dir}"
-        if created
-        else f"L1 memory already present at {l1_dir}"
+        f"Created matryca-l1 at {l1_dir}" if created else f"L1 memory already present at {l1_dir}"
     )
     return ProvisionL1Response(
         ok=True,

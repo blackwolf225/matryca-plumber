@@ -69,7 +69,10 @@ def test_l1_is_not_created_under_vault_pages_tree(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_prepare_matryca_runtime_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prepare_matryca_runtime_is_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     graph = _minimal_graph(tmp_path)
     l1 = _expected_sibling_l1(graph)
     l1.mkdir(parents=True)
@@ -155,7 +158,10 @@ def test_prepare_does_not_create_lazy_runtime_ledgers(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_try_prepare_from_env_with_valid_graph(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_try_prepare_from_env_with_valid_graph(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     graph = _minimal_graph(tmp_path)
     monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
     monkeypatch.delenv("MATRYCA_L1_PATH", raising=False)

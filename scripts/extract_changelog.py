@@ -19,9 +19,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_CHANGELOG = _REPO_ROOT / "CHANGELOG.md"
 
-_VERSION_HEADING = re.compile(
-    r"^## \[(?P<label>[^\]]+)\](?:\s+-\s+(?P<date>.+))?\s*$"
-)
+_VERSION_HEADING = re.compile(r"^## \[(?P<label>[^\]]+)\](?:\s+-\s+(?P<date>.+))?\s*$")
 
 
 def normalize_version(tag_or_version: str) -> str:
@@ -67,9 +65,7 @@ def extract_changelog_section(
         hint = f" Known versions: {', '.join(known[:8])}" if known else ""
         if len(known) > 8:
             hint += ", …"
-        raise LookupError(
-            f"No changelog section found for version [{normalized}].{hint}"
-        )
+        raise LookupError(f"No changelog section found for version [{normalized}].{hint}")
 
     end = len(lines)
     for index in range(start + 1, len(lines)):

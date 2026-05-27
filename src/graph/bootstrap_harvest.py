@@ -14,8 +14,8 @@ from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
-from .generational_cache import patch_generational_caches_for_paths
 from .bootstrap_stop import BootstrapHarvestStopped
+from .generational_cache import patch_generational_caches_for_paths
 from .hierarchical_summarization import mapreduce_harvest_page_summary
 from .markdown_blocks import (
     atomic_write_bytes,

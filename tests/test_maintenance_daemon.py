@@ -1401,7 +1401,7 @@ def test_bootstrap_progress_persists_live_token_counters(
     logger = TokenLogger(log_path=graph_root / "ops.log")
     logger.log_turn(
         target_file="pages/Bootstrap.md",
-        operation="Bootstrap Harvest",
+        operation="Concept Indexing",
         prompt_tokens=77,
         completion_tokens=22,
         prompt="bootstrap",

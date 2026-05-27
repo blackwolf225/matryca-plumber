@@ -51,10 +51,7 @@ def _is_allowed_l1_path(path: Path) -> bool:
 
 def _effective_l1_path_override(raw: str | None) -> str:
     """Return ``MATRYCA_L1_PATH`` (or explicit override) ignoring ``.env.example`` templates."""
-    if raw is None:
-        value = os.environ.get("MATRYCA_L1_PATH", "").strip()
-    else:
-        value = raw.strip()
+    value = os.environ.get("MATRYCA_L1_PATH", "").strip() if raw is None else raw.strip()
     if is_template_env_path(value):
         return ""
     return value
@@ -78,10 +75,12 @@ _L1_README = """# Matryca L1 memory
 
 Small Markdown files in this folder are loaded first each session (deploy rules, identity, gotchas).
 
-- Default location is **next to** your Logseq vault (`<parent-of-vault>/matryca-l1/`), not inside `pages/`,
-  so session rules stay outside the wiki index (L2). To store L1 inside the vault, set `MATRYCA_L1_PATH`
-  to `<vault>/matryca-l1` or `memory_path` in `matryca-wiki.yml`.
-- Add one or more `*.md` files here (`README.md` is documentation only and is not loaded into context).
+- Default location is **next to** your Logseq vault (`<parent-of-vault>/matryca-l1/`),
+  not inside `pages/`, so session rules stay outside the wiki index (L2).
+  To store L1 inside the vault, set `MATRYCA_L1_PATH` to `<vault>/matryca-l1`
+  or `memory_path` in `matryca-wiki.yml`.
+- Add one or more `*.md` files here (`README.md` is documentation only;
+  it is not loaded into context).
 - Keep secrets out of L1; store pointers only. Deep wiki content belongs in the Logseq graph (L2).
 - See `SYSTEM_PROMPT.md` in the Matryca Plumber repo for L1 vs L2 routing.
 """

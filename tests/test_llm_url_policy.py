@@ -8,7 +8,9 @@ from src.utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_
 
 
 def test_validate_llm_proxy_url_allows_localhost() -> None:
-    url = validate_llm_proxy_url("http://localhost:1234", configured_base_url="http://localhost:1234")
+    url = validate_llm_proxy_url(
+        "http://localhost:1234", configured_base_url="http://localhost:1234"
+    )
     assert url == "http://localhost:1234/v1"
 
 
