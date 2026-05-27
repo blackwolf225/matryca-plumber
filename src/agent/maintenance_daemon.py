@@ -36,6 +36,7 @@ from ..graph.bootstrap_harvest import (
     run_bootstrap_harvest,
     run_incremental_catalog_refresh,
 )
+from ..graph.concurrency_probe import probe_concurrency_capability
 from ..graph.generational_cache import (
     cached_build_alias_index,
     gc_generational_alias_cache,
@@ -75,6 +76,7 @@ from ..graph.page_write_lock import (
     PageLockUnavailableError,
     clear_page_write_locks,
     page_rmw_lock,
+    probe_page_rmw_lock,
     sweep_matryca_lock_sidecars,
 )
 from ..graph.path_sandbox import (
@@ -97,6 +99,7 @@ from .context_compressor import (
     condense_messages,
     extract_persisted_history,
 )
+from .control_room_progress import refresh_phase2_cognitive_totals
 from .llm_context_payload import prepare_llm_context_payload
 from .plumber_config import (
     DEFAULT_LLM_MODEL_NAME,
@@ -149,7 +152,15 @@ DEFAULT_STOP_GRACE_SECONDS = 130.0
 DEFAULT_STOP_SIGKILL_AFTER_SECONDS = 125.0
 SHUTDOWN_INFLIGHT_TIMEOUT_SECONDS = 120.0
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_FILE_STATUS_PRIORITY = {"processed": 4, "error": 3, "skipped": 2, "pending": 1}
+_FILE_STATUS_PRIORITY = {
+    "processed": 5,
+    "error": 4,
+    "skipped": 3,
+    "lock_backoff": 2,
+    "pending": 1,
+}
+_LOCK_BACKOFF_INITIAL_S = 30.0
+_LOCK_BACKOFF_MAX_S = 300.0
 STRUCTURAL_LINT_HEADING = "### Matryca Structural Lint"
 STRUCTURAL_LINT_HEADER = f"- {STRUCTURAL_LINT_HEADING}"
 DEFAULT_MODEL = DEFAULT_LLM_MODEL_NAME  # backward-compatible alias for CLI/TUI
@@ -269,14 +280,19 @@ class LLMClient(Protocol):
         ...
 
 
+FileStatus = Literal["processed", "skipped", "error", "pending", "lock_backoff"]
+
+
 @dataclass
 class FileState:
     """Processing record for one markdown file."""
 
     mtime: float
     processed_at: str
-    status: Literal["processed", "skipped", "error", "pending"] = "processed"
+    status: FileStatus = "processed"
     error: str | None = None
+    lock_backoff_until: float | None = None
+    lock_backoff_seconds: float | None = None
 
 
 BootstrapHarvestStatus = Literal["regex", "llm", "skipped", "error"]
@@ -333,6 +349,9 @@ class DaemonState:
     current_cluster: str | None = None
     current_cluster_files_total: int = 0
     current_cluster_files_done: int = 0
+    phase2_cognitive_total: int = 0
+    phase2_cognitive_done: int = 0
+    phase2_cluster_file_in_flight: bool = False
     phase2_llm_turns: int = 0
     last_scan_at: str | None = None
     last_file: str | None = None
@@ -356,6 +375,9 @@ class DaemonState:
             "current_cluster": self.current_cluster,
             "current_cluster_files_total": self.current_cluster_files_total,
             "current_cluster_files_done": self.current_cluster_files_done,
+            "phase2_cognitive_total": self.phase2_cognitive_total,
+            "phase2_cognitive_done": self.phase2_cognitive_done,
+            "phase2_cluster_file_in_flight": self.phase2_cluster_file_in_flight,
             "phase2_llm_turns": self.phase2_llm_turns,
             "last_scan_at": self.last_scan_at,
             "last_file": self.last_file,
@@ -377,6 +399,8 @@ class DaemonState:
                     "processed_at": rec.processed_at,
                     "status": rec.status,
                     "error": rec.error,
+                    "lock_backoff_until": rec.lock_backoff_until,
+                    "lock_backoff_seconds": rec.lock_backoff_seconds,
                 }
                 for path, rec in self.files.items()
             },
@@ -390,11 +414,19 @@ class DaemonState:
             for path, rec in raw_files.items():
                 if not isinstance(rec, dict):
                     continue
+                backoff_until = rec.get("lock_backoff_until")
+                backoff_seconds = rec.get("lock_backoff_seconds")
                 files[str(path)] = FileState(
                     mtime=float(rec.get("mtime", 0.0)),
                     processed_at=str(rec.get("processed_at", "")),
                     status=str(rec.get("status", "processed")),  # type: ignore[arg-type]
-                    error=rec.get("error"),
+                    error=rec.get("error") if rec.get("error") is not None else None,
+                    lock_backoff_until=(
+                        float(backoff_until) if backoff_until is not None else None
+                    ),
+                    lock_backoff_seconds=(
+                        float(backoff_seconds) if backoff_seconds is not None else None
+                    ),
                 )
         return cls(
             version=int(payload.get("version", 1)),
@@ -413,6 +445,9 @@ class DaemonState:
             ),
             current_cluster_files_total=int(payload.get("current_cluster_files_total", 0)),
             current_cluster_files_done=int(payload.get("current_cluster_files_done", 0)),
+            phase2_cognitive_total=int(payload.get("phase2_cognitive_total", 0)),
+            phase2_cognitive_done=int(payload.get("phase2_cognitive_done", 0)),
+            phase2_cluster_file_in_flight=bool(payload.get("phase2_cluster_file_in_flight", False)),
             phase2_llm_turns=int(payload.get("phase2_llm_turns", 0)),
             last_scan_at=payload.get("last_scan_at"),
             last_file=payload.get("last_file"),
@@ -469,6 +504,40 @@ def record_daemon_impact(
         state.ai_blocks_healed += lint.applied
     if links_backpropagated > 0:
         state.ai_links_injected += links_backpropagated
+
+
+def _lock_backoff_active(rec: FileState) -> bool:
+    if rec.status != "lock_backoff":
+        return False
+    if rec.lock_backoff_until is None:
+        return False
+    return time.time() < rec.lock_backoff_until
+
+
+def _next_lock_backoff_seconds(rec: FileState | None) -> float:
+    if rec is None or rec.status != "lock_backoff":
+        return _LOCK_BACKOFF_INITIAL_S
+    previous = rec.lock_backoff_seconds or _LOCK_BACKOFF_INITIAL_S
+    return min(previous * 2.0, _LOCK_BACKOFF_MAX_S)
+
+
+def _record_page_lock_backoff(
+    state: DaemonState,
+    *,
+    key: str,
+    mtime: float,
+    message: str,
+    prior: FileState | None,
+) -> None:
+    interval = _next_lock_backoff_seconds(prior)
+    state.files[key] = FileState(
+        mtime=mtime,
+        processed_at=datetime.now(tz=UTC).isoformat(),
+        status="lock_backoff",
+        error=message,
+        lock_backoff_until=time.time() + interval,
+        lock_backoff_seconds=interval,
+    )
 
 
 def _merge_file_state(existing: FileState, incoming: FileState) -> FileState:
@@ -2093,6 +2162,8 @@ def page_needs_phase2_cognitive(
         return False
     if rec.status == "error":
         return False
+    if _lock_backoff_active(rec):
+        return False
     if rec.status == "skipped":
         return _semantic_index_section_present(text)
     return True
@@ -2177,6 +2248,8 @@ def list_pending_files(
                 continue
             if rec.status == "error":
                 continue
+            if _lock_backoff_active(rec):
+                continue
         pending.append(path)
     return pending
 
@@ -2237,6 +2310,13 @@ class MaintenanceDaemon:
         self._state_persist_failed = False
         self.bootstrap_complete = False
         self._ensure_shared_token_logger()
+        capability = probe_concurrency_capability()
+        if capability.mode == "full":
+            logger.debug("Concurrency: {}", capability.message)
+        elif capability.degradation_allowed:
+            logger.info("Concurrency: {}", capability.message)
+        else:
+            logger.warning("Concurrency: {}", capability.message)
 
     def _ensure_shared_token_logger(self) -> None:
         """Bind the LLM client to the daemon's central token logger."""
@@ -2294,6 +2374,10 @@ class MaintenanceDaemon:
         state.bootstrap_scanned = 0
         state.bootstrap_total = 0
         state.bootstrap_recent = {}
+        try:
+            refresh_phase2_cognitive_totals(self.graph_root, state)
+        except OSError as exc:
+            logger.warning("Phase 2 progress totals skipped after bootstrap: {}", exc)
         self._sync_live_telemetry(state)
         save_daemon_state(self.graph_root, state)
 
@@ -2693,6 +2777,8 @@ class MaintenanceDaemon:
         mtime = path.stat().st_mtime
         title = _page_title_from_path(self.graph_root, path)
         state.last_file = sanitize_for_console(key)
+        if cluster_id is not None:
+            state.phase2_cluster_file_in_flight = True
         self._sync_live_telemetry(
             state,
             cluster_id=cluster_id,
@@ -2745,6 +2831,23 @@ class MaintenanceDaemon:
                 )
                 write_aborted = True
                 return False
+            _key, prior_rec = _lookup_file_state(self.graph_root, state, path)
+            try:
+                probe_page_rmw_lock(path)
+            except PageLockUnavailableError as exc:
+                self.token_logger.log_structural_lint_warning(
+                    target_file=path,
+                    message=f"Page lock unavailable before inference: {exc}",
+                    malformed_refs=[],
+                )
+                _record_page_lock_backoff(
+                    state,
+                    key=key,
+                    mtime=mtime,
+                    message=str(exc),
+                    prior=prior_rec,
+                )
+                return False
             result, usage = self.llm_client.index_page(
                 title,
                 content,
@@ -2791,7 +2894,14 @@ class MaintenanceDaemon:
                 message=f"Page lock unavailable after retries: {exc}",
                 malformed_refs=[],
             )
-            # Leave ledger unchanged so the file stays pending for the next cycle.
+            _key, prior_rec = _lookup_file_state(self.graph_root, state, path)
+            _record_page_lock_backoff(
+                state,
+                key=_key,
+                mtime=mtime,
+                message=str(exc),
+                prior=prior_rec,
+            )
         except Exception as exc:  # noqa: BLE001 - quarantine per-file; never abort cycle
             if is_malformed_block_ref_error(exc):
                 protected_lines = compute_page_protected_line_indices(content)
@@ -2816,6 +2926,8 @@ class MaintenanceDaemon:
                 )
         finally:
             self._end_phase2_write()
+            if cluster_id is not None:
+                state.phase2_cluster_file_in_flight = False
             if reset_history_after and isinstance(self.llm_client, InstructorLLMClient):
                 self.llm_client.reset_execution_history()
         llm_called_from_logger = (
@@ -2882,6 +2994,11 @@ class MaintenanceDaemon:
 
         state.status = "running"
         state.last_scan_at = datetime.now(tz=UTC).isoformat()
+        if self.bootstrap_complete:
+            try:
+                refresh_phase2_cognitive_totals(self.graph_root, state)
+            except OSError as exc:
+                logger.warning("Phase 2 progress totals skipped at cycle start: {}", exc)
         self._sync_live_telemetry(state, mark_running=True)
         save_daemon_state(self.graph_root, state)
         try:
@@ -2946,11 +3063,14 @@ class MaintenanceDaemon:
                 self._begin_cluster_context(cluster_id, cluster_paths)
                 state.current_cluster_files_total = len(cluster_paths)
                 state.current_cluster_files_done = 0
+                state.phase2_cluster_file_in_flight = False
                 self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
                 self._save_cycle_checkpoint(state)
             else:
+                state.current_cluster = None
                 state.current_cluster_files_total = 0
                 state.current_cluster_files_done = 0
+                state.phase2_cluster_file_in_flight = False
             for path in cluster_paths:
                 if self._stop_requested:
                     state.status = "stopped"
@@ -2973,6 +3093,10 @@ class MaintenanceDaemon:
 
         self._prune_stale_catalog_entries()
         heal_daemon_state_ledger(self.graph_root, state)
+        state.phase2_cluster_file_in_flight = False
+        if self.bootstrap_complete:
+            with contextlib.suppress(OSError):
+                refresh_phase2_cognitive_totals(self.graph_root, state)
         self._sync_live_telemetry(state)
         if not self._stop_requested:
             state.status = "idle"
