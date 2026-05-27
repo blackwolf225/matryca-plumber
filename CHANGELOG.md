@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-05-27
+
 ### Added
 
 - **Concurrency preflight** — `probe_concurrency_capability()` and a Sovereign UI checklist row for cross-process `flock` vs in-process-only mode; daemon logs the active contract at startup.
