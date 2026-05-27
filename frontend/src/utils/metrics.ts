@@ -10,6 +10,19 @@ export interface ProgressMetrics {
 
 export function computeProgressMetrics(state: DaemonStateResponse): ProgressMetrics {
   if (!state.bootstrap_complete) {
+    const bootstrapTotal = state.bootstrap_total ?? 0
+    const bootstrapScanned = state.bootstrap_scanned ?? 0
+    if (bootstrapTotal > 0) {
+      const percent = Math.min(100, (bootstrapScanned / bootstrapTotal) * 100)
+      return {
+        title: 'Phase 1: Cataloging Graph',
+        subtitle: `${bootstrapScanned} / ${bootstrapTotal} pages indexed`,
+        done: bootstrapScanned,
+        total: bootstrapTotal,
+        percent,
+      }
+    }
+
     const entries = Object.values(state.files)
     const processed = entries.filter((file) => file.status === 'processed').length
     const total = entries.length

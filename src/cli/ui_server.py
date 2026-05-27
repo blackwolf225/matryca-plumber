@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import os
@@ -15,6 +16,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from collections import defaultdict, deque
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -46,9 +49,11 @@ from ..agent.plumber_config import (
     resolve_llm_base_url,
     serialize_plumber_config_field_for_dotenv,
 )
+from ..config import load_matryca_wiki_config
 from ..graph.graph_analytics import compute_graph_analytics
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
+from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 from ..utils.updater import UpdateCheckResult, check_for_updates, update_check_to_dict
 from .ui_auth import resolve_ui_token, verify_ui_token
@@ -109,6 +114,8 @@ class DaemonStateResponse(BaseModel):
     status: DaemonStatusValue = "idle"
     model: str
     bootstrap_complete: bool = False
+    bootstrap_scanned: int = 0
+    bootstrap_total: int = 0
     session_prompt_tokens: int = 0
     session_completion_tokens: int = 0
     current_cluster: str | None = None
@@ -121,22 +128,10 @@ class DaemonStateResponse(BaseModel):
     ai_links_injected: int = 0
     ai_blocks_healed: int = 0
     hygiene_corrections: int = 0
-    graph_analytics: GraphAnalyticsResponse = Field(default_factory=GraphAnalyticsResponse)
 
     @classmethod
-    def from_daemon_state(
-        cls,
-        state: DaemonState,
-        *,
-        graph_root: Path | None = None,
-    ) -> DaemonStateResponse:
+    def from_daemon_state(cls, state: DaemonState) -> DaemonStateResponse:
         payload = state.to_json()
-        if graph_root is not None:
-            payload["graph_analytics"] = _safe_graph_analytics(
-                graph_root,
-                ai_links_injected=state.ai_links_injected,
-                ai_blocks_healed=state.ai_blocks_healed,
-            ).model_dump()
         if payload.get("last_file"):
             payload["last_file"] = sanitize_for_console(str(payload["last_file"]))
         return cls.model_validate(payload)
@@ -498,8 +493,17 @@ def _ensure_graph_root_env_loaded() -> None:
     reload_plumber_dotenv()
 
 
+@asynccontextmanager
+async def _ui_app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Provision logs and graph runtime dirs before serving API traffic."""
+    _ensure_graph_root_env_loaded()
+    try_prepare_matryca_runtime_from_env()
+    yield
+
+
 app = FastAPI(
     title="Matryca Plumber API",
+    lifespan=_ui_app_lifespan,
     docs_url="/docs" if _ui_docs_enabled() else None,
     redoc_url=None,
     openapi_url="/openapi.json" if _ui_docs_enabled() else None,
@@ -530,13 +534,6 @@ def _resolve_graph_root_or_raise() -> Path:
 def _heal_daemon_state_in_memory(graph_root: Path, state: DaemonState) -> None:
     """Reconcile persisted AI counters against live graph totals without writing disk."""
     heal_daemon_state_ledger(graph_root, state)
-
-
-def _load_healed_daemon_state(graph_root: Path) -> DaemonState:
-    """Load daemon checkpoint and heal AI counters in memory (read-only for GET handlers)."""
-    state = load_daemon_state(graph_root)
-    _heal_daemon_state_in_memory(graph_root, state)
-    return state
 
 
 def _safe_graph_analytics(
@@ -576,11 +573,10 @@ def get_auth_session(request: Request) -> AuthSessionResponse:
     return AuthSessionResponse(token=resolve_ui_token())
 
 
-@app.get("/api/graph-analytics", response_model=GraphAnalyticsResponse)
-def get_graph_analytics(_: None = Depends(_require_ui_token)) -> GraphAnalyticsResponse:
-    """Return live graph topology telemetry for the configured ``LOGSEQ_GRAPH_PATH``."""
-    graph_root = _resolve_graph_root_or_raise()
-    state = _load_healed_daemon_state(graph_root)
+def _graph_analytics_for_graph(graph_root: Path) -> GraphAnalyticsResponse:
+    """Heal ledger counters and compute topology telemetry (blocking; run off the event loop)."""
+    state = load_daemon_state(graph_root)
+    _heal_daemon_state_in_memory(graph_root, state)
     return _safe_graph_analytics(
         graph_root,
         ai_links_injected=state.ai_links_injected,
@@ -588,12 +584,19 @@ def get_graph_analytics(_: None = Depends(_require_ui_token)) -> GraphAnalyticsR
     )
 
 
+@app.get("/api/graph-analytics", response_model=GraphAnalyticsResponse)
+async def get_graph_analytics(_: None = Depends(_require_ui_token)) -> GraphAnalyticsResponse:
+    """Return live graph topology telemetry for the configured ``LOGSEQ_GRAPH_PATH``."""
+    graph_root = _resolve_graph_root_or_raise()
+    return await asyncio.to_thread(_graph_analytics_for_graph, graph_root)
+
+
 @app.get("/api/state", response_model=DaemonStateResponse)
 def get_state(_: None = Depends(_require_ui_token)) -> DaemonStateResponse:
-    """Return the current daemon checkpoint from ``.matryca_daemon_state.json``."""
+    """Return the current daemon checkpoint from ``.matryca_daemon_state.json`` (no graph scan)."""
     graph_root = _resolve_graph_root_or_raise()
-    state = _load_healed_daemon_state(graph_root)
-    return DaemonStateResponse.from_daemon_state(state, graph_root=graph_root)
+    state = load_daemon_state(graph_root)
+    return DaemonStateResponse.from_daemon_state(state)
 
 
 @app.get("/api/logs", response_model=list[str])
@@ -653,7 +656,16 @@ def post_config(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
-    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
+    config = load_plumber_lint_config()
+    graph_raw = config.logseq_graph_path.strip() if config.logseq_graph_path else ""
+    graph_root = None
+    if graph_raw:
+        try:
+            graph_root = resolve_graph_root()
+        except ValueError:
+            graph_root = None
+    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    return PlumberConfigResponse.from_lint_config(config)
 
 
 def _daemon_control_response(result: dict[str, Any]) -> DaemonControlResponse:
@@ -723,6 +735,7 @@ def _verify_daemon_launch(
 def start_daemon_endpoint(_: None = Depends(_require_ui_token)) -> DaemonControlResponse:
     """Launch the maintenance daemon without blocking the FastAPI event loop."""
     graph_root = _resolve_graph_root_or_raise()
+    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
     existing = read_pid_file(graph_root)
     if existing is not None and is_plumber_process(existing):
         return DaemonControlResponse(

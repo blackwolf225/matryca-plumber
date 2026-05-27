@@ -199,6 +199,8 @@ export interface DaemonStateResponse {
   status: DaemonStatusValue
   model: string
   bootstrap_complete: boolean
+  bootstrap_scanned: number
+  bootstrap_total: number
   session_prompt_tokens: number
   session_completion_tokens: number
   current_cluster: string | null

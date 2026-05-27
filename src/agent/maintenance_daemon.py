@@ -25,6 +25,7 @@ from loguru import logger
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from ..config import load_matryca_wiki_config
 from ..graph.alias_index import (
     AliasIndex,
     format_alias_index_for_prompt,
@@ -87,6 +88,7 @@ from ..graph.semantic_clustering import (
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.json_repair import parse_llm_json
 from ..utils.logging_config import configure_loguru
+from ..utils.runtime_bootstrap import prepare_matryca_runtime
 from ..utils.token_logger import OperationType, TokenLogger
 from .context_compressor import (
     COMPRESSION_SYSTEM_PROMPT,
@@ -286,6 +288,8 @@ class DaemonState:
     status: DaemonStatus = "idle"
     model: str = DEFAULT_LM_MODEL
     bootstrap_complete: bool = False
+    bootstrap_scanned: int = 0
+    bootstrap_total: int = 0
     session_prompt_tokens: int = 0
     session_completion_tokens: int = 0
     current_cluster: str | None = None
@@ -305,6 +309,8 @@ class DaemonState:
             "status": self.status,
             "model": self.model,
             "bootstrap_complete": self.bootstrap_complete,
+            "bootstrap_scanned": self.bootstrap_scanned,
+            "bootstrap_total": self.bootstrap_total,
             "session_prompt_tokens": self.session_prompt_tokens,
             "session_completion_tokens": self.session_completion_tokens,
             "current_cluster": self.current_cluster,
@@ -348,6 +354,8 @@ class DaemonState:
             status=str(payload.get("status", "idle")),  # type: ignore[arg-type]
             model=str(payload.get("model", DEFAULT_LM_MODEL)),
             bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
+            bootstrap_scanned=int(payload.get("bootstrap_scanned", 0)),
+            bootstrap_total=int(payload.get("bootstrap_total", 0)),
             session_prompt_tokens=int(payload.get("session_prompt_tokens", 0)),
             session_completion_tokens=int(payload.get("session_completion_tokens", 0)),
             current_cluster=(
@@ -2209,6 +2217,8 @@ class MaintenanceDaemon:
 
     def _persist_bootstrap_complete(self, state: DaemonState) -> None:
         state.bootstrap_complete = True
+        state.bootstrap_scanned = 0
+        state.bootstrap_total = 0
         save_daemon_state(self.graph_root, state)
 
     def _effective_lint_config(self) -> PlumberLintConfig:
@@ -2304,6 +2314,17 @@ class MaintenanceDaemon:
         if self.bootstrap_complete:
             return
 
+        checkpoint.status = "running"
+        save_daemon_state(self.graph_root, checkpoint)
+
+        def _persist_bootstrap_progress(scanned: int, total: int, last_path: Path | None) -> None:
+            checkpoint.bootstrap_scanned = scanned
+            checkpoint.bootstrap_total = total
+            checkpoint.status = "running"
+            if last_path is not None:
+                checkpoint.last_file = graph_relative_path_key(last_path, self.graph_root)
+            save_daemon_state(self.graph_root, checkpoint)
+
         max_attempts = 3
         backoff_s = 1.0
         last_exc: Exception | None = None
@@ -2316,6 +2337,7 @@ class MaintenanceDaemon:
                     incremental=False,
                     rebuild_index=True,
                     phase1_strict=True,
+                    on_progress=_persist_bootstrap_progress,
                 )
                 break
             except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
@@ -2850,6 +2872,10 @@ class MaintenanceDaemon:
     def run_forever(self) -> None:
         """Infinite polling loop until stop is requested."""
         self._register_daemon_signal_handlers()
+        prepare_matryca_runtime(
+            graph_root=self.graph_root,
+            wiki_config=load_matryca_wiki_config(),
+        )
         write_pid_file(self.graph_root)
         state = self._sync_runtime_config(load_daemon_state(self.graph_root))
         llm_config = load_plumber_lint_config()
@@ -2897,6 +2923,7 @@ def run_plumber_cluster(
 ) -> dict[str, Any]:
     """Manual entrypoint: compute or audit semantic cluster neighborhoods."""
     root = graph_root or resolve_graph_root()
+    prepare_matryca_runtime(graph_root=root, wiki_config=load_matryca_wiki_config())
     catalog = load_master_catalog(root, force_reload=True)
     clusters = load_or_compute_semantic_clusters(
         root,
@@ -2923,6 +2950,7 @@ def run_plumber_cluster(
 def run_plumber_audit(graph_root: Path | None = None) -> dict[str, Any]:
     """Manual entrypoint: refresh catalog and compile graph insights dashboard."""
     root = graph_root or resolve_graph_root()
+    prepare_matryca_runtime(graph_root=root, wiki_config=load_matryca_wiki_config())
     llm = InstructorLLMClient()
     run_bootstrap_harvest(root, llm=llm, incremental=True, rebuild_index=True)
     result = run_graph_insights_engine(root, llm=llm)
@@ -2943,6 +2971,7 @@ def start_daemon_foreground(graph_root: Path | None = None) -> None:
     reload_plumber_dotenv()
     configure_loguru()
     root = graph_root or resolve_graph_root()
+    prepare_matryca_runtime(graph_root=root, wiki_config=load_matryca_wiki_config())
     config = load_plumber_lint_config()
     if config.low_priority_mode and hasattr(os, "nice"):
         with contextlib.suppress(OSError):

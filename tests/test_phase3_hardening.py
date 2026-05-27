@@ -173,7 +173,10 @@ def test_compute_graph_analytics_human_links_never_underflow(tmp_path: Path) -> 
     assert metrics.ai_links == 999
 
 
-def test_get_state_self_heals_stale_ledger(graph_root: Path, auth_headers: dict[str, str]) -> None:
+def test_get_graph_analytics_self_heals_stale_ledger(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
     pages = graph_root / "pages"
     pages.mkdir(exist_ok=True)
     (pages / "Human.md").write_text("- note\n", encoding="utf-8")
@@ -182,13 +185,14 @@ def test_get_state_self_heals_stale_ledger(graph_root: Path, auth_headers: dict[
     save_daemon_state(graph_root, state)
 
     with TestClient(app) as client:
-        response = client.get("/api/state", headers=auth_headers)
+        state_response = client.get("/api/state", headers=auth_headers)
+        analytics_response = client.get("/api/graph-analytics", headers=auth_headers)
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["ai_links_injected"] == 0
-    assert payload["ai_blocks_healed"] == 1
-    assert payload["graph_analytics"]["human_links"] == 0
+    assert state_response.status_code == 200
+    assert state_response.json()["ai_links_injected"] == 100
+    assert analytics_response.status_code == 200
+    analytics = analytics_response.json()
+    assert analytics["human_links"] == 0
 
 
 def test_token_logger_log_turn_sanitizes_prompt(tmp_path: Path) -> None:

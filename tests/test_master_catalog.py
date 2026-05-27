@@ -347,3 +347,26 @@ def test_harvest_page_into_catalog_skips_empty_body(graph_root: Path) -> None:
     assert status == "skipped_empty"
     assert changed is False
     assert llm_called is False
+
+
+def test_bootstrap_harvest_reports_incremental_progress(graph_root: Path) -> None:
+    for index in range(3):
+        _write_page(graph_root, f"Page{index}", _indexed_body(summary=f"Summary {index}."))
+
+    snapshots: list[tuple[int, int]] = []
+
+    def on_progress(scanned: int, total: int, _last: Path | None) -> None:
+        snapshots.append((scanned, total))
+
+    metrics = run_bootstrap_harvest(
+        graph_root,
+        llm=None,
+        incremental=False,
+        phase1_strict=True,
+        progress_interval=1,
+        on_progress=on_progress,
+    )
+
+    assert metrics.scanned == 3
+    assert snapshots[0] == (0, 3)
+    assert snapshots[-1] == (3, 3)

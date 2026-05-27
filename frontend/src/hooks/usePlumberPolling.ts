@@ -8,11 +8,7 @@ import type {
   PlumberConfig,
   PlumberPollSnapshot,
 } from '../types/daemon'
-import {
-  hasGraphAnalyticsPayload,
-  normalizeDaemonState,
-  normalizeGraphAnalytics,
-} from '../types/daemon'
+import { normalizeDaemonState, normalizeGraphAnalytics } from '../types/daemon'
 import { MATRYCA_API_BASE, matrycaFetchJson } from '../utils/matrycaApiAuth'
 
 const POLL_INTERVAL_MS = 1000
@@ -79,25 +75,18 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
     }
 
     try {
-      const rawState = await matrycaFetchJson<DaemonStateResponse & { graph_analytics?: unknown }>(
+      const rawState = await matrycaFetchJson<DaemonStateResponse>(
         `${MATRYCA_API_BASE}/api/state`,
       )
-      let graphAnalytics: GraphAnalytics | undefined = hasGraphAnalyticsPayload(rawState.graph_analytics)
-        ? normalizeGraphAnalytics(rawState.graph_analytics)
-        : undefined
 
-      if (!graphAnalytics) {
-        try {
-          graphAnalytics = normalizeGraphAnalytics(
-            await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
-          )
-          if (mountedRef.current) {
-            setConnectionError(null)
-          }
-        } catch (error) {
-          console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
-          graphAnalytics = undefined
-        }
+      let graphAnalytics: GraphAnalytics | undefined
+      try {
+        graphAnalytics = normalizeGraphAnalytics(
+          await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
+        )
+      } catch (error) {
+        console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
+        graphAnalytics = undefined
       }
 
       const nextState = normalizeDaemonState({

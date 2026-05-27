@@ -68,21 +68,10 @@ def test_get_state_returns_daemon_checkpoint(
     assert payload["session_prompt_tokens"] == 100
     assert payload["session_completion_tokens"] == 25
     assert len(payload["files"]) == 1
-    analytics = payload["graph_analytics"]
-    assert analytics["total_pages"] == 2
-    assert analytics["human_pages"] == 2
-    assert analytics["human_links"] == 1
-    assert analytics["ai_pages"] == 0
-    assert analytics["ai_links"] == 0
-    assert analytics["ai_blocks_healed"] == 0
-    assert analytics["total_journals"] == 1
     assert payload["ai_pages_created"] == 0
     assert payload["ai_links_injected"] == 0
     assert payload["ai_blocks_healed"] == 0
-    assert analytics["alias_count"] == 1
-    assert analytics["semantic_links"] == 1
-    assert analytics["semantic_cache_mb"] == 0.0
-    assert analytics["context_acceleration"] == 0.0
+    assert "graph_analytics" not in payload
 
 
 def test_get_graph_analytics_returns_topology(
@@ -104,7 +93,7 @@ def test_get_graph_analytics_returns_topology(
     assert analytics["semantic_links"] == 1
 
 
-def test_get_state_survives_analytics_failure(
+def test_get_state_is_fast_without_graph_scan(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,
     auth_headers: dict[str, str],
@@ -120,7 +109,27 @@ def test_get_state_survives_analytics_failure(
         response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
-    analytics = response.json()["graph_analytics"]
+    assert response.json()["status"] == "idle"
+    assert "graph_analytics" not in response.json()
+
+
+def test_get_graph_analytics_survives_scan_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    save_daemon_state(graph_root, DaemonState(status="idle"))
+
+    def _boom(_root: Path, **_kwargs: object) -> None:
+        raise RuntimeError("graph scan failed")
+
+    monkeypatch.setattr("src.cli.ui_server.compute_graph_analytics", _boom)
+
+    with TestClient(app) as client:
+        response = client.get("/api/graph-analytics", headers=auth_headers)
+
+    assert response.status_code == 200
+    analytics = response.json()
     assert analytics["total_pages"] == 0
     assert analytics["context_acceleration"] == 0.0
     assert analytics["status"] == "offline"
@@ -141,11 +150,10 @@ def test_get_state_loads_graph_root_from_repo_dotenv(
     reload_plumber_dotenv()
 
     with TestClient(app) as client:
-        response = client.get("/api/state", headers=auth_headers)
+        response = client.get("/api/graph-analytics", headers=auth_headers)
 
     assert response.status_code == 200
-    analytics = response.json()["graph_analytics"]
-    assert analytics["total_pages"] == 1
+    assert response.json()["total_pages"] == 1
 
 
 def test_get_state_requires_graph_root(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -34,6 +35,8 @@ from .page_write_lock import page_rmw_lock
 
 _TYPE_LINE = re.compile(r"^\s*type::\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 _MARPA_DOMAINS = frozenset({"mappa", "area", "risorsa", "progetto", "archivio"})
+BOOTSTRAP_PROGRESS_INTERVAL = 50
+BootstrapProgressCallback = Callable[[int, int, Path | None], None]
 
 
 @dataclass
@@ -272,6 +275,8 @@ def run_bootstrap_harvest(
     rebuild_index: bool = True,
     phase1_strict: bool = False,
     config: PlumberLintConfig | None = None,
+    progress_interval: int = BOOTSTRAP_PROGRESS_INTERVAL,
+    on_progress: BootstrapProgressCallback | None = None,
 ) -> HarvestMetrics:
     """Scan the graph, populate the master catalog, and compile the master index."""
     root = graph_root.expanduser().resolve(strict=False)
@@ -290,7 +295,12 @@ def run_bootstrap_harvest(
     )
     metrics.pruned = catalog.prune_missing_pages()
 
+    total_pages = len(paths)
+    if on_progress is not None:
+        on_progress(0, total_pages, None)
+
     changed = metrics.pruned > 0
+    interval = max(1, progress_interval)
     for page_path in paths:
         metrics.scanned += 1
         try:
@@ -314,6 +324,11 @@ def run_bootstrap_harvest(
         elif status == "skipped_empty":
             metrics.skipped_empty += 1
         changed = changed or page_changed
+
+        if on_progress is not None and (
+            metrics.scanned % interval == 0 or metrics.scanned == total_pages
+        ):
+            on_progress(metrics.scanned, total_pages, page_path)
 
     _refresh_orphan_flags(root, catalog)
 
@@ -352,6 +367,8 @@ def run_incremental_catalog_refresh(
 
 
 __all__ = [
+    "BOOTSTRAP_PROGRESS_INTERVAL",
+    "BootstrapProgressCallback",
     "HarvestMetrics",
     "harvest_page_into_catalog",
     "run_bootstrap_harvest",

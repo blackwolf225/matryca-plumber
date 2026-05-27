@@ -68,7 +68,7 @@ export function GraphInsightsCard({ state }: GraphInsightsCardProps) {
   return (
     <section className="panel flex flex-col gap-4 p-4 shadow-sm md:p-6">
       {!analytics ? (
-        <p className="text-xs text-theme-muted">Loading graph telemetry from /api/state…</p>
+        <p className="text-xs text-theme-muted">Loading graph telemetry from /api/graph-analytics…</p>
       ) : (
         <>
           {telemetryMissing && (
