@@ -15,3 +15,10 @@ export interface PreflightResponse {
   env_created_from_example: boolean
   checks: PreflightCheck[]
 }
+
+export interface ProvisionL1Response {
+  ok: boolean
+  l1_path: string
+  created: boolean
+  message: string
+}

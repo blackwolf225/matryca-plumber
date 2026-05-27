@@ -11,14 +11,25 @@ import type {
 import { normalizeDaemonState, normalizeGraphAnalytics } from '../types/daemon'
 import { MATRYCA_API_BASE, matrycaFetchJson } from '../utils/matrycaApiAuth'
 
-const POLL_INTERVAL_MS = 1000
+/** Base interval between telemetry poll cycles (distributed requests within each cycle). */
+const POLL_CYCLE_MS = 4000
+/** Delay between sequential API calls inside one cycle to avoid request bursts. */
+const POLL_STAGGER_MS = 1200
+/** Fetch graph analytics every N cycles (~16s at 4s/cycle). */
+const GRAPH_ANALYTICS_EVERY_N_CYCLES = 4
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
 
 /** Treat daemon start responses that should enable live UI polling. */
 function isStartAccepted(result: DaemonControlResponse): boolean {
   return result.ok || result.code === 'already_running'
 }
 
-export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSnapshot {
+export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot {
   const [state, setState] = useState<DaemonStateResponse | null>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [config, setConfig] = useState<PlumberConfig | null>(null)
@@ -30,17 +41,20 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
   const [engineError, setEngineError] = useState<string | null>(null)
 
   const stateRef = useRef<DaemonStateResponse | null>(null)
+  const graphAnalyticsRef = useRef<GraphAnalytics | undefined>(undefined)
   const logsRef = useRef<string[]>([])
   const mountedRef = useRef(true)
-  const intervalRef = useRef<number | null>(null)
+  const cycleTimeoutRef = useRef<number | null>(null)
+  const cycleGenerationRef = useRef(0)
+  const pollCycleCountRef = useRef(0)
   const frozenRef = useRef(true)
   /** True after the operator clicks Start — keeps polling even while status is still ``stopped``. */
   const telemetryLiveRef = useRef(false)
 
-  const clearPolling = useCallback(() => {
-    if (intervalRef.current !== null) {
-      window.clearInterval(intervalRef.current)
-      intervalRef.current = null
+  const clearCycleTimer = useCallback(() => {
+    if (cycleTimeoutRef.current !== null) {
+      window.clearTimeout(cycleTimeoutRef.current)
+      cycleTimeoutRef.current = null
     }
   }, [])
 
@@ -50,54 +64,38 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
       frozenRef.current = !live
       setFrozen(!live)
       if (!live) {
-        clearPolling()
+        clearCycleTimer()
+        cycleGenerationRef.current += 1
       }
     },
-    [clearPolling],
+    [clearCycleTimer],
   )
 
-  const poll = useCallback(async () => {
-    let stateOk = false
-    let logsOk = false
-    let configOk = false
-
-    try {
-      const refreshedConfig = await matrycaFetchJson<PlumberConfig>(`${MATRYCA_API_BASE}/api/config`)
-      if (mountedRef.current) {
-        setConfig(refreshedConfig)
-        setConnectionError(null)
-        configOk = true
-      }
-    } catch (error) {
-      if (!mountedRef.current) return
-      console.warn('[Matryca Plumber] poll: /api/config failed', error)
-      setConnectionError(error instanceof Error ? error.message : 'config request failed')
+  const applyConnectionFromPoll = useCallback((stateOk: boolean, logsOk: boolean) => {
+    if (!mountedRef.current) return
+    if (stateOk || logsOk) {
+      setConnectionStatus('live')
+      setLastUpdatedAt(new Date())
+    } else if (!stateRef.current) {
+      setConnectionStatus('offline')
+    } else {
+      setConnectionStatus('connecting')
     }
+  }, [])
 
+  const pollState = useCallback(async (): Promise<boolean> => {
     try {
       const rawState = await matrycaFetchJson<DaemonStateResponse>(
         `${MATRYCA_API_BASE}/api/state`,
       )
-
-      let graphAnalytics: GraphAnalytics | undefined
-      try {
-        graphAnalytics = normalizeGraphAnalytics(
-          await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
-        )
-      } catch (error) {
-        console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
-        graphAnalytics = undefined
-      }
-
       const nextState = normalizeDaemonState({
         ...rawState,
-        graph_analytics: graphAnalytics,
+        graph_analytics: graphAnalyticsRef.current,
       })
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       stateRef.current = nextState
       setState(nextState)
       setConnectionError(null)
-      stateOk = true
 
       if (
         frozenRef.current
@@ -108,77 +106,150 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         frozenRef.current = false
         setFrozen(false)
       }
+      return true
     } catch (error) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       console.warn('[Matryca Plumber] poll: /api/state failed', error)
       setConnectionError(error instanceof Error ? error.message : 'state request failed')
+      return false
     }
+  }, [])
 
-    if (frozenRef.current) {
-      if (!mountedRef.current) return
-      if (stateOk || configOk) {
-        setConnectionStatus('live')
-        setLastUpdatedAt(new Date())
-      } else if (!stateRef.current) {
-        setConnectionStatus('offline')
-      } else {
-        setConnectionStatus('connecting')
+  const pollGraphAnalytics = useCallback(async (): Promise<boolean> => {
+    try {
+      const graphAnalytics = normalizeGraphAnalytics(
+        await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
+      )
+      if (!mountedRef.current) return false
+      graphAnalyticsRef.current = graphAnalytics
+      if (stateRef.current) {
+        const merged = normalizeDaemonState({
+          ...stateRef.current,
+          graph_analytics: graphAnalytics,
+        })
+        stateRef.current = merged
+        setState(merged)
       }
-      return
+      setConnectionError(null)
+      return true
+    } catch (error) {
+      if (!mountedRef.current) return false
+      console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
+      return false
     }
+  }, [])
 
+  const pollLogs = useCallback(async (): Promise<boolean> => {
     try {
       const nextLogs = await matrycaFetchJson<string[]>(`${MATRYCA_API_BASE}/api/logs`)
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       const cleaned = nextLogs.filter((line) => line.trim().length > 0)
       logsRef.current = cleaned
       setLogs(cleaned)
       setConnectionError(null)
-      logsOk = true
+      return true
     } catch (error) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current) return false
       console.warn('[Matryca Plumber] poll: /api/logs failed', error)
       setConnectionError(error instanceof Error ? error.message : 'logs request failed')
-    }
-
-    if (!mountedRef.current) return
-    if (stateOk || logsOk || configOk) {
-      setConnectionStatus('live')
-      setLastUpdatedAt(new Date())
-    } else if (!stateRef.current) {
-      setConnectionStatus('offline')
-    } else {
-      setConnectionStatus('connecting')
+      return false
     }
   }, [])
 
-  const startPollingLoop = useCallback(() => {
-    clearPolling()
-    intervalRef.current = window.setInterval(() => {
-      void poll()
-    }, intervalMs)
-  }, [clearPolling, intervalMs, poll])
+  /** One-shot state fetch when telemetry is frozen (no logs/analytics). */
+  const pollFrozenSnapshot = useCallback(async () => {
+    const stateOk = await pollState()
+    applyConnectionFromPoll(stateOk, false)
+  }, [applyConnectionFromPoll, pollState])
+
+  /** Immediate full refresh (Start/Stop/mount). */
+  const pollFull = useCallback(async () => {
+    const stateOk = await pollState()
+    let logsOk = false
+    let analyticsOk = false
+
+    if (!frozenRef.current) {
+      await pollGraphAnalytics().then((ok) => {
+        analyticsOk = ok
+      })
+      logsOk = await pollLogs()
+    }
+
+    applyConnectionFromPoll(stateOk, logsOk || analyticsOk)
+  }, [applyConnectionFromPoll, pollGraphAnalytics, pollLogs, pollState])
+
+  const runTelemetryCycleRef = useRef<(generation: number) => Promise<void>>(async () => {})
+
+  const runTelemetryCycle = useCallback(
+    async (generation: number) => {
+      if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+      if (frozenRef.current) return
+
+      const cycleStartedAt = Date.now()
+      pollCycleCountRef.current += 1
+      const cycleIndex = pollCycleCountRef.current
+      const fetchAnalytics = cycleIndex % GRAPH_ANALYTICS_EVERY_N_CYCLES === 0
+
+      const stateOk = await pollState()
+      if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+
+      await sleep(POLL_STAGGER_MS)
+      if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+
+      const logsOk = await pollLogs()
+      if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+
+      let analyticsOk = false
+      if (fetchAnalytics) {
+        await sleep(POLL_STAGGER_MS)
+        if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+        analyticsOk = await pollGraphAnalytics()
+      }
+
+      applyConnectionFromPoll(stateOk, logsOk || analyticsOk)
+
+      if (!mountedRef.current || generation !== cycleGenerationRef.current) return
+      const elapsed = Date.now() - cycleStartedAt
+      const delay = Math.max(0, cycleMs - elapsed)
+      cycleTimeoutRef.current = window.setTimeout(() => {
+        void runTelemetryCycleRef.current(generation)
+      }, delay)
+    },
+    [applyConnectionFromPoll, cycleMs, pollGraphAnalytics, pollLogs, pollState],
+  )
+
+  runTelemetryCycleRef.current = runTelemetryCycle
+
+  const startTelemetryLoop = useCallback(() => {
+    clearCycleTimer()
+    const generation = cycleGenerationRef.current
+    void runTelemetryCycle(generation)
+  }, [clearCycleTimer, runTelemetryCycle])
 
   useEffect(() => {
     mountedRef.current = true
-    void poll()
+    void pollFrozenSnapshot()
     return () => {
       mountedRef.current = false
-      clearPolling()
+      cycleGenerationRef.current += 1
+      clearCycleTimer()
     }
-  }, [clearPolling, poll])
+  }, [clearCycleTimer, pollFrozenSnapshot])
 
   useEffect(() => {
     if (frozen) {
-      clearPolling()
+      clearCycleTimer()
+      cycleGenerationRef.current += 1
       return
     }
-    void poll()
-    startPollingLoop()
+    pollCycleCountRef.current = 0
+    void pollFull()
+    startTelemetryLoop()
     return () => {
-      clearPolling()
+      cycleGenerationRef.current += 1
+      clearCycleTimer()
     }
-  }, [clearPolling, frozen, poll, startPollingLoop])
+  }, [clearCycleTimer, frozen, pollFull, startTelemetryLoop])
 
   const refreshConfig = useCallback(async () => {
     try {
@@ -187,12 +258,21 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         setConfig(payload)
         setConnectionError(null)
       }
+      return payload
     } catch (error) {
       console.warn('[Matryca Plumber] refreshConfig: /api/config failed', error)
       if (mountedRef.current) {
         setConfig(null)
         setConnectionError(error instanceof Error ? error.message : 'config request failed')
       }
+      return null
+    }
+  }, [])
+
+  const applyConfig = useCallback((payload: PlumberConfig) => {
+    if (mountedRef.current) {
+      setConfig(payload)
+      setConnectionError(null)
     }
   }, [])
 
@@ -212,7 +292,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         return
       }
       setTelemetryLive(true)
-      await poll()
+      await pollFull()
     } catch (error) {
       if (mountedRef.current) {
         setEngineError(error instanceof Error ? error.message : 'Failed to start engine')
@@ -222,7 +302,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         setEngineBusy(false)
       }
     }
-  }, [poll, setTelemetryLive])
+  }, [pollFull, setTelemetryLive])
 
   const stopEngine = useCallback(async () => {
     setEngineBusy(true)
@@ -236,7 +316,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         return
       }
       setTelemetryLive(false)
-      await poll()
+      await pollFrozenSnapshot()
     } catch (error) {
       if (mountedRef.current) {
         setEngineError(error instanceof Error ? error.message : 'Failed to stop engine')
@@ -246,7 +326,7 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
         setEngineBusy(false)
       }
     }
-  }, [poll, setTelemetryLive])
+  }, [pollFrozenSnapshot, setTelemetryLive])
 
   const saveConfig = useCallback(async (payload: PlumberConfig): Promise<PlumberConfig | null> => {
     try {
@@ -281,5 +361,6 @@ export function usePlumberPolling(intervalMs = POLL_INTERVAL_MS): PlumberPollSna
     stopEngine,
     saveConfig,
     refreshConfig,
+    applyConfig,
   }
 }

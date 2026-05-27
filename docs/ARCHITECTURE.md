@@ -47,7 +47,7 @@ Persistent artifacts at the graph root include `.matryca_daemon_state.json` (che
 A **monolithic** Uvicorn process serves:
 
 - **REST API** — `/api/state`, `/api/logs`, `/api/config`, daemon control, LM model discovery (SSRF-hardened)
-- **Static SPA** — `frontend/dist/` built from Vite; polls at **1 Hz** via `usePlumberPolling`
+- **Static SPA** — `frontend/dist/` built from Vite; polls on a **4s distributed cycle** via `usePlumberPolling` (`/api/state` every cycle, `/api/logs` staggered, `/api/graph-analytics` ~every 16s)
 - **Zero-Trust auth** — `X-Matryca-Token` on protected routes (`ui_auth.py`)
 
 The UI never becomes a second source of truth: it reads daemon checkpoints and live graph scans; configuration writes go to the repo **`.env`** atomically and are picked up by `reload_plumber_dotenv()` on the next daemon sync cycle.
@@ -90,7 +90,7 @@ graph TD
   subgraph ui["Sovereign UI"]
     REACT["React SPA\nfrontend/dist"]
     API["FastAPI ui_server.py\n:8500 loopback"]
-    REACT <-->|"1 Hz · X-Matryca-Token"| API
+    REACT <-->|"4s cycle · X-Matryca-Token"| API
   end
 
   subgraph mcp["MCP sidecar optional"]
@@ -242,7 +242,7 @@ graph LR
 
 ## Runtime bootstrap
 
-Every Matryca surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **`prepare_matryca_runtime()`** in `src/utils/runtime_bootstrap.py` after environment load and **before** graph processing. The helper is idempotent.
+Every Matryca Plumber surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **`prepare_matryca_runtime()`** in `src/utils/runtime_bootstrap.py` after environment load and **before** graph processing. The helper is idempotent.
 
 | Provisioned at startup | Location | Motivation |
 |------------------------|----------|------------|
@@ -264,7 +264,7 @@ Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bo
 
 All page-level metadata mutations route through **`page_properties.py`**, which computes the **frontmatter span** at the top of the file and injects raw `key:: value` lines **without** promoting them to bullets. Block-level surgery uses **`property_line_edit.py`** scoped to subtrees anchored at `id::`, intersecting **`compute_page_protected_line_indices`** so fenced code and query blocks are never touched.
 
-The adapter and writer stack delegate tree shape to **`logseq-matryca-parser`**; Matryca does not maintain a competing full-file Markdown AST.
+The adapter and writer stack delegate tree shape to **`logseq-matryca-parser`**; Matryca Plumber does not maintain a competing full-file Markdown AST.
 
 ### Atomic `.env` writes (Sovereign UI)
 

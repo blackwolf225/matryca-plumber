@@ -53,7 +53,11 @@ from ..config import load_matryca_wiki_config
 from ..graph.graph_analytics import compute_graph_analytics
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
+from ..agent.l1_memory import default_matryca_l1_directory_for_graph
+from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
+from ..utils.env_placeholders import is_template_env_path
 from ..utils.preflight import run_preflight_checks
+from ..utils.provision_l1 import provision_matryca_l1_sibling
 from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 from ..utils.updater import UpdateCheckResult, check_for_updates, update_check_to_dict
@@ -89,6 +93,13 @@ class FileStateResponse(BaseModel):
     error: str | None = None
 
 
+class BootstrapRecentEntryResponse(BaseModel):
+    """Recent Phase 1 catalog page for control-room pills."""
+
+    harvest: Literal["regex", "llm", "skipped", "error"]
+    processed_at: str
+
+
 class GraphAnalyticsResponse(BaseModel):
     """Live graph topology and GraphRAG telemetry for the control room."""
 
@@ -100,6 +111,7 @@ class GraphAnalyticsResponse(BaseModel):
     ai_pages: int = 0
     ai_links: int = 0
     ai_blocks_healed: int = 0
+    page_summaries: int = 0
     alias_count: int = 0
     semantic_links: int = 0
     semantic_cache_mb: float = 0.0
@@ -129,6 +141,8 @@ class DaemonStateResponse(BaseModel):
     ai_links_injected: int = 0
     ai_blocks_healed: int = 0
     hygiene_corrections: int = 0
+    page_summaries_created: int = 0
+    bootstrap_recent: dict[str, BootstrapRecentEntryResponse] = Field(default_factory=dict)
 
     @classmethod
     def from_daemon_state(cls, state: DaemonState) -> DaemonStateResponse:
@@ -242,6 +256,21 @@ class PreflightResponse(BaseModel):
     ready: bool
     env_created_from_example: bool = False
     checks: list[PreflightCheckResponse] = Field(default_factory=list)
+
+
+class ProvisionL1Response(BaseModel):
+    """Result of onboarding ``matryca-l1/`` provisioning beside the configured vault."""
+
+    ok: bool
+    l1_path: str
+    created: bool
+    message: str
+
+
+class GraphPathUpdateRequest(BaseModel):
+    """Pre-flight onboarding: update ``LOGSEQ_GRAPH_PATH`` only."""
+
+    logseq_graph_path: str
 
 
 def assert_safe_lm_proxy_url(base_url: str) -> str:
@@ -397,7 +426,12 @@ class _UiRateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Any:
         path = request.url.path
-        if not path.startswith("/api/") or path in {"/api/health", "/api/auth/session"}:
+        if not path.startswith("/api/") or path in {
+            "/api/health",
+            "/api/auth/session",
+            "/api/daemon/start",
+            "/api/daemon/stop",
+        }:
             return await call_next(request)
         token = request.headers.get("x-matryca-token")
         limit = (
@@ -463,20 +497,11 @@ def _redact_log_line(line: str) -> str:
     return sanitize_for_console(line)
 
 
-def _update_dotenv(payload: PlumberConfigResponse) -> None:
-    """Persist configuration updates to ``.env`` and the active process environment."""
-    env_path = _resolve_dotenv_path()
-    validated_lm_url = assert_safe_lm_proxy_url(payload.lm_studio_url)
-    updates: dict[str, str] = {}
-    for field, env_key in _ENV_KEY_MAP.items():
-        raw_value = validated_lm_url if field == "lm_studio_url" else getattr(payload, field)
-        updates[env_key] = serialize_plumber_config_field_for_dotenv(field, raw_value)
-    updates["MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS"] = (
-        "false" if payload.enable_inline_semantic_corrections else "true"
-    )
-
-    if env_path.is_file():
-        lines = env_path.read_text(encoding="utf-8").splitlines()
+def _apply_dotenv_updates(updates: dict[str, str], *, env_path: Path | None = None) -> Path:
+    """Merge ``updates`` into the repo ``.env`` and refresh ``os.environ``."""
+    target = env_path or _resolve_dotenv_path()
+    if target.is_file():
+        lines = target.read_text(encoding="utf-8").splitlines()
     else:
         example_path = _REPO_ROOT / ".env.example"
         lines = (
@@ -502,10 +527,24 @@ def _update_dotenv(payload: PlumberConfigResponse) -> None:
         if key not in seen:
             new_lines.append(f"{key}={format_dotenv_value(value)}")
 
-    _atomic_write_text(env_path, "\n".join(new_lines).rstrip() + "\n")
+    _atomic_write_text(target, "\n".join(new_lines).rstrip() + "\n")
     for key, value in updates.items():
         os.environ[key] = value
-    load_dotenv(env_path, override=True)
+    load_dotenv(target, override=True)
+    return target
+
+
+def _update_dotenv(payload: PlumberConfigResponse) -> None:
+    """Persist configuration updates to ``.env`` and the active process environment."""
+    validated_lm_url = assert_safe_lm_proxy_url(payload.lm_studio_url)
+    updates: dict[str, str] = {}
+    for field, env_key in _ENV_KEY_MAP.items():
+        raw_value = validated_lm_url if field == "lm_studio_url" else getattr(payload, field)
+        updates[env_key] = serialize_plumber_config_field_for_dotenv(field, raw_value)
+    updates["MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS"] = (
+        "false" if payload.enable_inline_semantic_corrections else "true"
+    )
+    _apply_dotenv_updates(updates)
 
 
 def _ensure_graph_root_env_loaded() -> None:
@@ -561,11 +600,22 @@ def _heal_daemon_state_in_memory(graph_root: Path, state: DaemonState) -> None:
     heal_daemon_state_ledger(graph_root, state)
 
 
+def _daemon_status_for_api(graph_root: Path, state: DaemonState) -> DaemonStatusValue:
+    """Expose ``stopped`` unless a live Plumber PID is present (UI Start gate)."""
+    pid = read_pid_file(graph_root)
+    if pid is None or not is_plumber_process(pid):
+        return "stopped"
+    if state.status in {"running", "idle", "error"}:
+        return state.status
+    return "idle"
+
+
 def _safe_graph_analytics(
     graph_root: Path,
     *,
     ai_links_injected: int = 0,
     ai_blocks_healed: int = 0,
+    page_summaries_created: int = 0,
 ) -> GraphAnalyticsResponse:
     """Compute graph telemetry without failing the daemon state endpoint."""
     try:
@@ -574,6 +624,7 @@ def _safe_graph_analytics(
                 graph_root,
                 ai_links_injected=ai_links_injected,
                 ai_blocks_healed=ai_blocks_healed,
+                page_summaries_created=page_summaries_created,
             ).to_dict()
         )
     except Exception as exc:
@@ -598,6 +649,43 @@ def get_preflight(_: None = Depends(_require_ui_token)) -> PreflightResponse:
     return PreflightResponse.model_validate(report.to_dict())
 
 
+@app.post("/api/provision-l1", response_model=ProvisionL1Response)
+def post_provision_l1(_: None = Depends(_require_ui_token)) -> ProvisionL1Response:
+    """Create sibling ``matryca-l1/`` for the configured Logseq graph (onboarding)."""
+    graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+    if not graph_raw or is_template_env_path(graph_raw):
+        raise HTTPException(
+            status_code=422,
+            detail="Set and save a valid Logseq graph path before provisioning L1 memory.",
+        )
+    try:
+        graph_root = validate_logseq_graph_path_for_config(graph_raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    planned = default_matryca_l1_directory_for_graph(graph_root)
+    existed_before = planned.is_dir()
+    try:
+        l1_dir = provision_matryca_l1_sibling(graph_root=graph_root, repo_root=_REPO_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to provision matryca-l1: {exc}") from exc
+
+    created = not existed_before
+    message = (
+        f"Created matryca-l1 at {l1_dir}"
+        if created
+        else f"L1 memory already present at {l1_dir}"
+    )
+    return ProvisionL1Response(
+        ok=True,
+        l1_path=str(l1_dir),
+        created=created,
+        message=message,
+    )
+
+
 @app.get("/api/auth/session", response_model=AuthSessionResponse)
 def get_auth_session(request: Request) -> AuthSessionResponse:
     """Return the local UI bearer token for loopback clients only."""
@@ -613,6 +701,7 @@ def _graph_analytics_for_graph(graph_root: Path) -> GraphAnalyticsResponse:
         graph_root,
         ai_links_injected=state.ai_links_injected,
         ai_blocks_healed=state.ai_blocks_healed,
+        page_summaries_created=state.page_summaries_created,
     )
 
 
@@ -628,7 +717,8 @@ def get_state(_: None = Depends(_require_ui_token)) -> DaemonStateResponse:
     """Return the current daemon checkpoint from ``.matryca_daemon_state.json`` (no graph scan)."""
     graph_root = _resolve_graph_root_or_raise()
     state = load_daemon_state(graph_root)
-    return DaemonStateResponse.from_daemon_state(state)
+    response = DaemonStateResponse.from_daemon_state(state)
+    return response.model_copy(update={"status": _daemon_status_for_api(graph_root, state)})
 
 
 @app.get("/api/logs", response_model=list[str])
@@ -674,6 +764,30 @@ def get_lm_models(
         resolved = load_plumber_lint_config().lm_base_url
     safe_base_url = _validate_lm_models_base_url(resolved)
     return _fetch_lm_studio_models(safe_base_url)
+
+
+@app.post("/api/config/graph-path", response_model=PlumberConfigResponse)
+@app.patch("/api/config/graph-path", response_model=PlumberConfigResponse)
+def save_graph_path(
+    payload: GraphPathUpdateRequest,
+    _: None = Depends(_require_ui_token),
+) -> PlumberConfigResponse:
+    """Persist only ``LOGSEQ_GRAPH_PATH`` (pre-flight onboarding; avoids full-settings POST)."""
+    try:
+        validated_path = serialize_plumber_config_field_for_dotenv(
+            "logseq_graph_path",
+            payload.logseq_graph_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        _apply_dotenv_updates({"LOGSEQ_GRAPH_PATH": validated_path})
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
+    reload_plumber_dotenv(override=True)
+    graph_root = validate_logseq_graph_path_for_config(validated_path)
+    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
 
 
 @app.post("/api/config", response_model=PlumberConfigResponse)

@@ -17,6 +17,7 @@ from .alias_index import (
 )
 from .generational_cache import cached_build_alias_index
 from .link_tag_hop import _WIKILINK
+from .master_catalog import MATRYCA_GENERATED_INDEX_TITLES, load_master_catalog
 from .page_properties import is_plumber_authored_page
 
 _CACHE_DIRNAME = ".matryca_semantic_cache"
@@ -32,6 +33,7 @@ class TelemetryLedgerSnapshot:
     ai_links_injected: int
     ai_blocks_healed: int
     ai_pages_created: int
+    page_summaries_created: int
     healed: bool = False
 
 
@@ -47,6 +49,7 @@ class GraphAnalytics:
     ai_pages: int = 0
     ai_links: int = 0
     ai_blocks_healed: int = 0
+    page_summaries: int = 0
     alias_count: int = 0
     semantic_links: int = 0
     semantic_cache_mb: float = 0.0
@@ -63,6 +66,7 @@ class GraphAnalytics:
             "ai_pages": self.ai_pages,
             "ai_links": self.ai_links,
             "ai_blocks_healed": self.ai_blocks_healed,
+            "page_summaries": self.page_summaries,
             "alias_count": self.alias_count,
             "semantic_links": self.semantic_links,
             "semantic_cache_mb": self.semantic_cache_mb,
@@ -95,6 +99,20 @@ def _count_journals(graph_root: Path) -> int:
         1
         for path in journals.rglob("*.md")
         if path.is_file() and is_scannable_graph_markdown(path, graph_root)
+    )
+
+
+def _count_catalog_summaries(graph_root: Path) -> int:
+    """Count master-catalog rows with a non-empty Phase 1 summary."""
+    root = graph_root.expanduser().resolve(strict=False)
+    try:
+        catalog = load_master_catalog(root)
+    except Exception:
+        return 0
+    return sum(
+        1
+        for title, entry in catalog.pages.items()
+        if title not in MATRYCA_GENERATED_INDEX_TITLES and entry.summary.strip()
     )
 
 
@@ -171,6 +189,7 @@ def reconcile_telemetry_ledger(
     ai_links_injected: int,
     ai_blocks_healed: int,
     ai_pages_created: int = 0,
+    page_summaries_created: int = 0,
 ) -> TelemetryLedgerSnapshot:
     """Clamp ledger counters when mass-deletions drop absolute graph totals below them."""
     root = graph_root.expanduser().resolve(strict=False)
@@ -182,6 +201,8 @@ def reconcile_telemetry_ledger(
     links = ai_links_injected
     blocks = ai_blocks_healed
     pages = ai_pages_created
+    summaries = page_summaries_created
+    catalog_summaries = _count_catalog_summaries(root)
 
     if links > total_links:
         links = total_links
@@ -192,11 +213,15 @@ def reconcile_telemetry_ledger(
     if pages > total_pages:
         pages = total_pages
         healed = True
+    if summaries > catalog_summaries and catalog_summaries > 0:
+        summaries = catalog_summaries
+        healed = True
 
     return TelemetryLedgerSnapshot(
         ai_links_injected=links,
         ai_blocks_healed=blocks,
         ai_pages_created=pages,
+        page_summaries_created=summaries,
         healed=healed,
     )
 
@@ -218,8 +243,11 @@ def _compute_graph_analytics_uncached(
     *,
     ai_links_injected: int = 0,
     ai_blocks_healed: int = 0,
+    page_summaries_created: int = 0,
 ) -> GraphAnalytics:
     root = graph_root.expanduser().resolve(strict=False)
+    catalog_summaries = _count_catalog_summaries(root)
+    page_summaries = max(catalog_summaries, page_summaries_created)
     total_pages_scanned = len(iter_scannable_pages_markdown(root))
     current_ai_pages = _count_current_ai_pages(root)
     total_links_scanned = _count_links_scanned(root)
@@ -235,6 +263,7 @@ def _compute_graph_analytics_uncached(
         ai_pages=current_ai_pages,
         ai_links=ai_links_injected,
         ai_blocks_healed=ai_blocks_healed,
+        page_summaries=page_summaries,
         alias_count=len(alias_index.alias_to_page),
         semantic_links=total_links_scanned,
         semantic_cache_mb=_semantic_cache_size_mb(root),
@@ -265,6 +294,7 @@ def compute_graph_analytics(
     *,
     ai_links_injected: int = 0,
     ai_blocks_healed: int = 0,
+    page_summaries_created: int = 0,
 ) -> GraphAnalytics:
     """Return graph telemetry, reusing a short-lived in-process cache for UI polling."""
     root = graph_root.expanduser().resolve(strict=False)
@@ -284,7 +314,10 @@ def compute_graph_analytics(
             ai_blocks_healed=ai_blocks_healed,
         )
 
-    key = f"{root}|{page_count}|{revision_ns}|{ai_links_injected}|{ai_blocks_healed}"
+    key = (
+        f"{root}|{page_count}|{revision_ns}|{ai_links_injected}|"
+        f"{ai_blocks_healed}|{page_summaries_created}"
+    )
     now = time.monotonic()
     cached = _analytics_cache.get(key)
     if cached is not None and now - cached[0] < _ANALYTICS_TTL_SECONDS:
@@ -295,6 +328,7 @@ def compute_graph_analytics(
             root,
             ai_links_injected=ai_links_injected,
             ai_blocks_healed=ai_blocks_healed,
+            page_summaries_created=page_summaries_created,
         )
     except (OSError, FileNotFoundError) as exc:
         logger.error("Graph analytics offline during scan of {}: {}", root, exc)

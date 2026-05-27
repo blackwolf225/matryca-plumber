@@ -1,4 +1,4 @@
-# Ingest (Matryca MCP)
+# Ingest (Matryca Plumber MCP)
 
 **Source of truth for the living roadmap:** [`ROADMAP_LLM_WIKI.md`](../../ROADMAP_LLM_WIKI.md)
 

@@ -1,6 +1,6 @@
 # Security policy
 
-**Matryca Plumber** is a **local-first autonomous background AI daemon** (with an optional MCP sidecar for tool hosts) that can **read and write Markdown files** under your Logseq graph path and uses **credentials** (for example `LOGSEQ_API_TOKEN` and any LLM provider keys in your environment or host). Treating those surfaces carefully is a top priority for the maintainers.
+**Matryca Plumber** (developed by Marco Porcellato · [Matryca.ai](https://matryca.ai)) is a **local-first autonomous background AI daemon** (with an optional MCP sidecar for tool hosts) that can **read and write Markdown files** under your Logseq graph path and uses **credentials** (for example `LOGSEQ_API_TOKEN` and any LLM provider keys in your environment or host). Treating those surfaces carefully is a top priority for the maintainers.
 
 ## Please do not file public issues for vulnerabilities
 

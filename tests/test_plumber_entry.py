@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
-from src.plumber_entry import _mcp_stdio_enabled, _normalize_cli_argv
+from src.plumber_entry import _mcp_stdio_enabled, _normalize_cli_argv, main as plumber_entry_main
 
 
 @pytest.mark.parametrize(
@@ -31,3 +33,32 @@ def test_mcp_stdio_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_mcp_stdio_enabled_when_flag_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MATRYCA_MCP_ENABLED", "true")
     assert _mcp_stdio_enabled() is True
+
+
+def test_plumber_entry_status_opens_ui_without_starting_daemon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``uvx … matryca-plumber status`` must match ``matryca plumber status`` (UI only)."""
+    ui_calls: list[bool] = []
+    start_calls: list[bool] = []
+
+    def _run_ui_server() -> None:
+        ui_calls.append(True)
+
+    monkeypatch.setattr("src.cli.run_ui_server", _run_ui_server)
+    monkeypatch.setattr(
+        "src.cli.start_daemon_detached",
+        lambda *_args, **_kwargs: start_calls.append(True) or {"ok": True},
+    )
+    monkeypatch.setattr(
+        "src.cli.start_daemon_foreground",
+        lambda *_args, **_kwargs: start_calls.append(True),
+    )
+    monkeypatch.setattr(sys, "argv", ["matryca-plumber", "status"])
+
+    with pytest.raises(SystemExit) as exc:
+        plumber_entry_main()
+
+    assert exc.value.code == 0
+    assert ui_calls == [True]
+    assert start_calls == []

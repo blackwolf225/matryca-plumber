@@ -1,4 +1,4 @@
-# L1 / L2 routing (Matryca)
+# L1 / L2 routing (Matryca Plumber)
 
 **Roadmap:** [`ROADMAP_LLM_WIKI.md`](../../ROADMAP_LLM_WIKI.md)  
 **Bootstrap:** [`runtime-bootstrap.md`](runtime-bootstrap.md) (directory creation, `README.md` vs content files)

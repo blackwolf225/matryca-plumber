@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 from ..agent.plumber_config import PlumberLintConfig, apply_thermal_pause_bootstrap
+from .bootstrap_stop import BootstrapHarvestStopped
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 
 _ROOT_BULLET = re.compile(r"^[-*+]\s+")
@@ -103,17 +105,20 @@ def mapreduce_harvest_page_summary(
     page_path: Path | None = None,
     graph_root: Path | None = None,
     config: PlumberLintConfig,
+    stop_event: threading.Event | None = None,
 ) -> BootstrapSummaryResult:
     """Harvest a page summary via structural MapReduce when content exceeds the trigger."""
 
     def _harvest_turn(chunk_text: str) -> BootstrapSummaryResult:
+        if stop_event is not None and stop_event.is_set():
+            raise BootstrapHarvestStopped
         result = llm.harvest_page_summary(
             page_title,
             chunk_text,
             page_path=page_path,
             graph_root=graph_root,
         )
-        apply_thermal_pause_bootstrap(config)
+        apply_thermal_pause_bootstrap(config, stop_event=stop_event)
         return result
 
     if len(content) <= config.mapreduce_trigger_chars:
@@ -122,6 +127,8 @@ def mapreduce_harvest_page_summary(
     chunks = chunk_outliner_content(content, max_chunk_chars=config.mapreduce_chunk_chars)
     partials: list[BootstrapSummaryResult] = []
     for chunk in chunks:
+        if stop_event is not None and stop_event.is_set():
+            raise BootstrapHarvestStopped
         partial = _harvest_turn(chunk)
         reset_history = getattr(llm, "reset_execution_history", None)
         if reset_history is not None:

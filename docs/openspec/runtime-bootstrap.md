@@ -19,7 +19,7 @@ Matryca Plumber provisions **directories and optional config files** before harv
 
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
 
-On first startup, if repo **`.env`** is missing and **`.env.example`** exists, Matryca copies the example to `.env` (logged at INFO) before loading environment variables.
+On first startup, if repo **`.env`** is missing and **`.env.example`** exists, Matryca Plumber copies the example to `.env` (logged at INFO) before loading environment variables.
 
 ---
 
@@ -85,7 +85,7 @@ or `memory_path` in `matryca-wiki.yml`. Bootstrap will create that path and seed
 | Artifact | Reason |
 |----------|--------|
 | Repo **`.env`** (pre-existing) | Never overwritten; auto-created from `.env.example` only when `.env` is absent |
-| **`pages/` / `journals/`** | A valid Logseq graph must already exist; Matryca does not fabricate vault structure |
+| **`pages/` / `journals/`** | A valid Logseq graph must already exist; Matryca Plumber does not fabricate vault structure |
 | **`.matryca_daemon_state.json`**, **`.matryca_xray_state.json`** | Runtime ledgers — created on first checkpoint / X-Ray session |
 | **Daemon PID / lock files** | Created when the daemon process starts |
 | **`master_catalog.json` body** | Populated by bootstrap harvest, not empty placeholders |

@@ -279,6 +279,44 @@ class FileState:
     error: str | None = None
 
 
+BootstrapHarvestStatus = Literal["regex", "llm", "skipped", "error"]
+BOOTSTRAP_RECENT_MAX = 30
+
+
+@dataclass
+class BootstrapRecentEntry:
+    """Recent Phase 1 catalog page for control-room pills."""
+
+    harvest: BootstrapHarvestStatus
+    processed_at: str
+
+
+def upsert_bootstrap_recent(
+    state: DaemonState,
+    path_key: str,
+    harvest: BootstrapHarvestStatus,
+) -> None:
+    """Record one cataloged page; evict oldest entries beyond ``BOOTSTRAP_RECENT_MAX``."""
+    now = datetime.now(tz=UTC).isoformat()
+    state.bootstrap_recent[path_key] = BootstrapRecentEntry(harvest=harvest, processed_at=now)
+    if len(state.bootstrap_recent) <= BOOTSTRAP_RECENT_MAX:
+        return
+    oldest_key = min(
+        state.bootstrap_recent,
+        key=lambda key: state.bootstrap_recent[key].processed_at,
+    )
+    del state.bootstrap_recent[oldest_key]
+
+
+def record_bootstrap_harvest_impact(
+    state: DaemonState,
+    harvest: BootstrapHarvestStatus | None,
+) -> None:
+    """Increment session ledger when a catalog summary is written."""
+    if harvest in ("regex", "llm"):
+        state.page_summaries_created += 1
+
+
 @dataclass
 class DaemonState:
     """Persistent daemon checkpoint stored inside the graph root."""
@@ -302,6 +340,8 @@ class DaemonState:
     ai_links_injected: int = 0
     ai_blocks_healed: int = 0
     hygiene_corrections: int = 0
+    page_summaries_created: int = 0
+    bootstrap_recent: dict[str, BootstrapRecentEntry] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -323,6 +363,14 @@ class DaemonState:
             "ai_links_injected": self.ai_links_injected,
             "ai_blocks_healed": self.ai_blocks_healed,
             "hygiene_corrections": self.hygiene_corrections,
+            "page_summaries_created": self.page_summaries_created,
+            "bootstrap_recent": {
+                path: {
+                    "harvest": rec.harvest,
+                    "processed_at": rec.processed_at,
+                }
+                for path, rec in self.bootstrap_recent.items()
+            },
             "files": {
                 path: {
                     "mtime": rec.mtime,
@@ -374,7 +422,28 @@ class DaemonState:
             ),
             ai_blocks_healed=int(payload.get("ai_blocks_healed", payload.get("blocks_healed", 0))),
             hygiene_corrections=int(payload.get("hygiene_corrections", 0)),
+            page_summaries_created=int(payload.get("page_summaries_created", 0)),
+            bootstrap_recent=_bootstrap_recent_from_json(payload.get("bootstrap_recent")),
         )
+
+
+def _bootstrap_recent_from_json(
+    raw: object,
+) -> dict[str, BootstrapRecentEntry]:
+    if not isinstance(raw, dict):
+        return {}
+    recent: dict[str, BootstrapRecentEntry] = {}
+    for path, rec in raw.items():
+        if not isinstance(rec, dict):
+            continue
+        harvest = str(rec.get("harvest", ""))
+        if harvest not in ("regex", "llm", "skipped", "error"):
+            continue
+        recent[str(path)] = BootstrapRecentEntry(
+            harvest=harvest,  # type: ignore[arg-type]
+            processed_at=str(rec.get("processed_at", "")),
+        )
+    return recent
 
 
 def record_daemon_impact(
@@ -469,12 +538,14 @@ def heal_daemon_state_ledger(graph_root: Path, state: DaemonState) -> bool:
         ai_links_injected=state.ai_links_injected,
         ai_blocks_healed=state.ai_blocks_healed,
         ai_pages_created=state.ai_pages_created,
+        page_summaries_created=state.page_summaries_created,
     )
     if not snapshot.healed:
         return False
     state.ai_links_injected = snapshot.ai_links_injected
     state.ai_blocks_healed = snapshot.ai_blocks_healed
     state.ai_pages_created = snapshot.ai_pages_created
+    state.page_summaries_created = snapshot.page_summaries_created
     return True
 
 
@@ -1396,6 +1467,7 @@ class InstructorLLMClient:
         )
         self._execution_history: list[ChatMessage] = []
         self._runtime_lint_config: PlumberLintConfig | None = None
+        self.thermal_stop_event: threading.Event | None = None
 
     def bind_lint_config(self, config: PlumberLintConfig | None) -> None:
         """Pin the active lint/thermal config for this daemon cycle (live drawer updates)."""
@@ -1538,10 +1610,11 @@ class InstructorLLMClient:
 
     def _apply_thermal_after_completion(self, profile: ThermalProfile) -> None:
         cfg = self._active_lint_config()
+        stop_event = self.thermal_stop_event
         if profile == "bootstrap":
-            apply_thermal_pause_bootstrap(cfg)
+            apply_thermal_pause_bootstrap(cfg, stop_event=stop_event)
         elif profile == "cognitive":
-            apply_thermal_pause_cognitive(cfg)
+            apply_thermal_pause_cognitive(cfg, stop_event=stop_event)
 
     def _raw_json_completion(
         self,
@@ -2152,7 +2225,6 @@ class MaintenanceDaemon:
         self.graph_root = graph_root
         self.token_logger = token_logger or TokenLogger()
         self.llm_client = llm_client or InstructorLLMClient(token_logger=self.token_logger)
-        self._ensure_shared_token_logger()
         self.poll_seconds = poll_seconds or float(
             os.environ.get("MATRYCA_PLUMBER_POLL_SECONDS", str(DEFAULT_POLL_SECONDS)),
         )
@@ -2164,11 +2236,13 @@ class MaintenanceDaemon:
         self._active_write_count = 0
         self._state_persist_failed = False
         self.bootstrap_complete = False
+        self._ensure_shared_token_logger()
 
     def _ensure_shared_token_logger(self) -> None:
         """Bind the LLM client to the daemon's central token logger."""
         if isinstance(self.llm_client, InstructorLLMClient):
             self.llm_client.token_logger = self.token_logger
+            self.llm_client.thermal_stop_event = self._shutdown_event
 
     def _absorb_token_logger_delta(
         self,
@@ -2219,6 +2293,8 @@ class MaintenanceDaemon:
         state.bootstrap_complete = True
         state.bootstrap_scanned = 0
         state.bootstrap_total = 0
+        state.bootstrap_recent = {}
+        self._sync_live_telemetry(state)
         save_daemon_state(self.graph_root, state)
 
     def _effective_lint_config(self) -> PlumberLintConfig:
@@ -2315,14 +2391,39 @@ class MaintenanceDaemon:
             return
 
         checkpoint.status = "running"
+        self._sync_live_telemetry(checkpoint, mark_running=True)
         save_daemon_state(self.graph_root, checkpoint)
 
-        def _persist_bootstrap_progress(scanned: int, total: int, last_path: Path | None) -> None:
+        def _on_page_cataloged(
+            scanned: int,
+            total: int,
+            last_path: Path | None,
+            harvest_status: BootstrapHarvestStatus | None = None,
+        ) -> None:
+            checkpoint.bootstrap_scanned = scanned
+            checkpoint.bootstrap_total = total
+            if last_path is None:
+                return
+            key = graph_relative_path_key(last_path, self.graph_root)
+            checkpoint.last_file = key
+            if harvest_status is not None:
+                upsert_bootstrap_recent(checkpoint, key, harvest_status)
+            record_bootstrap_harvest_impact(checkpoint, harvest_status)
+            if scanned % 5 == 0:
+                checkpoint.status = "running"
+                save_daemon_state(self.graph_root, checkpoint)
+
+        def _persist_bootstrap_progress(
+            scanned: int,
+            total: int,
+            last_path: Path | None,
+            harvest_status: BootstrapHarvestStatus | None = None,
+        ) -> None:
+            del last_path, harvest_status
             checkpoint.bootstrap_scanned = scanned
             checkpoint.bootstrap_total = total
             checkpoint.status = "running"
-            if last_path is not None:
-                checkpoint.last_file = graph_relative_path_key(last_path, self.graph_root)
+            self._sync_live_telemetry(checkpoint, mark_running=True)
             save_daemon_state(self.graph_root, checkpoint)
 
         max_attempts = 3
@@ -2338,6 +2439,9 @@ class MaintenanceDaemon:
                     rebuild_index=True,
                     phase1_strict=True,
                     on_progress=_persist_bootstrap_progress,
+                    on_page_cataloged=_on_page_cataloged,
+                    should_stop=lambda: self._stop_requested,
+                    stop_event=self._shutdown_event,
                 )
                 break
             except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
@@ -2359,6 +2463,12 @@ class MaintenanceDaemon:
                     message=f"Bootstrap harvest failed: {last_exc}",
                     malformed_refs=[],
                 )
+            return
+
+        if self._stop_requested:
+            checkpoint.status = "stopped"
+            self._sync_live_telemetry(checkpoint)
+            save_daemon_state(self.graph_root, checkpoint)
             return
 
         master_index = master_index_page_path(self.graph_root)

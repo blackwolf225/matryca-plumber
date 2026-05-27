@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from ..config import MatrycaWikiConfig
+from ..utils.env_placeholders import is_template_env_path
 from .llm_context_payload import cap_llm_payload_chars
 
 # Guardrails so agents cannot accidentally load huge trees into context.
@@ -48,6 +49,31 @@ def _is_allowed_l1_path(path: Path) -> bool:
     return _l1_path_under_allowed_root(path) and path.exists()
 
 
+def _effective_l1_path_override(raw: str | None) -> str:
+    """Return ``MATRYCA_L1_PATH`` (or explicit override) ignoring ``.env.example`` templates."""
+    if raw is None:
+        value = os.environ.get("MATRYCA_L1_PATH", "").strip()
+    else:
+        value = raw.strip()
+    if is_template_env_path(value):
+        return ""
+    return value
+
+
+def _effective_memory_path_override(raw: str | None) -> str:
+    if raw is None:
+        return ""
+    stripped = raw.strip()
+    if is_template_env_path(stripped):
+        return ""
+    return stripped
+
+
+def default_matryca_l1_directory_for_graph(graph_root: Path) -> Path:
+    """Return the default sibling ``matryca-l1`` directory for a Logseq graph root."""
+    return graph_root.expanduser().resolve(strict=False).parent / "matryca-l1"
+
+
 _L1_README = """# Matryca L1 memory
 
 Small Markdown files in this folder are loaded first each session (deploy rules, identity, gotchas).
@@ -74,11 +100,9 @@ def resolve_matryca_l1_directory(
     memory_path_from_yaml: str | None = None,
 ) -> Path | None:
     """Resolve the L1 directory to provision (``None`` when using a single ``.md`` file)."""
-    l1_raw = (
-        matryca_l1_path if matryca_l1_path is not None else os.environ.get("MATRYCA_L1_PATH", "")
-    ).strip()
+    l1_raw = _effective_l1_path_override(matryca_l1_path)
     if not l1_raw and memory_path_from_yaml:
-        l1_raw = memory_path_from_yaml.strip()
+        l1_raw = _effective_memory_path_override(memory_path_from_yaml)
     if l1_raw:
         p = _expand(l1_raw)
         if not _l1_path_under_allowed_root(p):
@@ -92,8 +116,8 @@ def resolve_matryca_l1_directory(
         if logseq_graph_path is not None
         else os.environ.get("LOGSEQ_GRAPH_PATH", "")
     ).strip()
-    if graph_raw:
-        return _expand(graph_raw).parent / "matryca-l1"
+    if graph_raw and not is_template_env_path(graph_raw):
+        return default_matryca_l1_directory_for_graph(_expand(graph_raw))
     return None
 
 
@@ -152,11 +176,9 @@ def collect_l1_markdown_paths(
     Returns:
         Ordered list of files to read (may be empty).
     """
-    l1_raw = (
-        matryca_l1_path if matryca_l1_path is not None else os.environ.get("MATRYCA_L1_PATH", "")
-    ).strip()
+    l1_raw = _effective_l1_path_override(matryca_l1_path)
     if not l1_raw and memory_path_from_yaml:
-        l1_raw = memory_path_from_yaml.strip()
+        l1_raw = _effective_memory_path_override(memory_path_from_yaml)
     if l1_raw:
         p = _expand(l1_raw)
         if not _is_allowed_l1_path(p):
@@ -253,6 +275,7 @@ async def read_l1_memory_async(
 
 __all__ = [
     "collect_l1_markdown_paths",
+    "default_matryca_l1_directory_for_graph",
     "ensure_matryca_l1_dir",
     "read_l1_memory_async",
     "read_l1_memory_from_env",

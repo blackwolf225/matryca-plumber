@@ -6,7 +6,8 @@ import json
 import time
 from pathlib import Path
 
-from src.graph.graph_analytics import compute_graph_analytics
+from src.graph.graph_analytics import _count_catalog_summaries, compute_graph_analytics
+from src.graph.master_catalog import CatalogEntry, load_master_catalog
 
 
 def test_compute_graph_analytics_counts_topology(tmp_path: Path) -> None:
@@ -82,6 +83,22 @@ def test_compute_graph_analytics_counts_versioned_ai_pages(tmp_path: Path) -> No
     assert metrics.total_pages == 3
     assert metrics.ai_pages == 2
     assert metrics.human_pages == 1
+
+
+def test_compute_graph_analytics_page_summaries_from_catalog_and_ledger(
+    tmp_path: Path,
+) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    (pages / "Indexed.md").write_text("- note\n", encoding="utf-8")
+
+    catalog = load_master_catalog(tmp_path, force_reload=True)
+    catalog.upsert("Indexed", CatalogEntry(summary="One-line summary.", last_mtime=1))
+    catalog.save()
+
+    assert _count_catalog_summaries(tmp_path) == 1
+    metrics = compute_graph_analytics(tmp_path, page_summaries_created=3)
+    assert metrics.page_summaries == 3
 
 
 def test_compute_graph_analytics_reflects_deleted_ai_page(tmp_path: Path) -> None:

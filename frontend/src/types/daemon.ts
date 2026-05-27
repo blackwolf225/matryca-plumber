@@ -11,6 +11,14 @@ export interface FileStateResponse {
 /** Mirrors ``DaemonStatusValue`` from ``src/cli/ui_server.py``. */
 export type DaemonStatusValue = 'running' | 'idle' | 'stopped' | 'error'
 
+/** Phase 1 catalog harvest outcome for control-room pills. */
+export type BootstrapHarvestStatus = 'regex' | 'llm' | 'skipped' | 'error'
+
+export interface BootstrapRecentEntry {
+  harvest: BootstrapHarvestStatus
+  processed_at: string
+}
+
 /** Mirrors ``GraphAnalyticsResponse`` from ``src/cli/ui_server.py``. */
 export interface GraphAnalytics {
   total_pages: number
@@ -21,6 +29,7 @@ export interface GraphAnalytics {
   ai_pages: number
   ai_links: number
   ai_blocks_healed: number
+  page_summaries: number
   alias_count: number
   semantic_links: number
   semantic_cache_mb: number
@@ -37,6 +46,7 @@ export const DEFAULT_GRAPH_ANALYTICS: GraphAnalytics = {
   ai_pages: 0,
   ai_links: 0,
   ai_blocks_healed: 0,
+  page_summaries: 0,
   alias_count: 0,
   semantic_links: 0,
   semantic_cache_mb: 0,
@@ -104,6 +114,7 @@ export function hasGraphAnalyticsPayload(raw: unknown): boolean {
   const humanLinks = readNumber(source, 'human_links', 'humanLinks')
   const aiPages = readNumber(source, 'ai_pages', 'aiPages')
   const aiLinks = readNumber(source, 'ai_links', 'aiLinks')
+  const pageSummaries = readNumber(source, 'page_summaries', 'pageSummaries')
   const aliasCount = readNumber(source, 'alias_count', 'aliasCount')
   return (
     totalPages > 0
@@ -113,6 +124,7 @@ export function hasGraphAnalyticsPayload(raw: unknown): boolean {
     || humanLinks > 0
     || aiPages > 0
     || aiLinks > 0
+    || pageSummaries > 0
     || aliasCount > 0
   )
 }
@@ -150,6 +162,7 @@ export function normalizeGraphAnalytics(raw: unknown): GraphAnalytics {
     ai_pages: aiPages,
     ai_links: aiLinks,
     ai_blocks_healed: readNumber(source, 'ai_blocks_healed', 'aiBlocksHealed'),
+    page_summaries: readNumber(source, 'page_summaries', 'pageSummaries'),
     alias_count: readNumber(source, 'alias_count', 'aliasCount'),
     semantic_links: resolvedSemanticLinks,
     semantic_cache_mb: readNumber(source, 'semantic_cache_mb', 'semanticCacheMb'),
@@ -157,6 +170,28 @@ export function normalizeGraphAnalytics(raw: unknown): GraphAnalytics {
       contextAcceleration > 0 ? contextAcceleration : DEFAULT_GRAPH_ANALYTICS.context_acceleration,
     status: readGraphAnalyticsStatus(source),
   }
+}
+
+function normalizeBootstrapRecent(raw: unknown): Record<string, BootstrapRecentEntry> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {}
+  }
+  const entries: Record<string, BootstrapRecentEntry> = {}
+  for (const [path, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      continue
+    }
+    const rec = value as Record<string, unknown>
+    const harvest = rec.harvest
+    if (harvest !== 'regex' && harvest !== 'llm' && harvest !== 'skipped' && harvest !== 'error') {
+      continue
+    }
+    entries[path] = {
+      harvest,
+      processed_at: typeof rec.processed_at === 'string' ? rec.processed_at : String(rec.processedAt ?? ''),
+    }
+  }
+  return entries
 }
 
 function normalizeImpactCounters(raw: DaemonStateResponse): DaemonImpactCounters {
@@ -188,6 +223,15 @@ export function normalizeDaemonState(raw: DaemonStateResponse): DaemonStateRespo
     ...raw,
     files,
     ...impact,
+    bootstrap_recent: normalizeBootstrapRecent(
+      (raw as unknown as Record<string, unknown>).bootstrap_recent
+        ?? (raw as unknown as Record<string, unknown>).bootstrapRecent,
+    ),
+    page_summaries_created: readNumber(
+      raw as unknown as Record<string, unknown>,
+      'page_summaries_created',
+      'pageSummariesCreated',
+    ),
     graph_analytics: graphAnalytics,
   }
 }
@@ -213,6 +257,8 @@ export interface DaemonStateResponse {
   ai_links_injected?: number
   ai_blocks_healed?: number
   hygiene_corrections?: number
+  page_summaries_created?: number
+  bootstrap_recent?: Record<string, BootstrapRecentEntry>
   graph_analytics?: GraphAnalytics
 }
 
@@ -276,7 +322,8 @@ export interface PlumberPollSnapshot {
   startEngine: () => Promise<void>
   stopEngine: () => Promise<void>
   saveConfig: (payload: PlumberConfig) => Promise<PlumberConfig | null>
-  refreshConfig: () => Promise<void>
+  refreshConfig: () => Promise<PlumberConfig | null>
+  applyConfig: (payload: PlumberConfig) => void
 }
 
 export const LOW_PRIORITY_NICENESS = 19

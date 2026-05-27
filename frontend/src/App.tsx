@@ -55,6 +55,7 @@ export default function App() {
     startEngine,
     stopEngine,
     saveConfig,
+    applyConfig,
   } = usePlumberPolling()
 
   const isDesktopLayout = useDesktopLayout()
@@ -127,6 +128,7 @@ export default function App() {
         onStartEngine={startEngine}
         onStopEngine={stopEngine}
         onSaveConfig={saveConfig}
+        onConfigRefreshed={applyConfig}
       />
 
       <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-y-contain lg:flex-row lg:overflow-hidden">

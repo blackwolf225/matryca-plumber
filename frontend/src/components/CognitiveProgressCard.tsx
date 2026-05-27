@@ -1,4 +1,10 @@
-import type { DaemonStateResponse, FileStateResponse, FileStatus } from '../types/daemon'
+import type {
+  BootstrapHarvestStatus,
+  BootstrapRecentEntry,
+  DaemonStateResponse,
+  FileStateResponse,
+  FileStatus,
+} from '../types/daemon'
 import { basenameFromPath, computeProgressMetrics } from '../utils/metrics'
 
 const FILE_STATUS_STYLES: Record<FileStatus, string> = {
@@ -7,6 +13,13 @@ const FILE_STATUS_STYLES: Record<FileStatus, string> = {
   pending: 'border-theme-accent/50 bg-theme-accent-bg/30 text-theme-accent',
   error: 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300',
   skipped: 'border-theme-border/40 bg-theme-base/30 text-theme-muted',
+}
+
+const BOOTSTRAP_HARVEST_STYLES: Record<BootstrapHarvestStatus, string> = {
+  llm: FILE_STATUS_STYLES.processed,
+  regex: FILE_STATUS_STYLES.pending,
+  skipped: FILE_STATUS_STYLES.skipped,
+  error: FILE_STATUS_STYLES.error,
 }
 
 const MAX_VISIBLE_PILLS = 14
@@ -23,8 +36,33 @@ function FileStatusPill({ path, file }: { path: string; file: FileStateResponse 
   )
 }
 
+function BootstrapHarvestPill({
+  path,
+  entry,
+}: {
+  path: string
+  entry: BootstrapRecentEntry
+}) {
+  const label = basenameFromPath(path)?.replace(/\.md$/i, '') ?? path
+  return (
+    <span
+      className={`inline-flex max-w-full items-center rounded-full border px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-wide ${BOOTSTRAP_HARVEST_STYLES[entry.harvest]}`}
+      title={`${label} — catalog ${entry.harvest}`}
+    >
+      <span className="truncate">{label}</span>
+    </span>
+  )
+}
+
 function buildFilePills(state: DaemonStateResponse) {
   return Object.entries(state.files)
+    .sort(([, left], [, right]) => right.processed_at.localeCompare(left.processed_at))
+    .slice(0, MAX_VISIBLE_PILLS)
+}
+
+function buildBootstrapPills(state: DaemonStateResponse) {
+  const recent = state.bootstrap_recent ?? {}
+  return Object.entries(recent)
     .sort(([, left], [, right]) => right.processed_at.localeCompare(left.processed_at))
     .slice(0, MAX_VISIBLE_PILLS)
 }
@@ -43,6 +81,14 @@ export function CognitiveProgressCard({ state }: CognitiveProgressCardProps) {
         total: 0,
         percent: 0,
       }
+
+  const phase1 = state !== null && !state.bootstrap_complete
+  const bootstrapPills = state ? buildBootstrapPills(state) : []
+  const filePills = state ? buildFilePills(state) : []
+  const pills = phase1 && bootstrapPills.length > 0 ? bootstrapPills : filePills
+  const pillTotal = phase1
+    ? Object.keys(state?.bootstrap_recent ?? {}).length
+    : Object.keys(state?.files ?? {}).length
 
   return (
     <section className="rounded-2xl border border-theme-border/25 bg-theme-surface/45 p-5 shadow-sm transition-all duration-300 dark:bg-theme-surface/20">
@@ -73,17 +119,27 @@ export function CognitiveProgressCard({ state }: CognitiveProgressCardProps) {
 
       {state && (
         <div className="mt-4 flex min-h-[4.5rem] flex-wrap content-start gap-2">
-          {buildFilePills(state).map(([path, file]) => (
-            <FileStatusPill key={path} path={path} file={file} />
-          ))}
-          {Object.keys(state.files).length === 0 && (
+          {pills.map(([path, entry]) =>
+            phase1 && bootstrapPills.length > 0 ? (
+              <BootstrapHarvestPill
+                key={path}
+                path={path}
+                entry={entry as BootstrapRecentEntry}
+              />
+            ) : (
+              <FileStatusPill key={path} path={path} file={entry as FileStateResponse} />
+            ),
+          )}
+          {pills.length === 0 && (
             <span className="text-[10px] text-theme-muted">
-              No file checkpoints yet — start the engine to populate processing pills.
+              {phase1
+                ? 'Cataloging in progress — pills appear as pages are indexed.'
+                : 'No file checkpoints yet — start the engine to populate processing pills.'}
             </span>
           )}
-          {Object.keys(state.files).length > MAX_VISIBLE_PILLS && (
+          {pillTotal > MAX_VISIBLE_PILLS && (
             <span className="self-center text-[10px] text-theme-muted">
-              +{Object.keys(state.files).length - MAX_VISIBLE_PILLS} more
+              +{pillTotal - MAX_VISIBLE_PILLS} more
             </span>
           )}
         </div>

@@ -17,7 +17,7 @@ const INSTALL_METHODS: InstallMethod[] = [
   {
     id: 'uv-tool',
     title: 'uv tool install (recommended for services)',
-    description: 'Use this if you installed Matryca via uv tool or run a background service.',
+    description: 'Use this if you installed Matryca Plumber via uv tool or run a background service.',
     commands: [
       '# 1. Stop the daemon (UI Stop Engine, or CLI)',
       'matryca plumber stop',

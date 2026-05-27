@@ -1,4 +1,4 @@
-"""Ensure Matryca runtime directories and config exist before graph processing.
+"""Ensure Matryca Plumber runtime directories and config exist before graph processing.
 
 Provisioned on every Matryca Plumber startup (MCP lifespan, daemon, UI, CLI):
 

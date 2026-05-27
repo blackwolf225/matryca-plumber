@@ -1,22 +1,33 @@
-import { AlertTriangle, CheckCircle2, Circle, Cpu, Loader2, Sparkles, XCircle } from 'lucide-react'
-import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, Circle, Cpu, FolderPlus, Loader2, Sparkles, XCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
-import type { PreflightCheck, PreflightResponse } from '../types/preflight'
+import type { PlumberConfig } from '../types/daemon'
+import type { PreflightCheck, PreflightResponse, ProvisionL1Response } from '../types/preflight'
 
 interface PreFlightModalProps {
   open: boolean
   report: PreflightResponse | null
   loading: boolean
   error: string | null
+  config: PlumberConfig | null
   onRefresh: () => Promise<PreflightResponse | null>
+  onSaveGraphPath: (path: string) => Promise<PlumberConfig | null>
+  onProvisionL1: () => Promise<ProvisionL1Response | null>
   onOpenSettings: () => void
   onDismissWhenReady: () => void
+}
+
+const GRAPH_INPUT_CLASS =
+  'w-full rounded-xl border border-theme-border/50 bg-theme-base px-3 py-2 font-mono text-xs text-theme-text outline-none transition placeholder:text-theme-muted focus:border-theme-accent/60 focus:ring-2 focus:ring-theme-accent/30'
+
+function checkById(report: PreflightResponse | null, id: string): PreflightCheck | undefined {
+  return report?.checks.find((row) => row.id === id)
 }
 
 function PreflightStepLocalLlm() {
   return (
     <li className="space-y-3">
-      <h3 className="font-medium text-theme-text">3. Start your local LLM</h3>
+      <h3 className="font-medium text-theme-text">4. Start your local LLM</h3>
       <p className="text-theme-muted">
         Start an OpenAI-compatible server (LM Studio, Ollama, etc.). In Settings, set the base URL (e.g.{' '}
         <code className="font-mono text-xs">http://localhost:1234/v1</code>) and the exact model id, then
@@ -33,7 +44,8 @@ function PreflightStepLocalLlm() {
             <p className="text-xs leading-relaxed text-theme-muted">
               We engineer our tools to run flawlessly on standard hardware. You do not need expensive cloud
               subscriptions or high-end GPUs. Matryca Plumber is designed to run completely offline on a
-              standard <strong className="text-theme-text">CPU-only machine with 16 GB of RAM</strong>.
+              standard <strong className="text-theme-text">CPU-only machine with 16 GB of RAM</strong>. We are
+              actively testing additional open models to improve that target setup.
             </p>
           </div>
         </div>
@@ -43,43 +55,23 @@ function PreflightStepLocalLlm() {
         <div className="flex gap-3">
           <Cpu className="mt-0.5 h-5 w-5 shrink-0 text-theme-muted" aria-hidden />
           <div className="min-w-0 space-y-3">
-            <h4 className="text-sm font-semibold text-theme-text">🧠 Recommended Models (May 2026)</h4>
+            <h4 className="text-sm font-semibold text-theme-text">Recommended &amp; tested model</h4>
             <p className="text-xs leading-relaxed text-theme-muted">
-              To achieve maximum performance (20–30 tokens/second) without melting your CPU, download models
-              in <strong className="text-theme-text">GGUF format</strong> (quantization{' '}
-              <code className="rounded bg-theme-surface px-1 py-0.5 font-mono text-[11px]">Q4_K_M</code> or{' '}
-              <code className="rounded bg-theme-surface px-1 py-0.5 font-mono text-[11px]">Q5_K_M</code>).
+              <strong className="text-theme-text">Gemma 4-E4b Instruct</strong> is the model we use to test and
+              validate Matryca Plumber today. In Settings, set the exact model id to{' '}
+              <code className="rounded bg-theme-surface px-1 py-0.5 font-mono text-[11px]">gemma-4-e4b-it</code>
+              , then use <strong>Refresh models</strong> to confirm discovery.
             </p>
-            <div>
-              <p className="text-xs font-medium text-theme-text">
-                Top Picks for 16GB CPU-only machines:
-              </p>
-              <ul className="mt-2 space-y-2 text-xs leading-relaxed text-theme-muted">
-                <li className="flex gap-2">
-                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-theme-accent" aria-hidden />
-                  <span>
-                    <strong className="text-theme-text">Qwen 3.5 (1.5B or 3B):</strong> The current reigning
-                    champion of lightweight open-weights. Extremely fast and highly capable of following
-                    strict formatting instructions.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-theme-accent" aria-hidden />
-                  <span>
-                    <strong className="text-theme-text">Ministral 3 (3B):</strong> Mistral&apos;s lightweight
-                    genius. Exceptional at generating the rigorous JSON metadata required by Matryca&apos;s
-                    semantic engine.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-theme-accent" aria-hidden />
-                  <span>
-                    <strong className="text-theme-text">Llama 3.2 (3B):</strong> A solid, reliable fallback for
-                    dense CPU tasks.
-                  </span>
-                </li>
-              </ul>
-            </div>
+            <p className="text-xs leading-relaxed text-theme-muted">
+              For responsive CPU inference (about 15–30 tokens/second), prefer weights in{' '}
+              <strong className="text-theme-text">GGUF format</strong> at quantization{' '}
+              <code className="rounded bg-theme-surface px-1 py-0.5 font-mono text-[11px]">Q4_K_M</code> or{' '}
+              <code className="rounded bg-theme-surface px-1 py-0.5 font-mono text-[11px]">Q5_K_M</code>.
+            </p>
+            <p className="text-xs leading-relaxed text-theme-muted">
+              We are actively testing additional open models to improve CPU-only, 16 GB RAM setups; Gemma
+              4-E4b Instruct remains our current default recommendation.
+            </p>
           </div>
         </div>
       </div>
@@ -93,7 +85,7 @@ function PreflightStepLocalLlm() {
           <strong className="font-semibold">⚠️ Hardware Warning:</strong> Avoid new &quot;MoE&quot; (Mixture of
           Experts) models like <em>Llama 4 Scout</em>. Even though they advertise a low number of
           &quot;active&quot; parameters per token, the entire model weights (100B+) must be loaded into memory,
-          requiring 60GB+ of RAM. Stick to the dense 1.5B – 3B models listed above.
+          requiring 60GB+ of RAM.
         </p>
       </div>
     </li>
@@ -115,15 +107,42 @@ export function PreFlightModal({
   report,
   loading,
   error,
+  config,
   onRefresh,
+  onSaveGraphPath,
+  onProvisionL1,
   onOpenSettings,
   onDismissWhenReady,
 }: PreFlightModalProps) {
   const [refreshing, setRefreshing] = useState(false)
+  const [graphPathDraft, setGraphPathDraft] = useState('')
+  const [savingGraph, setSavingGraph] = useState(false)
+  const [graphSaveError, setGraphSaveError] = useState<string | null>(null)
+  const [provisioningL1, setProvisioningL1] = useState(false)
+  const [provisionMessage, setProvisionMessage] = useState<string | null>(null)
+  const [provisionError, setProvisionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (config?.logseq_graph_path) {
+      setGraphPathDraft(config.logseq_graph_path)
+    }
+  }, [config?.logseq_graph_path])
+
+  useEffect(() => {
+    if (checkById(report, 'logseq_graph')?.status === 'pass') {
+      setGraphSaveError(null)
+    }
+  }, [report])
 
   if (!open) {
     return null
   }
+
+  const graphCheck = checkById(report, 'logseq_graph')
+  const l1Check = checkById(report, 'l1_memory')
+  const graphReady = graphCheck?.status === 'pass'
+  const l1Ready = l1Check?.status === 'pass'
+  const plannedL1Path = l1Check?.detail ?? null
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -131,6 +150,56 @@ export function PreFlightModal({
       await onRefresh()
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleSaveGraph = async () => {
+    const trimmed = graphPathDraft.trim()
+    if (!trimmed) {
+      setGraphSaveError('Enter the absolute path to your Logseq vault root (folder containing pages/).')
+      return
+    }
+    setSavingGraph(true)
+    setGraphSaveError(null)
+    try {
+      const updated = await onSaveGraphPath(trimmed)
+      if (updated) {
+        setGraphPathDraft(updated.logseq_graph_path)
+      }
+      const latest = await onRefresh()
+      const graphCheck = checkById(latest, 'logseq_graph')
+      if (graphCheck?.status === 'pass') {
+        setGraphSaveError(null)
+        return
+      }
+      if (!updated) {
+        setGraphSaveError(
+          graphCheck?.message ?? 'Could not save graph path. Check the path and try again.',
+        )
+      }
+    } catch (err) {
+      setGraphSaveError(err instanceof Error ? err.message : 'Failed to save graph path')
+    } finally {
+      setSavingGraph(false)
+    }
+  }
+
+  const handleProvisionL1 = async () => {
+    setProvisioningL1(true)
+    setProvisionError(null)
+    setProvisionMessage(null)
+    try {
+      const result = await onProvisionL1()
+      if (!result?.ok) {
+        setProvisionError('Could not provision matryca-l1.')
+        return
+      }
+      setProvisionMessage(result.message)
+      await onRefresh()
+    } catch (err) {
+      setProvisionError(err instanceof Error ? err.message : 'Failed to create matryca-l1')
+    } finally {
+      setProvisioningL1(false)
     }
   }
 
@@ -144,17 +213,27 @@ export function PreFlightModal({
       <div className="flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-theme-border/40 bg-theme-surface shadow-xl">
         <div className="border-b border-theme-border/30 px-6 py-5">
           <h2 id="preflight-title" className="text-lg font-semibold text-theme-text">
-            Pre-flight checklist
+            Matryca Plumber — Pre-flight checklist
           </h2>
-          <p className="mt-1 text-sm text-theme-muted">
-            Matryca provisions your environment automatically where possible. Complete the checks below
-            before starting the maintenance daemon.
+          <p className="mt-1 text-xs text-theme-muted">
+            Developed by Marco Porcellato ·{' '}
+            <a
+              href="https://matryca.ai"
+              className="text-theme-accent underline-offset-2 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Matryca.ai
+            </a>
+          </p>
+          <p className="mt-2 text-sm text-theme-muted">
+            Set your test vault path first, provision session memory, then confirm your local LLM before
+            starting the maintenance daemon.
           </p>
           {report?.env_created_from_example ? (
             <p className="mt-2 rounded-lg border border-theme-accent/30 bg-theme-accent-bg/20 px-3 py-2 text-xs text-theme-accent">
               A new <code className="font-mono">.env</code> was created from{' '}
-              <code className="font-mono">.env.example</code> with safe defaults — open Settings to set your
-              Logseq graph path and LLM endpoint.
+              <code className="font-mono">.env.example</code> — enter your Logseq graph path below (step 2).
             </p>
           ) : null}
         </div>
@@ -169,23 +248,103 @@ export function PreFlightModal({
               </p>
             </li>
 
-            <li>
-              <h3 className="font-medium text-theme-text">2. Logseq graph (test vault first)</h3>
-              <p className="mt-1 text-theme-muted">
-                Point Matryca at the <strong>root</strong> of a Logseq OG vault — the folder that contains{' '}
-                <code className="font-mono text-xs">pages/</code>. Use a clone for your first run; avoid
-                enabling Logseq Sync on test graphs.
+            <li className="space-y-3">
+              <h3 className="font-medium text-theme-text">2. Logseq test vault (required first)</h3>
+              <p className="text-theme-muted">
+                Point Matryca Plumber at the <strong>root</strong> of a Logseq OG vault — the folder that
+                contains <code className="font-mono text-xs">pages/</code>. Use a clone for your first run.
               </p>
-              <p className="mt-1 text-theme-muted">
-                Open <strong>Settings</strong> (gear) → <strong>Logseq Graph Path</strong>, enter an absolute
-                path, and save.
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-theme-muted">Absolute graph path</span>
+                <input
+                  type="text"
+                  value={graphPathDraft}
+                  onChange={(event) => setGraphPathDraft(event.target.value)}
+                  placeholder="/Users/you/Documents/my-logseq-vault"
+                  className={GRAPH_INPUT_CLASS}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              {graphSaveError ? (
+                <p className="text-xs text-red-500" role="alert">
+                  {graphSaveError}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={savingGraph || !graphPathDraft.trim()}
+                  onClick={() => void handleSaveGraph()}
+                  className="rounded-xl border border-theme-accent/80 bg-theme-accent px-4 py-2 text-sm font-medium text-theme-accent-foreground transition hover:bg-theme-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {savingGraph ? 'Saving…' : 'Save and verify graph'}
+                </button>
+                {graphReady ? (
+                  <span className="inline-flex items-center gap-1.5 self-center text-xs text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    Graph path verified
+                  </span>
+                ) : null}
+              </div>
+            </li>
+
+            <li className="space-y-3">
+              <h3 className="font-medium text-theme-text">3. L1 session memory</h3>
+              <p className="text-theme-muted">
+                Matryca creates a <code className="font-mono text-xs">matryca-l1/</code> folder{' '}
+                <strong>next to</strong> your vault (not inside <code className="font-mono text-xs">pages/</code>
+                ) for deploy rules and session context.
               </p>
+              {graphReady && !l1Ready ? (
+                <div className="space-y-3 rounded-xl border border-theme-border/30 bg-theme-base/50 p-4">
+                  {plannedL1Path ? (
+                    <p className="font-mono text-[10px] leading-relaxed text-theme-muted" title={plannedL1Path}>
+                      Will create: {plannedL1Path}
+                    </p>
+                  ) : null}
+                  {provisionMessage ? (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400" role="status">
+                      {provisionMessage}
+                    </p>
+                  ) : null}
+                  {provisionError ? (
+                    <p className="text-xs text-red-500" role="alert">
+                      {provisionError}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={provisioningL1 || loading}
+                    onClick={() => void handleProvisionL1()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-theme-border px-4 py-2 text-sm text-theme-text transition hover:border-theme-accent/50 hover:text-theme-accent disabled:opacity-40"
+                  >
+                    {provisioningL1 ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    ) : (
+                      <FolderPlus className="h-4 w-4" aria-hidden />
+                    )}
+                    {provisioningL1 ? 'Creating…' : 'Create matryca-l1 folder'}
+                  </button>
+                </div>
+              ) : null}
+              {l1Ready && l1Check?.detail ? (
+                <p className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  <span className="truncate font-mono" title={l1Check.detail}>
+                    {l1Check.detail}
+                  </span>
+                </p>
+              ) : null}
+              {!graphReady ? (
+                <p className="text-xs text-theme-muted">Complete step 2 before provisioning L1 memory.</p>
+              ) : null}
             </li>
 
             <PreflightStepLocalLlm />
 
             <li>
-              <h3 className="font-medium text-theme-text">4. First-run expectations</h3>
+              <h3 className="font-medium text-theme-text">5. First-run expectations</h3>
               <p className="mt-1 text-theme-muted">
                 Phase 1 catalogs the entire graph and may take a long time on large vaults. Phase 2 processes
                 roughly one LLM-heavy page per poll interval by default.

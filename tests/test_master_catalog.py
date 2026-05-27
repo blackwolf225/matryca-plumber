@@ -215,6 +215,27 @@ def test_bootstrap_harvest_thermal_delay_only_after_llm(
     assert all(delay == 2.0 for delay in sleeps)
 
 
+def test_bootstrap_harvest_stops_when_requested(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    _write_page(graph_root, "Alpha", "- type:: risorsa\n- Alpha body\n")
+    _write_page(graph_root, "Beta", "- type:: risorsa\n- Beta body\n")
+    stop_event = threading.Event()
+    stop_event.set()
+    metrics = run_bootstrap_harvest(
+        graph_root,
+        llm=StubHarvestLLM(),
+        incremental=False,
+        phase1_strict=False,
+        stop_event=stop_event,
+    )
+    assert metrics.scanned == 0
+    assert metrics.llm_harvested == 0
+
+
 def test_bootstrap_harvest_regex_path_without_llm(graph_root: Path) -> None:
     _write_page(graph_root, "Indexed", _indexed_body(summary="Already indexed."))
     metrics = run_bootstrap_harvest(
@@ -355,7 +376,12 @@ def test_bootstrap_harvest_reports_incremental_progress(graph_root: Path) -> Non
 
     snapshots: list[tuple[int, int]] = []
 
-    def on_progress(scanned: int, total: int, _last: Path | None) -> None:
+    def on_progress(
+        scanned: int,
+        total: int,
+        _last: Path | None,
+        _harvest: object = None,
+    ) -> None:
         snapshots.append((scanned, total))
 
     metrics = run_bootstrap_harvest(

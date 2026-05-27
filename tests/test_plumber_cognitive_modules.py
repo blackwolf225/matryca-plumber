@@ -115,13 +115,13 @@ def test_apply_thermal_pause_ignores_negative_delay(
 
     sleeps: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_COGNITIVE", "-3")
     apply_thermal_pause_cognitive(
-        PlumberLintConfig(thermal_delay_cognitive=-3.0),
+        PlumberLintConfig(thermal_delay_cognitive=99.0),
     )
     assert sleeps == []
-    apply_thermal_pause_bootstrap(
-        PlumberLintConfig(thermal_delay_bootstrap=1.25),
-    )
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_BOOTSTRAP", "1.25")
+    apply_thermal_pause_bootstrap()
     assert sleeps == [1.25]
 
 

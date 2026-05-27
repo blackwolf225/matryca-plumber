@@ -87,6 +87,33 @@ function buildAuthenticatedHeaders(init: RequestInit | undefined, token: string)
   return headers
 }
 
+async function readMatrycaApiErrorMessage(response: Response): Promise<string> {
+  const fallback = `HTTP ${response.status}`
+  try {
+    const body = (await response.json()) as { detail?: unknown }
+    const detail = body.detail
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail
+    }
+    if (Array.isArray(detail)) {
+      const parts = detail
+        .map((item) => {
+          if (typeof item === 'object' && item !== null && 'msg' in item) {
+            return String((item as { msg?: string }).msg ?? '')
+          }
+          return ''
+        })
+        .filter(Boolean)
+      if (parts.length > 0) {
+        return parts.join('; ')
+      }
+    }
+  } catch {
+    // ignore JSON parse errors
+  }
+  return fallback
+}
+
 /** JSON GET/POST with ``X-Matryca-Token``; on 401, refresh session once and retry. */
 export async function matrycaFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const token = await resolveMatrycaAuthToken()
@@ -103,7 +130,7 @@ export async function matrycaFetchJson<T>(url: string, init?: RequestInit): Prom
     })
   }
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+    throw new Error(await readMatrycaApiErrorMessage(response))
   }
   return (await response.json()) as T
 }

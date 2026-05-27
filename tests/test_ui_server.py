@@ -37,6 +37,7 @@ def graph_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_get_state_returns_daemon_checkpoint(
     graph_root: Path,
     auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     page = graph_root / "pages" / "Alpha.md"
     page.write_text("- alpha\n- link [[Beta]]\n", encoding="utf-8")
@@ -58,6 +59,8 @@ def test_get_state_returns_daemon_checkpoint(
         },
     )
     save_daemon_state(graph_root, state)
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: 4242)
+    monkeypatch.setattr("src.cli.ui_server.is_plumber_process", lambda _pid: True)
 
     with TestClient(app) as client:
         response = client.get("/api/state", headers=auth_headers)
@@ -109,8 +112,37 @@ def test_get_state_is_fast_without_graph_scan(
         response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "idle"
+    assert response.json()["status"] == "stopped"
     assert "graph_analytics" not in response.json()
+
+
+def test_get_state_reports_stopped_when_checkpoint_idle_but_no_pid(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
+    save_daemon_state(graph_root, DaemonState(status="idle", bootstrap_complete=True))
+
+    with TestClient(app) as client:
+        response = client.get("/api/state", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "stopped"
+
+
+def test_get_state_reports_idle_when_live_plumber_pid(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_daemon_state(graph_root, DaemonState(status="idle", bootstrap_complete=True))
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: 9001)
+    monkeypatch.setattr("src.cli.ui_server.is_plumber_process", lambda _pid: True)
+
+    with TestClient(app) as client:
+        response = client.get("/api/state", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "idle"
 
 
 def test_get_graph_analytics_survives_scan_failure(
@@ -712,3 +744,65 @@ def test_ui_server_serves_frontend_index_when_dist_exists(
     assert "text/html" in dashboard.headers.get("content-type", "")
     assert 'id="root"' in dashboard.text
     assert config.status_code == 200
+
+
+def test_post_provision_l1_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    from src.config import MatrycaWikiConfig
+
+    graph = tmp_path / "vault"
+    (graph / "pages").mkdir(parents=True)
+    (tmp_path / ".env").write_text(f'LOGSEQ_GRAPH_PATH="{graph}"\n', encoding="utf-8")
+    monkeypatch.setattr("src.cli.ui_server._REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "src.agent.plumber_config.resolve_repo_dotenv_path",
+        lambda: tmp_path / ".env",
+    )
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
+    monkeypatch.delenv("MATRYCA_L1_PATH", raising=False)
+    empty_wiki = MatrycaWikiConfig()
+    monkeypatch.setattr("src.config.load_matryca_wiki_config", lambda: empty_wiki)
+    monkeypatch.setattr("src.utils.provision_l1.load_matryca_wiki_config", lambda: empty_wiki)
+
+    with TestClient(app) as client:
+        response = client.post("/api/provision-l1", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    l1_path = Path(payload["l1_path"])
+    assert l1_path == tmp_path / "matryca-l1"
+    assert l1_path.is_dir()
+    assert (l1_path / "session-rules.md").is_file()
+
+
+def test_post_graph_path_endpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    graph = tmp_path / "vault"
+    (graph / "pages").mkdir(parents=True)
+    (tmp_path / ".env").write_text('LOGSEQ_GRAPH_PATH="/old"\n', encoding="utf-8")
+    monkeypatch.setattr("src.cli.ui_server._REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        "src.agent.plumber_config.resolve_repo_dotenv_path",
+        lambda: tmp_path / ".env",
+    )
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", "/old")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/config/graph-path",
+            headers=auth_headers,
+            json={"logseq_graph_path": str(graph)},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["logseq_graph_path"] == str(graph.resolve())
+    env_text = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert str(graph.resolve()) in env_text
+    assert "LOGSEQ_GRAPH_PATH=" in env_text

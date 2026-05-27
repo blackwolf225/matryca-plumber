@@ -1,6 +1,6 @@
 # Contributing to Matryca Plumber
 
-Thank you for investing your time in **Matryca Plumber** (`matryca-plumber`).
+Thank you for investing your time in **Matryca Plumber** (`matryca-plumber`), developed by **Marco Porcellato** at **[Matryca.ai](https://matryca.ai)**. Use the full product name in user-facing copy — not “Matryca” alone. See [`docs/BRANDING.md`](docs/BRANDING.md).
 
 This project exists so humans and **autonomous local systems** can collaborate on **Logseq OG** graphs the right way: **blocks**, **`id::`**, and **local Markdown** — not flattened blobs in someone else's database. Whether you fix a typo, tighten a test, extend a **`MaintenanceDaemon`** cognitive module, or harden the **`graph_dispatch`** + **`logseq-matryca-parser`** headless CRUD plane, you are helping keep the **Ironclad** bar high.
 
@@ -80,7 +80,7 @@ When in doubt: exercise mutators with **`dry_run=true`** first (from **pytest** 
 
 ### Phase 4 — No central DB (JSON ledger only)
 
-Matryca tracks daemon progress in a **local JSON ledger** at the graph root — not in a database server.
+Matryca Plumber tracks daemon progress in a **local JSON ledger** at the graph root — not in a database server.
 
 | File | Role |
 |------|------|
@@ -117,7 +117,7 @@ Optional git snapshots on the graph repo are fine; they remain files on disk.
    cp .env.example .env
    ```
 
-   Set **`LOGSEQ_GRAPH_PATH`** to your Logseq graph root (folder containing `pages/`). Matryca is headless — no Logseq desktop app required for most tests.
+   Set **`LOGSEQ_GRAPH_PATH`** to your Logseq graph root (folder containing `pages/`). Matryca Plumber is headless — no Logseq desktop app required for most tests.
 
    On the first daemon/CLI/UI/MCP start, **`prepare_matryca_runtime()`** provisions log dirs, sibling **`matryca-l1/`**, **`.matryca_semantic_cache/`**, **`templates/`**, and an optional **`matryca-wiki.yml`** (see [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md)).
 

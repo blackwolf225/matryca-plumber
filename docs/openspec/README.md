@@ -1,4 +1,6 @@
-# Openspec-style notes (Matryca)
+# Openspec-style notes (Matryca Plumber)
+
+**Matryca Plumber** — developed by Marco Porcellato · [Matryca.ai](https://matryca.ai). Naming rules: [`../BRANDING.md`](../BRANDING.md).
 
 Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com/MehmetGoekce/llm-wiki) openspec, mapped to this repository.
 

@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from ..agent.l1_memory import ensure_matryca_l1_dir, resolve_matryca_l1_directory
+from ..agent.l1_memory import (
+    default_matryca_l1_directory_for_graph,
+    ensure_matryca_l1_dir,
+    resolve_matryca_l1_directory,
+)
 from ..agent.plumber_config import (
     load_plumber_lint_config,
     reload_plumber_dotenv,
@@ -193,15 +197,16 @@ def _check_l1_memory(graph_root: Path | None) -> PreflightCheck:
             detail=str(resolved),
         )
 
+    planned = default_matryca_l1_directory_for_graph(graph_root)
     return PreflightCheck(
         id="l1_memory",
         title="L1 session memory",
         status="fail",
         message=(
-            "Could not create or access matryca-l1 "
+            "matryca-l1 is not ready — use “Create matryca-l1 folder” in the checklist "
             "(path must lie under your home directory or temp)"
         ),
-        detail=str(resolved) if resolved is not None else None,
+        detail=str(resolved) if resolved is not None else str(planned),
     )
 
 

@@ -9,19 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Pre-flight onboarding (graph + L1)** — Sovereign UI checklist step 2 saves the Logseq test vault path inline; step 3 **Create matryca-l1 folder** calls `POST /api/provision-l1` to provision sibling `matryca-l1/` (README + `session-rules.md`, wiki `memory_path` sync). Template `MATRYCA_L1_PATH` values from `.env.example` are ignored and cleared on provision.
 - **Auto `.env` provisioning** — `ensure_repo_dotenv_from_example()` copies `.env.example` → `.env` on first startup (CLI, UI lifespan, `reload_plumber_dotenv`) with a clear Loguru info line.
-- **Pre-flight API & wizard** — `GET /api/preflight` validates graph path, L1 memory, and local LLM `/v1/models`; Sovereign UI modal blocks **Start Engine** until all checks pass. Step 3 includes Matryca.ai mission copy, May 2026 CPU model recommendations, and MoE hardware guidance.
+- **Pre-flight API & wizard** — `GET /api/preflight` validates graph path, L1 memory, and local LLM `/v1/models`; Sovereign UI modal blocks **Start Engine** until all checks pass. Step 3 includes Matryca.ai mission copy, Qwen 3.5 (4B / 1.7B Instruct) sizing, Ministral 3 (3B), and MoE hardware guidance.
+- **Branding guide** — [`docs/BRANDING.md`](docs/BRANDING.md): product name **Matryca Plumber** (not “Matryca” alone), Matryca.ai attribution; README, CONTRIBUTING, and pre-flight UI aligned.
 - **Runtime bootstrap** (`src/utils/runtime_bootstrap.py`) — `prepare_matryca_runtime()` provisions log directories, sibling `matryca-l1/`, `.matryca_semantic_cache/`, `templates/`, and seeds `matryca-wiki.yml` before harvest or MCP lifecycles (daemon, CLI, Sovereign UI, MCP stdio). Spec: [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md).
 - **L1 directory provisioning** — `ensure_matryca_l1_dir()` creates `<parent-of-vault>/matryca-l1/` with operator docs (`README.md`, not loaded into LLM context) and starter `session-rules.md` when no other content `*.md` exists; override via `MATRYCA_L1_PATH` or `memory_path` in wiki YAML.
 - **CI test workflow** (`.github/workflows/test.yml`) — Pytest, Ruff, and Mypy on `main` and pull requests (with Sovereign UI frontend build).
+- **Phase 1 catalog pills** — bootstrap harvest persists `bootstrap_recent` (per-page harvest status) so the control room shows live indexing pills during cataloging, not only Phase 2 checkpoints.
+- **Page Summaries metric** — `GET /api/graph-analytics` exposes `page_summaries` (master catalog + session ledger); Sovereign UI **Plumber Agent Cognition** panel shows a fourth tile.
 
 ### Changed
 
+- **Pre-flight & docs** — Sovereign UI wizard and README recommend only **Gemma 4-E4b Instruct** (`gemma-4-e4b-it`); removed Qwen/Ministral model lists; note on testing additional models for CPU-only 16 GB RAM. `.env.example` default updated to match.
+- **README** — documents Sovereign UI pre-flight checklist (operator steps, live checks, `status` vs `start`, `uvx` zero-install), Marco Porcellato · Matryca.ai attribution, and links to `docs/BRANDING.md`.
 - **Loguru bootstrap** — `configure_loguru()` delegates log parent-dir creation to the same runtime bootstrap helper as ops JSONL sinks.
-- **`.env.example`** — documents `MATRYCA_L1_PATH`, log path overrides, and runtime layout pointers.
+- **`.env.example`** — `MATRYCA_L1_PATH` left commented (sibling `matryca-l1/` via pre-flight); documents log path overrides and runtime layout pointers.
 
 ### Fixed
 
+- **Phase 1 catalog pills (empty state)** — pills no longer read only `state.files` during Phase 1 when the daemon has not yet started Phase 2 file checkpoints.
+- **Phase 1 thermal delay** — bootstrap pauses reload `MATRYCA_THERMAL_DELAY_BOOTSTRAP` from `.env` after every catalog LLM turn (Settings Drawer value is honored); cool-down sleeps wake promptly on Stop.
+- **Phase 1 cooperative stop** — bootstrap harvest checks shutdown between pages and during map-reduce chunks instead of running the full vault after Stop.
+- **Sovereign UI Stop** — `POST /api/daemon/stop` is exempt from UI rate limiting; the 1s poll loop no longer hammers `/api/config`, avoiding 429 responses that blocked stop requests.
+- **Pre-flight graph save** — `POST /api/config/graph-path` (and ``PATCH``) updates only ``LOGSEQ_GRAPH_PATH``; API errors surface in the UI; verified graph clears stale save errors.
+- **Sovereign UI start gate** — `GET /api/state` reports `stopped` when no live Plumber PID is present, so opening `status` alone does not imply the engine is running or disable **Start Engine** on a stale `idle` checkpoint.
 - **Sovereign UI polling** — `GET /api/state` returns only the daemon checkpoint (no full-graph scan); topology telemetry moves to async `GET /api/graph-analytics` via `asyncio.to_thread`, so the 1s poll loop no longer blocks the FastAPI event loop.
 - **Phase 1 progress** — bootstrap harvest persists `bootstrap_scanned` / `bootstrap_total` every 50 pages; the control-room progress bar advances during cataloging instead of staying at 0%.
 - **CLI logging** — reject or redact operator payloads that would log secrets in clear text (`secret_violations_in_text` on CLI paths).

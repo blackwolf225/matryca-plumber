@@ -1292,8 +1292,25 @@ def test_run_cycle_thermal_delay_after_each_atomic_llm_turn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MATRYCA_THERMAL_DELAY_COGNITIVE", "2.0")
+    monkeypatch.setattr("src.agent.maintenance_daemon.reload_plumber_dotenv", lambda **_kw: None)
+    for lint_key in (
+        "MATRYCA_LINT_MARPA_FRAMEWORK",
+        "MATRYCA_LINT_HEAL_DANGLING",
+        "MATRYCA_LINT_ENTITY_CONSOLIDATION",
+        "MATRYCA_LINT_PROPERTY_HYGIENE",
+        "MATRYCA_LINT_AUTO_SPLIT",
+    ):
+        monkeypatch.setenv(lint_key, "false")
     sleeps: list[float] = []
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    def _record_thermal_sleep(seconds: float, *, stop_event: object = None) -> None:
+        _ = stop_event
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(
+        "src.agent.plumber_config._interruptible_thermal_sleep",
+        _record_thermal_sleep,
+    )
 
     def _fake_completion(
         self: InstructorLLMClient,
@@ -1322,11 +1339,14 @@ def test_run_cycle_thermal_delay_after_each_atomic_llm_turn(
         llm_client=InstructorLLMClient(),
         max_files_per_cycle=1,
     )
+    daemon.bootstrap_complete = True
+    phase2_state = load_daemon_state(graph_root)
+    phase2_state.bootstrap_complete = True
+    save_daemon_state(graph_root, phase2_state)
     daemon.run_cycle()
-    assert sleeps == []
+    sleeps.clear()
 
     _write_page(graph_root, "NeedsLlm", "- fresh content\n")
-    sleeps.clear()
     daemon.run_cycle()
     assert sleeps.count(2.0) >= 1
     assert all(delay == 2.0 for delay in sleeps)
@@ -1370,6 +1390,51 @@ def test_save_cycle_checkpoint_syncs_live_token_counters(graph_root: Path) -> No
     assert loaded.session_completion_tokens == 4
     assert loaded.current_cluster == "cluster-a"
     assert loaded.status == "running"
+
+
+def test_bootstrap_progress_persists_live_token_counters(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.graph.bootstrap_harvest import HarvestMetrics
+
+    logger = TokenLogger(log_path=graph_root / "ops.log")
+    logger.log_turn(
+        target_file="pages/Bootstrap.md",
+        operation="Bootstrap Harvest",
+        prompt_tokens=77,
+        completion_tokens=22,
+        prompt="bootstrap",
+        response="ok",
+        latency_seconds=0.1,
+    )
+
+    def _fake_harvest(*_args: object, **kwargs: object) -> HarvestMetrics:
+        sample = graph_root / "pages" / "Sample.md"
+        on_page = kwargs.get("on_page_cataloged")
+        on_progress = kwargs.get("on_progress")
+        if callable(on_page):
+            on_page(25, 100, sample, "llm")
+        elif callable(on_progress):
+            on_progress(25, 100, sample, "llm")
+        return HarvestMetrics()
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_bootstrap_harvest",
+        _fake_harvest,
+    )
+
+    daemon = MaintenanceDaemon(graph_root, token_logger=logger, llm_client=StubLLM())
+    assert daemon.bootstrap_complete is False
+    daemon.run_bootstrap_pipeline()
+
+    loaded = load_daemon_state(graph_root)
+    assert loaded.bootstrap_scanned == 25
+    assert loaded.bootstrap_total == 100
+    assert loaded.session_prompt_tokens == 77
+    assert loaded.session_completion_tokens == 22
+    assert loaded.page_summaries_created == 1
+    assert any(key.endswith("Sample.md") for key in loaded.bootstrap_recent)
 
 
 def test_run_cycle_increments_phase2_turns_and_persists_tokens(

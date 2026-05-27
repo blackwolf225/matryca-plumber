@@ -7,6 +7,8 @@ import { isEngineActive } from '../types/daemon'
 import { useUpdateCheck } from '../hooks/useUpdateCheck'
 import { basenameFromPath } from '../utils/metrics'
 import { usePreflight } from '../hooks/usePreflight'
+import type { ProvisionL1Response } from '../types/preflight'
+import { MATRYCA_API_BASE, matrycaFetchJson } from '../utils/matrycaApiAuth'
 import { PreFlightModal } from './PreFlightModal'
 import { SettingsDrawer } from './SettingsDrawer'
 import { UpdateGuideModal } from './UpdateGuideModal'
@@ -23,6 +25,7 @@ interface MasterHeaderProps {
   onStartEngine: () => Promise<void>
   onStopEngine: () => Promise<void>
   onSaveConfig: (payload: PlumberConfig) => Promise<PlumberConfig | null>
+  onConfigRefreshed?: (config: PlumberConfig) => void
 }
 
 const TOOLBAR_BUTTON_CLASS =
@@ -93,6 +96,7 @@ export function MasterHeader({
   onStartEngine,
   onStopEngine,
   onSaveConfig,
+  onConfigRefreshed,
 }: MasterHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [updateModalOpen, setUpdateModalOpen] = useState(false)
@@ -166,12 +170,12 @@ export function MasterHeader({
               <img
                 src="/Logo_boxed_noslogan.png"
                 className="h-9 dark:hidden"
-                alt="Matryca Logo"
+                alt="Matryca Plumber logo"
               />
               <img
                 src="/Logo_boxed_noslogan_white.png"
                 className="hidden h-9 dark:block"
-                alt="Matryca Logo"
+                alt="Matryca Plumber logo"
               />
             </div>
 
@@ -283,7 +287,25 @@ export function MasterHeader({
         report={preflightReport}
         loading={preflightLoading}
         error={preflightError}
+        config={config}
         onRefresh={refreshPreflight}
+        onSaveGraphPath={async (path) => {
+          const updated = await matrycaFetchJson<PlumberConfig>(
+            `${MATRYCA_API_BASE}/api/config/graph-path`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ logseq_graph_path: path }),
+            },
+          )
+          onConfigRefreshed?.(updated)
+          return updated
+        }}
+        onProvisionL1={() =>
+          matrycaFetchJson<ProvisionL1Response>(`${MATRYCA_API_BASE}/api/provision-l1`, {
+            method: 'POST',
+          })
+        }
         onOpenSettings={() => {
           setPreflightOpen(false)
           setDrawerOpen(true)

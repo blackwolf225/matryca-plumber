@@ -117,3 +117,42 @@ def test_get_preflight_endpoint(
     payload = response.json()
     assert payload["ready"] is True
     assert len(payload["checks"]) == 4
+
+
+def test_run_preflight_l1_passes_when_matryca_l1_path_is_template(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Template ``MATRYCA_L1_PATH`` from ``.env.example`` must not block sibling L1."""
+    graph = tmp_path / "vault"
+    (graph / "pages").mkdir(parents=True)
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        f'LOGSEQ_GRAPH_PATH="{graph}"\n'
+        'MATRYCA_L1_PATH="/absolute/path/to/matryca-l1"\n'
+        'MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n'
+        'MATRYCA_LM_MODEL=test-model\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "src.agent.plumber_config.resolve_repo_dotenv_path",
+        lambda: env_path,
+    )
+    monkeypatch.setattr("src.utils.preflight.reload_plumber_dotenv", lambda **_kw: None)
+    monkeypatch.setattr("src.config.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setattr("src.utils.preflight.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setattr("src.utils.runtime_bootstrap.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
+    monkeypatch.setenv("MATRYCA_L1_PATH", "/absolute/path/to/matryca-l1")
+    monkeypatch.setenv("MATRYCA_LM_BASE_URL", "http://localhost:1234/v1")
+    monkeypatch.setenv("MATRYCA_LM_MODEL", "test-model")
+
+    with patch(
+        "src.utils.preflight._probe_openai_models",
+        return_value=(True, "ok", ["test-model"]),
+    ):
+        report = run_preflight_checks(repo_root=tmp_path)
+
+    l1_check = next(check for check in report.checks if check.id == "l1_memory")
+    assert l1_check.status == "pass"
+    assert Path(l1_check.detail) == tmp_path / "matryca-l1"

@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
 from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
 from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
 from .generational_cache import patch_generational_caches_for_paths
+from .bootstrap_stop import BootstrapHarvestStopped
 from .hierarchical_summarization import mapreduce_harvest_page_summary
 from .markdown_blocks import (
     atomic_write_bytes,
@@ -36,7 +39,20 @@ from .page_write_lock import page_rmw_lock
 _TYPE_LINE = re.compile(r"^\s*type::\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 _MARPA_DOMAINS = frozenset({"mappa", "area", "risorsa", "progetto", "archivio"})
 BOOTSTRAP_PROGRESS_INTERVAL = 50
-BootstrapProgressCallback = Callable[[int, int, Path | None], None]
+BootstrapHarvestStatus = Literal["regex", "llm", "skipped", "error"]
+BootstrapProgressCallback = Callable[
+    [int, int, Path | None, BootstrapHarvestStatus | None],
+    None,
+]
+
+
+def _progress_harvest_status(raw_status: str) -> BootstrapHarvestStatus | None:
+    """Map per-page harvest outcomes to UI/bootstrap telemetry statuses."""
+    if raw_status == "skipped_empty":
+        return "skipped"
+    if raw_status in ("regex", "llm", "skipped", "error"):
+        return raw_status  # type: ignore[return-value]
+    return None
 
 
 @dataclass
@@ -202,6 +218,7 @@ def harvest_page_into_catalog(
     llm: HarvestLLM | None = None,
     incoming_counts: dict[str, int] | None = None,
     config: PlumberLintConfig | None = None,
+    stop_event: threading.Event | None = None,
 ) -> tuple[str, bool, bool]:
     """Harvest one page into the catalog.
 
@@ -233,6 +250,9 @@ def harvest_page_into_catalog(
     if llm is None:
         return "pending_llm", False, False
 
+    if stop_event is not None and stop_event.is_set():
+        raise BootstrapHarvestStopped
+
     lint_config = config or load_plumber_lint_config()
     domain = _infer_domain_from_content(title, content)
     baseline_mtime = read_file_mtime(page_path)
@@ -243,6 +263,7 @@ def harvest_page_into_catalog(
         page_path=page_path,
         graph_root=graph_root,
         config=lint_config,
+        stop_event=stop_event,
     )
     reset_history = getattr(llm, "reset_execution_history", None)
     if reset_history is not None:
@@ -277,6 +298,9 @@ def run_bootstrap_harvest(
     config: PlumberLintConfig | None = None,
     progress_interval: int = BOOTSTRAP_PROGRESS_INTERVAL,
     on_progress: BootstrapProgressCallback | None = None,
+    on_page_cataloged: BootstrapProgressCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> HarvestMetrics:
     """Scan the graph, populate the master catalog, and compile the master index."""
     root = graph_root.expanduser().resolve(strict=False)
@@ -297,11 +321,18 @@ def run_bootstrap_harvest(
 
     total_pages = len(paths)
     if on_progress is not None:
-        on_progress(0, total_pages, None)
+        on_progress(0, total_pages, None, None)
 
     changed = metrics.pruned > 0
     interval = max(1, progress_interval)
+    stopped_early = False
     for page_path in paths:
+        if should_stop is not None and should_stop():
+            stopped_early = True
+            break
+        if stop_event is not None and stop_event.is_set():
+            stopped_early = True
+            break
         metrics.scanned += 1
         try:
             status, page_changed, llm_called_this_turn = harvest_page_into_catalog(
@@ -311,10 +342,18 @@ def run_bootstrap_harvest(
                 llm=llm,
                 incoming_counts=incoming,
                 config=lint_config,
+                stop_event=stop_event,
             )
+        except BootstrapHarvestStopped:
+            stopped_early = True
+            break
         except Exception as exc:  # noqa: BLE001 - per-file isolation
             metrics.errors += 1
             metrics.error_messages.append(f"{page_path.name}: {exc}")
+            if on_progress is not None and (
+                metrics.scanned % interval == 0 or metrics.scanned == total_pages
+            ):
+                on_progress(metrics.scanned, total_pages, page_path, "error")
             continue
 
         if status == "regex":
@@ -324,15 +363,18 @@ def run_bootstrap_harvest(
         elif status == "skipped_empty":
             metrics.skipped_empty += 1
         changed = changed or page_changed
+        harvest_status = _progress_harvest_status(status)
+        if on_page_cataloged is not None:
+            on_page_cataloged(metrics.scanned, total_pages, page_path, harvest_status)
 
         if on_progress is not None and (
             metrics.scanned % interval == 0 or metrics.scanned == total_pages
         ):
-            on_progress(metrics.scanned, total_pages, page_path)
+            on_progress(metrics.scanned, total_pages, page_path, harvest_status)
 
     _refresh_orphan_flags(root, catalog)
 
-    if changed or not incremental:
+    if not stopped_early and (changed or not incremental):
         catalog.save()
         if rebuild_index:
             write_master_index_page(root, catalog)
@@ -342,7 +384,7 @@ def run_bootstrap_harvest(
                 [master_index_page_path(root)],
             )
 
-    if phase1_strict:
+    if phase1_strict and not stopped_early:
         titles_after = _snapshot_page_titles(root)
         metrics.files_created = _count_new_concept_pages(
             before=titles_before,
@@ -368,6 +410,7 @@ def run_incremental_catalog_refresh(
 
 __all__ = [
     "BOOTSTRAP_PROGRESS_INTERVAL",
+    "BootstrapHarvestStatus",
     "BootstrapProgressCallback",
     "HarvestMetrics",
     "harvest_page_into_catalog",

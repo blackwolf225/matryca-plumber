@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -181,8 +182,15 @@ class PlumberLintConfig:
 
 
 def bootstrap_phase_lint_config() -> PlumberLintConfig:
-    """Return a lint config with every generative/mutative module disabled (Phase 1)."""
-    return PlumberLintConfig()
+    """Lint config for Phase 1: modules off, thermal/map-reduce from live ``.env``."""
+    live = load_plumber_lint_config()
+    return PlumberLintConfig(
+        thermal_delay_bootstrap=live.thermal_delay_bootstrap,
+        thermal_delay_cognitive=live.thermal_delay_cognitive,
+        low_priority_mode=live.low_priority_mode,
+        mapreduce_trigger_chars=live.mapreduce_trigger_chars,
+        mapreduce_chunk_chars=live.mapreduce_chunk_chars,
+    )
 
 
 def _safe_thermal_seconds(seconds: float) -> float:
@@ -205,20 +213,41 @@ def _safe_nonneg_int(value: int, *, default: int) -> int:
     return max(0, parsed)
 
 
-def apply_thermal_pause_bootstrap(config: PlumberLintConfig | None = None) -> None:
+def _interruptible_thermal_sleep(
+    seconds: float,
+    *,
+    stop_event: threading.Event | None = None,
+) -> None:
+    """Sleep for thermal cool-down, waking early when ``stop_event`` is set."""
+    delay = _safe_thermal_seconds(seconds)
+    if delay <= 0:
+        return
+    if stop_event is None:
+        time.sleep(delay)
+        return
+    stop_event.wait(timeout=delay)
+
+
+def apply_thermal_pause_bootstrap(
+    config: PlumberLintConfig | None = None,
+    *,
+    stop_event: threading.Event | None = None,
+) -> None:
     """GPU cool-down after one bootstrap harvest LLM turn (reads live env each call)."""
-    cfg = config or load_plumber_lint_config()
-    delay = _safe_thermal_seconds(cfg.thermal_delay_bootstrap)
-    if delay > 0:
-        time.sleep(delay)
+    _ = config
+    delay = _safe_thermal_seconds(load_plumber_lint_config().thermal_delay_bootstrap)
+    _interruptible_thermal_sleep(delay, stop_event=stop_event)
 
 
-def apply_thermal_pause_cognitive(config: PlumberLintConfig | None = None) -> None:
+def apply_thermal_pause_cognitive(
+    config: PlumberLintConfig | None = None,
+    *,
+    stop_event: threading.Event | None = None,
+) -> None:
     """GPU cool-down after one Plumber cognitive LLM turn (reads live env each call)."""
-    cfg = config or load_plumber_lint_config()
-    delay = _safe_thermal_seconds(cfg.thermal_delay_cognitive)
-    if delay > 0:
-        time.sleep(delay)
+    _ = config
+    delay = _safe_thermal_seconds(load_plumber_lint_config().thermal_delay_cognitive)
+    _interruptible_thermal_sleep(delay, stop_event=stop_event)
 
 
 def _map_bool(env: Mapping[str, str], key: str, default: bool = False) -> bool:
