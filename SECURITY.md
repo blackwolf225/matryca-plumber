@@ -24,7 +24,8 @@ Matryca Plumber ships several **defense-in-depth** controls you should configure
 | Control | Variable | Default | Purpose |
 |---------|----------|---------|---------|
 | MCP stdio gate | `MATRYCA_MCP_ENABLED` | `false` | Prevents accidental FastMCP startup unless you explicitly enable Claude Desktop / Cursor integration. |
-| UI bearer token | `MATRYCA_UI_TOKEN` | auto per process | Set a long random value if you enable LAN binding. |
+| UI bearer token | `MATRYCA_UI_TOKEN` | auto per process | Set a long random value on any shared or multi-user host; loopback clients can read an auto token via `/api/auth/session`. |
+| Require explicit UI token | `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN` | `false` | When `true`, refuse UI startup unless `MATRYCA_UI_TOKEN` is set. |
 | LAN UI bind | `MATRYCA_UI_ALLOW_LAN` | `false` | Refuses `0.0.0.0` unless set; `/api/auth/session` stays loopback-only even when LAN is on. |
 | LLM SSRF guard | `LLM_BASE_URL` / `MATRYCA_LM_BASE_URL` | localhost | Shared validation in UI and daemon blocks cloud metadata and arbitrary egress URLs. |
 | Graph path allowlist | `MATRYCA_ALLOWED_GRAPH_ROOTS` | (optional) | Settings UI cannot point `LOGSEQ_GRAPH_PATH` outside home, repo, temp, or declared roots. |
@@ -32,7 +33,11 @@ Matryca Plumber ships several **defense-in-depth** controls you should configure
 | Log redaction | `MATRYCA_PLUMBER_LOG_REDACT_SECRETS` | `true` | Masks Bearer tokens, `sk-*` keys, and JWT-shaped material in ops logs. |
 | MCP error sanitization | `MATRYCA_DEBUG` | `false` | When off, MCP tools do not return raw OS paths in error strings. |
 
-**Recommended local setup:** loopback UI only, `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host, test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`.
+**Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host (Cursor/Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`.
+
+### MCP trust boundary
+
+The optional FastMCP stdio sidecar (`matryca-plumber` with no CLI arguments when `MATRYCA_MCP_ENABLED=true`) exposes the same mutation tools as the daemon. The MCP **host process** is the security boundary: treat it like shell access to your graph directory. Do not enable MCP when the host may run untrusted extensions or shared automation.
 
 ## Non-goals
 

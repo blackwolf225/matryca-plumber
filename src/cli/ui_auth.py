@@ -18,6 +18,38 @@ def resolve_ui_token() -> str:
     return _resolved_token
 
 
+def ui_token_is_ephemeral() -> bool:
+    """True when the bearer token was auto-generated (not set in the environment)."""
+    return not os.environ.get("MATRYCA_UI_TOKEN", "").strip()
+
+
+def warn_if_ephemeral_ui_token() -> None:
+    """Log operator guidance when the UI token is generated per process."""
+    if not ui_token_is_ephemeral():
+        return
+    from loguru import logger
+
+    logger.warning(
+        "MATRYCA_UI_TOKEN is unset: a random bearer token was generated for this process. "
+        "Any local process on loopback can obtain it via GET /api/auth/session. "
+        "Set MATRYCA_UI_TOKEN to a long random value on shared or multi-user hosts."
+    )
+
+
+def require_explicit_ui_token_if_configured() -> None:
+    """Refuse UI startup when ``MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN`` is enabled without a token."""
+    raw = os.environ.get("MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN", "").strip().lower()
+    if raw not in {"1", "true", "yes", "on"}:
+        return
+    if os.environ.get("MATRYCA_UI_TOKEN", "").strip():
+        return
+    msg = (
+        "MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN is enabled but MATRYCA_UI_TOKEN is empty. "
+        "Set MATRYCA_UI_TOKEN before starting the Sovereign UI."
+    )
+    raise ValueError(msg)
+
+
 def verify_ui_token(provided: str | None) -> bool:
     """Constant-time comparison against the active UI token."""
     if not provided or not provided.strip():
@@ -46,7 +78,10 @@ def require_explicit_ui_token_for_lan() -> None:
 
 __all__ = [
     "require_explicit_ui_token_for_lan",
+    "require_explicit_ui_token_if_configured",
     "reset_ui_token_for_tests",
     "resolve_ui_token",
+    "ui_token_is_ephemeral",
     "verify_ui_token",
+    "warn_if_ephemeral_ui_token",
 ]

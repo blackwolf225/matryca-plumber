@@ -71,7 +71,6 @@ from ..graph.page_write_lock import (
     PageLockUnavailableError,
     clear_page_write_locks,
     page_rmw_lock,
-    probe_page_rmw_lock,
     sweep_matryca_lock_sidecars,
 )
 from ..graph.path_sandbox import (
@@ -328,6 +327,8 @@ class DaemonState:
     status: DaemonStatus = "idle"
     model: str = DEFAULT_LM_MODEL
     bootstrap_complete: bool = False
+    bootstrap_failed: bool = False
+    bootstrap_failed_reason: str | None = None
     bootstrap_scanned: int = 0
     bootstrap_total: int = 0
     session_prompt_tokens: int = 0
@@ -354,6 +355,8 @@ class DaemonState:
             "status": self.status,
             "model": self.model,
             "bootstrap_complete": self.bootstrap_complete,
+            "bootstrap_failed": self.bootstrap_failed,
+            "bootstrap_failed_reason": self.bootstrap_failed_reason,
             "bootstrap_scanned": self.bootstrap_scanned,
             "bootstrap_total": self.bootstrap_total,
             "session_prompt_tokens": self.session_prompt_tokens,
@@ -420,6 +423,12 @@ class DaemonState:
             status=str(payload.get("status", "idle")),  # type: ignore[arg-type]
             model=str(payload.get("model", DEFAULT_LM_MODEL)),
             bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
+            bootstrap_failed=bool(payload.get("bootstrap_failed", False)),
+            bootstrap_failed_reason=(
+                str(payload["bootstrap_failed_reason"])
+                if payload.get("bootstrap_failed_reason") not in (None, "")
+                else None
+            ),
             bootstrap_scanned=int(payload.get("bootstrap_scanned", 0)),
             bootstrap_total=int(payload.get("bootstrap_total", 0)),
             session_prompt_tokens=int(payload.get("session_prompt_tokens", 0)),
@@ -1755,6 +1764,7 @@ class MaintenanceDaemon:
         self._active_write_count = 0
         self._state_persist_failed = False
         self.bootstrap_complete = False
+        self.bootstrap_failed = False
         self._ensure_shared_token_logger()
         capability = probe_concurrency_capability()
         if capability.mode == "full":
@@ -1809,13 +1819,33 @@ class MaintenanceDaemon:
 
     def _hydrate_bootstrap_phase(self, state: DaemonState) -> None:
         """Restore Phase 2 readiness from persisted state or a complete on-disk catalog."""
+        self.bootstrap_failed = bool(state.bootstrap_failed)
         if state.bootstrap_complete or is_bootstrap_catalog_complete(self.graph_root):
             self.bootstrap_complete = True
             state.bootstrap_complete = True
+            state.bootstrap_failed = False
+            state.bootstrap_failed_reason = None
+            self.bootstrap_failed = False
         elif not self.bootstrap_complete:
             self.bootstrap_complete = False
 
+    def _persist_bootstrap_failure(self, state: DaemonState, message: str) -> None:
+        """Record Phase 1 failure and block Phase 2 LLM until bootstrap succeeds."""
+        self.bootstrap_complete = False
+        self.bootstrap_failed = True
+        state.bootstrap_complete = False
+        state.bootstrap_failed = True
+        state.bootstrap_failed_reason = message
+        state.status = "idle"
+        self._sync_live_telemetry(state)
+        save_daemon_state(self.graph_root, state)
+        logger.error("Bootstrap failed: {}", message)
+
     def _persist_bootstrap_complete(self, state: DaemonState) -> None:
+        self.bootstrap_failed = False
+        self.bootstrap_complete = True
+        state.bootstrap_failed = False
+        state.bootstrap_failed_reason = None
         state.bootstrap_complete = True
         state.bootstrap_scanned = 0
         state.bootstrap_total = 0
@@ -1977,22 +2007,26 @@ class MaintenanceDaemon:
             except Exception as exc:  # noqa: BLE001 - bootstrap must not block daemon start
                 last_exc = exc
                 if attempt >= max_attempts:
+                    msg = f"Bootstrap harvest failed after {max_attempts} attempts: {exc}"
                     self.token_logger.log_structural_lint_warning(
                         target_file=self.graph_root,
-                        message=(f"Bootstrap harvest failed after {max_attempts} attempts: {exc}"),
+                        message=msg,
                         malformed_refs=[],
                     )
+                    self._persist_bootstrap_failure(checkpoint, msg)
                     return
                 time.sleep(backoff_s)
                 backoff_s *= 2.0
 
         if metrics is None:
             if last_exc is not None:
+                msg = f"Bootstrap harvest failed: {last_exc}"
                 self.token_logger.log_structural_lint_warning(
                     target_file=self.graph_root,
-                    message=f"Bootstrap harvest failed: {last_exc}",
+                    message=msg,
                     malformed_refs=[],
                 )
+                self._persist_bootstrap_failure(checkpoint, msg)
             return
 
         if self._stop_requested:
@@ -2003,14 +2037,16 @@ class MaintenanceDaemon:
 
         master_index = master_index_page_path(self.graph_root)
         if not master_index.is_file() or metrics.files_created != 0:
+            msg = (
+                "Bootstrap Phase 1 incomplete: master index missing or unexpected "
+                f"concept pages created (files_created={metrics.files_created})."
+            )
             self.token_logger.log_structural_lint_warning(
                 target_file=self.graph_root,
-                message=(
-                    "Bootstrap Phase 1 incomplete: master index missing or unexpected "
-                    f"concept pages created (files_created={metrics.files_created})."
-                ),
+                message=msg,
                 malformed_refs=[],
             )
+            self._persist_bootstrap_failure(checkpoint, msg)
             return
 
         self.bootstrap_complete = True
@@ -2247,114 +2283,108 @@ class MaintenanceDaemon:
         write_aborted = False
         self._begin_phase2_write()
         try:
-            baseline_mtime = occ_snapshot(path)
-            content = path.read_text(encoding="utf-8", errors="replace")
-            cognitive_outcome: CognitiveLintOutcome | None = None
-            prompt_session: PagePromptSession | None = None
-            if self.bootstrap_complete and lint_config.any_enabled:
-                cognitive_outcome, prompt_session = run_cognitive_lint_pipeline(
-                    self.graph_root,
-                    path,
-                    title,
-                    content,
-                    llm=self.llm_client,
-                    config=lint_config,
-                )
-                record_daemon_impact(state, cognitive=cognitive_outcome)
-                if isinstance(self.llm_client, InstructorLLMClient):
-                    self._absorb_token_logger_delta(
-                        self.llm_client.token_logger,
-                        baseline_prompt=prompt_before,
-                        baseline_completion=completion_before,
-                    )
-                self._sync_live_telemetry(
-                    state,
-                    cluster_id=cluster_id,
-                    mark_running=True,
-                )
-                self._save_cycle_checkpoint(state, path=path)
+            with page_rmw_lock(path):
+                baseline_mtime = occ_snapshot(path)
                 content = path.read_text(encoding="utf-8", errors="replace")
-                refreshed_mtime = occ_snapshot(path)
-                if refreshed_mtime is not None:
-                    baseline_mtime = refreshed_mtime
-            alias_index = self._compiled_alias_index() if self.bootstrap_complete else None
-            enable_semantic_routing = self.bootstrap_complete and lint_config.semantic_routing
-            enable_backprop = self.bootstrap_complete and lint_config.backpropagate_links
-            if baseline_mtime is not None and file_mtime_drifted(path, baseline_mtime):
-                logger.warning(
-                    "OCC Conflict: User modified {} during inference. Aborting write.",
-                    path,
+                cognitive_outcome: CognitiveLintOutcome | None = None
+                prompt_session: PagePromptSession | None = None
+                if self.bootstrap_complete and lint_config.any_enabled:
+                    cognitive_outcome, prompt_session = run_cognitive_lint_pipeline(
+                        self.graph_root,
+                        path,
+                        title,
+                        content,
+                        llm=self.llm_client,
+                        config=lint_config,
+                    )
+                    record_daemon_impact(state, cognitive=cognitive_outcome)
+                    if isinstance(self.llm_client, InstructorLLMClient):
+                        self._absorb_token_logger_delta(
+                            self.llm_client.token_logger,
+                            baseline_prompt=prompt_before,
+                            baseline_completion=completion_before,
+                        )
+                    self._sync_live_telemetry(
+                        state,
+                        cluster_id=cluster_id,
+                        mark_running=True,
+                    )
+                    self._save_cycle_checkpoint(state, path=path)
+                    content = path.read_text(encoding="utf-8", errors="replace")
+                    refreshed_mtime = occ_snapshot(path)
+                    if refreshed_mtime is not None:
+                        baseline_mtime = refreshed_mtime
+                alias_index = self._compiled_alias_index() if self.bootstrap_complete else None
+                enable_semantic_routing = (
+                    self.bootstrap_complete and lint_config.semantic_routing
                 )
-                write_aborted = True
-                return False
-            _key, prior_rec = _lookup_file_state(self.graph_root, state, path)
-            try:
-                probe_page_rmw_lock(path)
-            except PageLockUnavailableError as exc:
-                self.token_logger.log_structural_lint_warning(
-                    target_file=path,
-                    message=f"Page lock unavailable before inference: {exc}",
-                    malformed_refs=[],
-                )
-                _record_page_lock_backoff(
-                    state,
-                    key=key,
-                    mtime=mtime,
-                    message=str(exc),
-                    prior=prior_rec,
-                )
-                return False
-            if prompt_session is None and self.graph_root is not None:
-                prompt_session = build_page_prompt_session(
-                    self.graph_root,
+                enable_backprop = self.bootstrap_complete and lint_config.backpropagate_links
+                if baseline_mtime is not None and file_mtime_drifted(path, baseline_mtime):
+                    logger.warning(
+                        "OCC Conflict: User modified {} during inference. Aborting write.",
+                        path,
+                    )
+                    write_aborted = True
+                    return False
+                _key, prior_rec = _lookup_file_state(self.graph_root, state, path)
+                if prompt_session is None and self.graph_root is not None:
+                    prompt_session = build_page_prompt_session(
+                        self.graph_root,
+                        title,
+                        content,
+                        config=lint_config,
+                        stable_system=build_semantic_lint_system_prompt(),
+                        page_path=path,
+                        alias_index=alias_index,
+                    )
+                result, usage = self.llm_client.index_page(
                     title,
                     content,
-                    config=lint_config,
-                    stable_system=build_semantic_lint_system_prompt(),
                     page_path=path,
+                    graph_root=self.graph_root,
                     alias_index=alias_index,
+                    enable_semantic_routing=enable_semantic_routing,
+                    prompt_session=prompt_session,
                 )
-            result, usage = self.llm_client.index_page(
-                title,
-                content,
-                page_path=path,
-                graph_root=self.graph_root,
-                alias_index=alias_index,
-                enable_semantic_routing=enable_semantic_routing,
-                prompt_session=prompt_session,
-            )
-            llm_called_from_usage = (
-                int(usage.get("prompt_tokens", 0) or 0)
-                + int(usage.get("completion_tokens", 0) or 0)
-            ) > 0
-            lint_outcome = apply_semantic_page_result(
-                self.graph_root,
-                path,
-                title,
-                result,
-                backpropagate=enable_backprop,
-                alias_index=alias_index,
-                disable_semantic_corrections=lint_config.disable_semantic_corrections,
-                baseline_mtime=baseline_mtime,
-            )
-            record_daemon_impact(
-                state,
-                lint=lint_outcome,
-                links_backpropagated=lint_outcome.links_backpropagated,
-            )
-            if lint_outcome.write_aborted:
-                write_aborted = True
-                llm_called_from_logger = (
-                    self.token_logger.session_prompt_tokens > prompt_before
-                    or self.token_logger.session_completion_tokens > completion_before
+                llm_called_from_usage = (
+                    int(usage.get("prompt_tokens", 0) or 0)
+                    + int(usage.get("completion_tokens", 0) or 0)
+                ) > 0
+                if baseline_mtime is not None and file_mtime_drifted(path, baseline_mtime):
+                    logger.warning(
+                        "OCC Conflict: User modified {} before apply. Aborting write.",
+                        path,
+                    )
+                    write_aborted = True
+                    return False
+                lint_outcome = apply_semantic_page_result(
+                    self.graph_root,
+                    path,
+                    title,
+                    result,
+                    backpropagate=enable_backprop,
+                    alias_index=alias_index,
+                    disable_semantic_corrections=lint_config.disable_semantic_corrections,
+                    baseline_mtime=baseline_mtime,
                 )
-                return llm_called_from_usage or llm_called_from_logger
-            state.files[key] = FileState(
-                mtime=path.stat().st_mtime,
-                processed_at=datetime.now(tz=UTC).isoformat(),
-                status="processed",
-            )
-            self._sync_catalog_after_page_write(path, title)
+                record_daemon_impact(
+                    state,
+                    lint=lint_outcome,
+                    links_backpropagated=lint_outcome.links_backpropagated,
+                )
+                if lint_outcome.write_aborted:
+                    write_aborted = True
+                    llm_called_from_logger = (
+                        self.token_logger.session_prompt_tokens > prompt_before
+                        or self.token_logger.session_completion_tokens > completion_before
+                    )
+                    return llm_called_from_usage or llm_called_from_logger
+                state.files[key] = FileState(
+                    mtime=path.stat().st_mtime,
+                    processed_at=datetime.now(tz=UTC).isoformat(),
+                    status="processed",
+                )
+                self._sync_catalog_after_page_write(path, title)
         except PageLockUnavailableError as exc:
             self.token_logger.log_structural_lint_warning(
                 target_file=path,
@@ -2506,11 +2536,18 @@ class MaintenanceDaemon:
             save_daemon_state(self.graph_root, state)
             return state
 
-        pending_llm = list_pending_files(
-            self.graph_root,
-            state,
-            bootstrap_complete=self.bootstrap_complete,
-        )
+        if self.bootstrap_failed and not self.bootstrap_complete:
+            logger.warning(
+                "Skipping Phase 2 LLM cycle: bootstrap_failed ({})",
+                state.bootstrap_failed_reason or "unknown",
+            )
+            pending_llm: list[Path] = []
+        else:
+            pending_llm = list_pending_files(
+                self.graph_root,
+                state,
+                bootstrap_complete=self.bootstrap_complete,
+            )
         lint_config = self._effective_lint_config()
         cluster_cycle = self._use_semantic_cluster_cycle(lint_config)
         llm_turns_this_cycle = 0

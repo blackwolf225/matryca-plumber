@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from src.agent.page_prompt_session import build_page_prompt_session
 from src.agent.plumber_config import (
     PlumberLintConfig,
     apply_thermal_pause_bootstrap,
@@ -23,6 +24,7 @@ from src.agent.plumber_modules.auto_split import run_auto_split
 from src.agent.plumber_modules.dangling_healer import run_dangling_healer
 from src.agent.plumber_modules.marpa_framework import run_marpa_framework
 from src.agent.plumber_modules.property_hygiene import run_property_hygiene
+from src.agent.semantic_lint_prompts import build_semantic_lint_system_prompt
 from src.graph.master_catalog import load_master_catalog
 from src.graph.page_write_lock import clear_page_write_locks
 from src.graph.path_sandbox import graph_safe_page_path
@@ -273,6 +275,40 @@ def test_auto_split_extracts_dense_subtree(graph_root: Path) -> None:
     assert "[[" in updated
     child = graph_safe_page_path(graph_root, outcome.pages_created[0])
     assert child.is_file()
+
+
+def test_cognitive_pipeline_rebuilds_prompt_session_after_auto_split(
+    graph_root: Path,
+) -> None:
+    lines = ["- Root topic\n", "  id:: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n"]
+    for i in range(20):
+        lines.append(f"  - child item {i}\n")
+    path = _write_page(graph_root, "DensePrompt", "".join(lines))
+    initial = path.read_text(encoding="utf-8")
+    config = PlumberLintConfig(auto_split=True, split_block_threshold=15)
+    _, session = run_cognitive_lint_pipeline(
+        graph_root,
+        path,
+        "DensePrompt",
+        initial,
+        llm=StubPlumberLLM(),
+        config=config,
+    )
+    assert session is not None
+    final_content = path.read_text(encoding="utf-8")
+    from src.graph.generational_cache import cached_build_alias_index
+
+    alias_index = cached_build_alias_index(graph_root)
+    expected = build_page_prompt_session(
+        graph_root,
+        "DensePrompt",
+        final_content,
+        config=config,
+        stable_system=build_semantic_lint_system_prompt(),
+        page_path=path,
+        alias_index=alias_index,
+    )
+    assert session.prefix_sha256 == expected.prefix_sha256
 
 
 def test_cognitive_pipeline_respects_disabled_modules(graph_root: Path) -> None:

@@ -6,6 +6,7 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -14,7 +15,7 @@ from typing import Any, Literal, cast
 import httpx
 import instructor
 from loguru import logger
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 from pydantic import BaseModel, ValidationError
 
 from ..graph.insights_engine import INSIGHTS_SYSTEM_PROMPT
@@ -59,6 +60,62 @@ from .prompt_layout import build_cache_aligned_prompt
 _LLM_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=5.0, pool=5.0)
 
 ThermalProfile = Literal["none", "bootstrap", "cognitive"]
+
+
+def _transport_retry_attempts() -> int:
+    raw = os.environ.get("MATRYCA_LLM_TRANSPORT_RETRIES", "3").strip()
+    try:
+        return max(1, min(8, int(raw)))
+    except ValueError:
+        return 3
+
+
+def _is_transport_retryable(exc: BaseException) -> bool:
+    if isinstance(
+        exc,
+        (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.RemoteProtocolError,
+            APIConnectionError,
+            RateLimitError,
+        ),
+    ):
+        return True
+    if isinstance(exc, APIStatusError):
+        code = getattr(exc, "status_code", None)
+        return code in {429, 502, 503, 504}
+    return False
+
+
+def call_openai_with_transport_retries[T](factory: Callable[[], T]) -> T:
+    """Retry transient HTTP failures when calling the local OpenAI-compatible API."""
+    attempts = _transport_retry_attempts()
+    backoff_s = 1.0
+    last_exc: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return factory()
+        except BaseException as exc:  # noqa: BLE001 - classify retryable OpenAI/httpx faults
+            last_exc = exc
+            if not _is_transport_retryable(exc) or attempt >= attempts:
+                raise
+            logger.warning(
+                "LLM transport error (attempt {}/{}): {} — retrying in {:.1f}s",
+                attempt,
+                attempts,
+                exc,
+                backoff_s,
+            )
+            time.sleep(backoff_s)
+            backoff_s = min(backoff_s * 2.0, 30.0)
+    if last_exc is not None:
+        raise last_exc
+    msg = "LLM transport retries exhausted without a captured exception"
+    raise RuntimeError(msg)
+
 
 MAX_SELF_CORRECTION_RETRIES = 3
 
@@ -274,18 +331,20 @@ class AdaptiveStructuredOutputEngine:
         client = self._client
         schema = pydantic_to_strict_json_schema(response_model)
         api_messages = cast(Any, messages)
-        response = client._raw_client.chat.completions.create(
-            model=client.model,
-            messages=api_messages,
-            temperature=0.1,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": _schema_name(response_model),
-                    "schema": schema,
-                    "strict": True,
+        response = call_openai_with_transport_retries(
+            lambda: client._raw_client.chat.completions.create(
+                model=client.model,
+                messages=api_messages,
+                temperature=0.1,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": _schema_name(response_model),
+                        "schema": schema,
+                        "strict": True,
+                    },
                 },
-            },
+            ),
         )
         raw_text = _extract_first_choice_content(response)
         parsed = response_model.model_validate_json(raw_text)
@@ -556,13 +615,15 @@ class InstructorLLMClient:
 
     def _compress_history_via_llm(self, compression_prompt: str) -> str:
         started = time.perf_counter()
-        response = self._raw_client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
-                {"role": "user", "content": compression_prompt},
-            ],
-            temperature=0.1,
+        response = call_openai_with_transport_retries(
+            lambda: self._raw_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
+                    {"role": "user", "content": compression_prompt},
+                ],
+                temperature=0.1,
+            ),
         )
         content = _extract_first_choice_content(response)
         self._log_completion_turn(
@@ -592,17 +653,21 @@ class InstructorLLMClient:
         _ = thermal_profile
         api_messages = cast(Any, messages)
         try:
-            response = self._raw_client.chat.completions.create(
-                model=self.model,
-                messages=api_messages,
-                temperature=0.1,
-                response_format={"type": "json_object"},
+            response = call_openai_with_transport_retries(
+                lambda: self._raw_client.chat.completions.create(
+                    model=self.model,
+                    messages=api_messages,
+                    temperature=0.1,
+                    response_format={"type": "json_object"},
+                ),
             )
         except Exception:  # noqa: BLE001
-            response = self._raw_client.chat.completions.create(
-                model=self.model,
-                messages=api_messages,
-                temperature=0.1,
+            response = call_openai_with_transport_retries(
+                lambda: self._raw_client.chat.completions.create(
+                    model=self.model,
+                    messages=api_messages,
+                    temperature=0.1,
+                ),
             )
         content = _extract_first_choice_content(response)
         return content, response

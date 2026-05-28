@@ -28,8 +28,9 @@ except ImportError:  # pragma: no cover - Windows and other non-Unix platforms
     _fcntl = None
 
 _registry_guard = threading.Lock()
-_page_locks: OrderedDict[str, threading.Lock] = OrderedDict()
+_page_locks: OrderedDict[str, threading.RLock] = OrderedDict()
 _MAX_PAGE_LOCK_REGISTRY = 4096
+_flock_depth_local = threading.local()
 
 
 def _flock_degradation_allowed() -> bool:
@@ -48,7 +49,15 @@ def _sidecar_lock_path(page_path: str | Path) -> Path:
     return path.parent / f".{path.name}.matryca.lock"
 
 
-def _lock_for_key(key: str) -> threading.Lock:
+def _flock_depths() -> dict[str, int]:
+    depths = getattr(_flock_depth_local, "depths", None)
+    if depths is None:
+        depths = {}
+        _flock_depth_local.depths = depths
+    return depths
+
+
+def _lock_for_key(key: str) -> threading.RLock:
     with _registry_guard:
         lock = _page_locks.get(key)
         if lock is not None:
@@ -58,7 +67,7 @@ def _lock_for_key(key: str) -> threading.Lock:
             evicted = False
             for old_key in list(_page_locks):
                 old_lock = _page_locks[old_key]
-                if not old_lock.locked():
+                if not getattr(old_lock, "locked", lambda: False)():
                     del _page_locks[old_key]
                     evicted = True
                     break
@@ -67,7 +76,7 @@ def _lock_for_key(key: str) -> threading.Lock:
                     f"In-process page lock registry full ({_MAX_PAGE_LOCK_REGISTRY}); "
                     f"cannot register lock for {key}",
                 )
-        lock = threading.Lock()
+        lock = threading.RLock()
         _page_locks[key] = lock
         return lock
 
@@ -108,8 +117,23 @@ def _acquire_cross_process_flock(fd: int, lock_path: Path) -> bool:
 @contextmanager
 def _cross_process_file_lock(page_path: str | Path) -> Iterator[None]:
     """Exclusive ``fcntl.flock`` on a sidecar lock file (no-op when ``fcntl`` is unavailable)."""
+    key = normalize_page_lock_key(page_path)
+    depths = _flock_depths()
+    nested = depths.get(key, 0)
+    if nested > 0:
+        depths[key] = nested + 1
+        try:
+            yield
+        finally:
+            depths[key] -= 1
+        return
+
     if _fcntl is None:
-        yield
+        depths[key] = 1
+        try:
+            yield
+        finally:
+            depths.pop(key, None)
         return
 
     lock_path = _sidecar_lock_path(page_path)
@@ -122,11 +146,17 @@ def _cross_process_file_lock(page_path: str | Path) -> Iterator[None]:
                 f"Could not acquire cross-process page lock for {lock_path}",
             )
         if not acquired:
-            yield
+            depths[key] = 1
+            try:
+                yield
+            finally:
+                depths.pop(key, None)
             return
+        depths[key] = 1
         try:
             yield
         finally:
+            depths.pop(key, None)
             with suppress(OSError):
                 _fcntl.flock(fd, _fcntl.LOCK_UN)
     finally:

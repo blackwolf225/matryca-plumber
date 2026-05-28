@@ -855,16 +855,16 @@ wheels = [
 
 [[package]]
 name = "logseq-matryca-parser"
-version = "1.0.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "rich" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/97/ff/0721000a0dd532deaa013e6b947f03f8120a0b368fe07f4339d1e70a4044/logseq_matryca_parser-1.0.0.tar.gz", hash = "sha256:b661469708e3253d0a1aa032f73fa542800859ff2bced152ea7f86b8ebdf727f", size = 643581, upload-time = "2026-05-23T03:53:12.848Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/44/99ce5d72042fabcc434144e55150a3a6f0c17ffa43769ed8bb45ef272f2e/logseq_matryca_parser-1.1.1.tar.gz", hash = "sha256:17a17247f270ac3e398e20a873ac80f5915618d46ee8d16a4b50cec57f058d50", size = 657476, upload-time = "2026-05-28T17:16:44.595Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/23/fd9b23d0a80e3145625f4870f3502473e850560c90c0e48d5a4ed1e35ff7/logseq_matryca_parser-1.0.0-py3-none-any.whl", hash = "sha256:9f047aa2f7902924d625c0334dffab712d12e91add20870f0e348def81f87019", size = 56742, upload-time = "2026-05-23T03:53:10.836Z" },
+    { url = "https://files.pythonhosted.org/packages/51/13/a4185feb5c46e9d76456263810d3a8d7c5aa78e6b712bbcbfdedbdc8b23f/logseq_matryca_parser-1.1.1-py3-none-any.whl", hash = "sha256:483b2044fb3227a08a7411ca433f571053cbcb352359bcf07b7ede47ff97f518", size = 60791, upload-time = "2026-05-28T17:16:43.354Z" },
 ]
 
 [[package]]
@@ -957,7 +957,7 @@ wheels = [
 
 [[package]]
 name = "matryca-plumber"
-version = "1.8.1"
+version = "1.8.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -992,7 +992,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
     { name = "instructor", specifier = ">=1.7.0,<2.0.0" },
-    { name = "logseq-matryca-parser", specifier = ">=0.3.3" },
+    { name = "logseq-matryca-parser", specifier = ">=1.1.1,<2.0.0" },
     { name = "loguru", specifier = ">=0.7.0,<1.0.0" },
     { name = "mcp", specifier = ">=1.0.0,<2.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0,<2.0.0" },

@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.8.0 (Ironclad + edge-performance layer)  
+**Version:** 1.8.2 (Ironclad + edge-performance layer)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -118,7 +118,7 @@ graph TD
 
 ### Parser-backed spatial truth
 
-**[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)** (`>=0.3.3`) owns block hierarchy, indentation, and `id::` semantics. **`src/rag/matryca_hooks.py`** adapts `read_logseq_page` for agent consumption.
+**[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)** (`>=1.1.1`) owns block hierarchy, indentation, and `id::` semantics. **`src/rag/matryca_hooks.py`** adapts `read_logseq_page` for agent consumption.
 
 Disk mutators that perform line surgery (`property_line_edit`, `tag_unify`, `reparent_blocks`, …) combine:
 

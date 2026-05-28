@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-05-28
+
+### Changed
+
+- **`logseq-matryca-parser`** — minimum dependency raised to **1.1.1** (latest on PyPI; was `>=0.3.3`).
+
+### Fixed
+
+- **Cognitive KV-cache alignment** — `run_cognitive_lint_pipeline` rebuilds `PagePromptSession` after on-disk mutations so semantic index LLM calls no longer use a stale stable prefix.
+- **Master catalog load safety** — transient `OSError` no longer caches an empty catalog that could overwrite `master_catalog.json`; corrupt JSON is quarantined or restored from `.bak`; `save()` is blocked until a successful load.
+- **Phase 2 page locking** — daemon holds `page_rmw_lock` through cognitive lint, LLM inference, and apply (replacing probe-only locking); in-process lock is re-entrant so nested module writes do not deadlock.
+- **Bootstrap failure state** — `bootstrap_failed` persisted in daemon checkpoint; Phase 2 LLM cycles are skipped until Phase 1 succeeds.
+- **LLM transport retries** — exponential backoff on transient HTTP errors (`MATRYCA_LLM_TRANSPORT_RETRIES`, default 3).
+- **CPU affinity parsing** — invalid `MATRYCA_PLUMBER_CPU_AFFINITY` tokens are logged and skipped instead of crashing startup.
+- **`nice_applied` telemetry** — set only when `os.nice` succeeds.
+
+### Security
+
+- **UI token hardening** — startup warning when `MATRYCA_UI_TOKEN` is unset; optional `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN` refuses UI without an explicit token; `SECURITY.md` / `.env.example` document MCP trust boundary and loopback session risk.
+
 ## [1.8.1] - 2026-05-28
 
 ### Fixed

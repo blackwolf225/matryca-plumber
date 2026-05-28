@@ -128,6 +128,8 @@ class DaemonStateResponse(BaseModel):
     status: DaemonStatusValue = "idle"
     model: str
     bootstrap_complete: bool = False
+    bootstrap_failed: bool = False
+    bootstrap_failed_reason: str | None = None
     bootstrap_scanned: int = 0
     bootstrap_total: int = 0
     session_prompt_tokens: int = 0
@@ -1052,7 +1054,11 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = DEFAULT_UI_PORT) -> No
             "(LAN clients could reach authenticated API routes if they obtain a token)."
         )
     reload_plumber_dotenv()
+    from .ui_auth import require_explicit_ui_token_if_configured, warn_if_ephemeral_ui_token
+
+    require_explicit_ui_token_if_configured()
     require_explicit_ui_token_for_lan()
+    warn_if_ephemeral_ui_token()
     if host == "0.0.0.0":
         logger.warning(
             "WARNING: Binding to 0.0.0.0 exposes authenticated API routes on the LAN. "

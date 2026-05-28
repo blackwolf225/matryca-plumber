@@ -86,7 +86,7 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively. Set `MATRYCA_MCP_ENABLED=true` in `.env` (stdio MCP is off by default).
+- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
 
 ---
 
@@ -97,7 +97,7 @@ It's a local React dashboard running on `http://127.0.0.1:8500` that provides:
 - **Pre-flight checklist** (modal on each UI open): operator guidance plus automated readiness checks before **Start Engine** is enabled.
 - **Live Graph Telemetry**: See exactly what the AI is indexing in real-time.
 - **Dynamic Impact**: Mathematically separates *Organic Human Mind* (your notes) from *Agent Cognition* (AI enhancements).
-- **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
+- **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Set `MATRYCA_UI_TOKEN` on shared hosts (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`); session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
 - **Trust & Safety Drawer**: Visually toggle what the AI is allowed to edit (Safe Mode, Augmented Mode, Surgeon Mode).
 
 See [`SECURITY.md`](SECURITY.md) for the full operator hardening matrix (`MATRYCA_MCP_ENABLED`, graph path allowlist, shared LLM SSRF policy, log redaction).

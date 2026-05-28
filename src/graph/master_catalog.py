@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
+import shutil
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -33,6 +35,11 @@ _MARPA_DOMAINS = frozenset({"mappa", "area", "risorsa", "progetto", "archivio"})
 
 _lock = threading.Lock()
 _loaded: dict[str, MasterCatalog] = {}
+_catalog_mtime_ns: dict[str, int] = {}
+
+
+class CatalogLoadError(OSError):
+    """Raised when ``master_catalog.json`` cannot be read and no safe cache exists."""
 
 
 @dataclass(slots=True)
@@ -77,6 +84,7 @@ class MasterCatalog:
     pages: dict[str, CatalogEntry] = field(default_factory=dict)
     alias_to_page: dict[str, str] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    persist_allowed: bool = True
 
     @staticmethod
     def catalog_path(graph_root: Path) -> Path:
@@ -108,6 +116,15 @@ class MasterCatalog:
 
     def save(self) -> None:
         """Persist catalog atomically under the graph root."""
+        if not self.persist_allowed:
+            logger.error(
+                "Refusing to save master catalog for {}: load did not succeed "
+                "(transient I/O or corruption).",
+                self.graph_root,
+            )
+            return
+        path = self.catalog_path(self.graph_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
             self.updated_at = datetime.now(tz=UTC).isoformat()
             payload = {
@@ -115,16 +132,18 @@ class MasterCatalog:
                 "updated_at": self.updated_at,
                 "pages": {title: entry.to_json() for title, entry in sorted(self.pages.items())},
             }
-        path = self.catalog_path(self.graph_root)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-        with cross_process_json_flock(path):
-            atomic_write_bytes(
-                path,
-                data.encode("utf-8"),
-                graph_root=self.graph_root,
-                validate_block_refs=False,
-            )
+            data = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+            with cross_process_json_flock(path):
+                atomic_write_bytes(
+                    path,
+                    data.encode("utf-8"),
+                    graph_root=self.graph_root,
+                    validate_block_refs=False,
+                )
+            with contextlib.suppress(OSError):
+                _catalog_mtime_ns[str(self.graph_root.expanduser().resolve(strict=False))] = (
+                    path.stat().st_mtime_ns
+                )
 
     def upsert(self, page_title: str, entry: CatalogEntry) -> None:
         with self._lock:
@@ -200,35 +219,107 @@ class MasterCatalog:
             return len(stale) + alias_purged
 
 
+def _catalog_backup_path(catalog_path: Path) -> Path:
+    return catalog_path.with_suffix(catalog_path.suffix + ".bak")
+
+
+def _quarantine_corrupt_catalog(catalog_path: Path) -> Path:
+    stamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    dest = catalog_path.with_name(f"{catalog_path.name}.corrupt.{stamp}")
+    shutil.move(str(catalog_path), str(dest))
+    return dest
+
+
+def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
+    """Parse catalog JSON from disk; restore backup or quarantine on corruption."""
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raise
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        backup = _catalog_backup_path(path)
+        if backup.is_file():
+            try:
+                payload = json.loads(backup.read_text(encoding="utf-8", errors="replace"))
+                logger.warning(
+                    "[METADATA CORRUPTION DETECTED] Restored master catalog from backup at {}",
+                    backup,
+                )
+                if isinstance(payload, dict):
+                    catalog = MasterCatalog.from_json(root, payload)
+                    catalog.persist_allowed = True
+                    return catalog
+            except (OSError, json.JSONDecodeError, ValueError):
+                pass
+        try:
+            quarantined = _quarantine_corrupt_catalog(path)
+            logger.warning(
+                "[METADATA CORRUPTION DETECTED] Quarantined malformed catalog to {}",
+                quarantined,
+            )
+        except OSError as move_exc:
+            logger.warning(
+                "[METADATA CORRUPTION DETECTED] Could not quarantine catalog: {}",
+                move_exc,
+            )
+        catalog = MasterCatalog(graph_root=root, persist_allowed=False)
+        return catalog
+    if isinstance(payload, dict):
+        return MasterCatalog.from_json(root, payload)
+    logger.warning("[METADATA CORRUPTION DETECTED] Catalog root is not a JSON object.")
+    return MasterCatalog(graph_root=root, persist_allowed=False)
+
+
 def load_master_catalog(graph_root: Path, *, force_reload: bool = False) -> MasterCatalog:
     """Load catalog into RAM at startup (cached per graph root)."""
     root = graph_root.expanduser().resolve(strict=False)
     key = str(root)
+    path = MasterCatalog.catalog_path(root)
     with _lock:
         if not force_reload and key in _loaded:
-            return _loaded[key]
+            cached = _loaded[key]
+            if path.is_file():
+                try:
+                    disk_mtime_ns = path.stat().st_mtime_ns
+                except OSError:
+                    disk_mtime_ns = None
+                else:
+                    if _catalog_mtime_ns.get(key) != disk_mtime_ns:
+                        force_reload = True
+            if not force_reload:
+                return cached
 
-        path = MasterCatalog.catalog_path(root)
         if not path.is_file():
             catalog = MasterCatalog(graph_root=root)
         else:
             try:
-                payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
-            except OSError:
-                catalog = MasterCatalog(graph_root=root)
-            except (json.JSONDecodeError, ValueError):
-                logger.warning(
-                    "[METADATA CORRUPTION DETECTED] File state was malformed, "
-                    "self-healing by initializing a fresh instance."
-                )
-                catalog = MasterCatalog(graph_root=root)
+                catalog = _load_catalog_payload_from_disk(path, root)
+            except OSError as exc:
+                if key in _loaded:
+                    logger.warning(
+                        "Transient catalog read failure for {} — using in-process cache: {}",
+                        path,
+                        exc,
+                    )
+                    return _loaded[key]
+                msg = f"Could not read master catalog at {path}: {exc}"
+                raise CatalogLoadError(msg) from exc
             else:
-                if isinstance(payload, dict):
-                    catalog = MasterCatalog.from_json(root, payload)
-                else:
-                    catalog = MasterCatalog(graph_root=root)
+                if catalog.persist_allowed:
+                    backup = _catalog_backup_path(path)
+                    try:
+                        shutil.copy2(path, backup)
+                    except OSError as copy_exc:
+                        logger.debug("Could not refresh catalog backup {}: {}", backup, copy_exc)
         catalog.rebuild_alias_index()
         _loaded[key] = catalog
+        if path.is_file():
+            try:
+                _catalog_mtime_ns[key] = path.stat().st_mtime_ns
+            except OSError:
+                _catalog_mtime_ns.pop(key, None)
         return catalog
 
 
@@ -237,9 +328,11 @@ def clear_master_catalog_cache(graph_root: Path | None = None) -> None:
     with _lock:
         if graph_root is None:
             _loaded.clear()
+            _catalog_mtime_ns.clear()
             return
         key = str(graph_root.expanduser().resolve(strict=False))
         _loaded.pop(key, None)
+        _catalog_mtime_ns.pop(key, None)
 
 
 def unload_master_catalog(graph_root: Path | str) -> bool:
@@ -306,7 +399,8 @@ def entry_from_page_path(graph_root: Path, page_path: Path) -> CatalogEntry | No
         return None
     try:
         content = read_graph_page_text(page_path, graph_root, errors="replace")
-        mtime = int(page_path.stat().st_mtime)
+        mtime_ns = page_path.stat().st_mtime_ns
+        mtime = int(mtime_ns // 1_000_000_000)
     except OSError:
         return None
 
@@ -424,6 +518,7 @@ def write_master_index_page(graph_root: Path, catalog: MasterCatalog) -> Path:
 
 __all__ = [
     "CATALOG_FILENAME",
+    "CatalogLoadError",
     "CatalogEntry",
     "MASTER_INDEX_PAGE_TITLE",
     "MATRYCA_GENERATED_INDEX_TITLES",

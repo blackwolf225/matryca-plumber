@@ -50,7 +50,13 @@ def _parse_cpu_affinity_env() -> tuple[int, ...] | None:
         token = part.strip()
         if not token:
             continue
-        cpus.append(int(token))
+        try:
+            cpus.append(int(token))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid MATRYCA_PLUMBER_CPU_AFFINITY entry: {!r}",
+                token,
+            )
     return tuple(cpus) if cpus else None
 
 
@@ -159,8 +165,11 @@ def apply_cpu_sandbox(sandbox: CpuSandboxConfig) -> AppliedPriorityReport:
     topology = probe_cpu_topology() if sandbox.enabled else None
     nice_applied = False
     if sandbox.enabled and hasattr(os, "nice"):
-        with contextlib.suppress(OSError):
+        try:
             os.nice(sandbox.nice_level)
+        except OSError as exc:
+            logger.debug("os.nice not applied: {}", exc)
+        else:
             nice_applied = True
     elif sandbox.enabled and sys.platform == "win32":
         nice_applied = _apply_windows_idle_priority()

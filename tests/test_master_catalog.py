@@ -21,6 +21,7 @@ from src.graph.insights_engine import (
 from src.graph.master_catalog import (
     SEMANTIC_INDEX_HEADER,
     CatalogEntry,
+    CatalogLoadError,
     MasterCatalog,
     build_master_index_markdown,
     clear_master_catalog_cache,
@@ -137,6 +138,59 @@ def test_load_master_catalog_self_heals_corrupt_json(graph_root: Path) -> None:
     path.write_text("{not-json", encoding="utf-8")
     catalog = load_master_catalog(graph_root, force_reload=True)
     assert catalog.pages == {}
+    assert catalog.persist_allowed is False
+    catalog.upsert("Lost", CatalogEntry(summary="x", domain="", tags=[], last_mtime=1))
+    catalog.save()
+    assert not path.is_file()
+
+
+def test_load_master_catalog_oserror_raises_without_cache(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_master_catalog_cache(graph_root)
+    path = MasterCatalog.catalog_path(graph_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"version": 1, "pages": {}}', encoding="utf-8")
+    catalog_key = path.resolve()
+
+    real_read_text = Path.read_text
+
+    def _patched_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self.resolve() == catalog_key:
+            raise OSError("simulated read failure")
+        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", _patched_read_text)
+    with pytest.raises(CatalogLoadError):
+        load_master_catalog(graph_root, force_reload=True)
+
+
+def test_load_master_catalog_oserror_returns_cached_instance(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_master_catalog_cache(graph_root)
+    catalog = load_master_catalog(graph_root)
+    catalog.upsert(
+        "Cached",
+        CatalogEntry(summary="cached", domain="", tags=[], last_mtime=1),
+    )
+    catalog.save()
+    _ = load_master_catalog(graph_root, force_reload=True)
+
+    path = MasterCatalog.catalog_path(graph_root)
+    catalog_key = path.resolve()
+    real_read_text = Path.read_text
+
+    def _patched_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self.resolve() == catalog_key:
+            raise OSError("simulated read failure")
+        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", _patched_read_text)
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    assert reloaded.pages["Cached"].summary == "cached"
 
 
 def test_load_and_save_master_catalog(graph_root: Path) -> None:

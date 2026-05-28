@@ -28,6 +28,35 @@ class CognitiveLintOutcome:
     details: list[str] = field(default_factory=list)
 
 
+def _rebuild_prompt_session(
+    graph_root: Path,
+    page_path: Path,
+    page_title: str,
+    content: str,
+    *,
+    config: PlumberLintConfig,
+) -> PagePromptSession:
+    """Build a fresh KV-cache session from on-disk page text."""
+    from ..semantic_lint_prompts import build_semantic_lint_system_prompt
+
+    alias_index = None
+    try:
+        from ...graph.generational_cache import cached_build_alias_index
+
+        alias_index = cached_build_alias_index(graph_root)
+    except OSError:
+        alias_index = None
+    return build_page_prompt_session(
+        graph_root,
+        page_title,
+        content,
+        config=config,
+        stable_system=build_semantic_lint_system_prompt(),
+        page_path=page_path,
+        alias_index=alias_index,
+    )
+
+
 def _run_cognitive_module_safe(
     module_name: str,
     runner: Callable[[], ModuleOutcome],
@@ -64,26 +93,16 @@ def run_cognitive_lint_pipeline(
         return outcome, prompt_session
 
     journal_page = is_journal_page_path(graph_root, page_path)
-
-    from ..semantic_lint_prompts import build_semantic_lint_system_prompt
+    initial_content = content
 
     session = prompt_session
     if session is None:
-        alias_index = None
-        try:
-            from ...graph.generational_cache import cached_build_alias_index
-
-            alias_index = cached_build_alias_index(graph_root)
-        except OSError:
-            alias_index = None
-        session = build_page_prompt_session(
+        session = _rebuild_prompt_session(
             graph_root,
+            page_path,
             page_title,
             content,
             config=config,
-            stable_system=build_semantic_lint_system_prompt(),
-            page_path=page_path,
-            alias_index=alias_index,
         )
     llm_context = session.stable_page_block
 
@@ -164,6 +183,18 @@ def run_cognitive_lint_pipeline(
                 llm_context=llm_context,
             ),
             outcome,
+        )
+
+    if page_path.is_file():
+        content = page_path.read_text(encoding="utf-8", errors="replace")
+    disk_changed = content != initial_content or page_title in outcome.pages_modified
+    if disk_changed and session is not None:
+        session = _rebuild_prompt_session(
+            graph_root,
+            page_path,
+            page_title,
+            content,
+            config=config,
         )
 
     return outcome, session
