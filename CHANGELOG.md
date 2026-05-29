@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-05-29
+
 ### Changed
 
 - **README** — Expanded professional badge block at the top (PyPI, GitHub Release, CI quality gates, platform, MCP, Logseq OG, security, contributing, code of conduct).
