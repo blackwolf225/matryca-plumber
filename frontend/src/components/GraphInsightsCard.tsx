@@ -87,8 +87,9 @@ export function GraphInsightsCard({ state }: GraphInsightsCardProps) {
               <p className="text-[10px] leading-relaxed text-theme-muted">
                 Biologic evolution — live totals minus certified agent impact on the next scan.
               </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <OrganicMetric value={analytics.human_pages} label="Organic Pages Written" />
+                <OrganicMetric value={analytics.human_journals} label="Organic Journals Written" />
                 <OrganicMetric value={analytics.human_links} label="Organic Connections" />
               </div>
             </div>

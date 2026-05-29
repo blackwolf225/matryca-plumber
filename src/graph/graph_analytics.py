@@ -45,6 +45,7 @@ class GraphAnalytics:
     total_journals: int = 0
     total_links: int = 0
     human_pages: int = 0
+    human_journals: int = 0
     human_links: int = 0
     ai_pages: int = 0
     ai_links: int = 0
@@ -62,6 +63,7 @@ class GraphAnalytics:
             "total_journals": self.total_journals,
             "total_links": self.total_links,
             "human_pages": self.human_pages,
+            "human_journals": self.human_journals,
             "human_links": self.human_links,
             "ai_pages": self.ai_pages,
             "ai_links": self.ai_links,
@@ -91,15 +93,24 @@ def offline_graph_analytics(
 _analytics_cache: dict[str, tuple[float, GraphAnalytics]] = {}
 
 
-def _count_journals(graph_root: Path) -> int:
+def _count_journal_metrics(graph_root: Path) -> tuple[int, int]:
+    """Return ``(total_journals, ai_journals)`` under ``journals/``."""
     journals = graph_root / "journals"
     if not journals.is_dir():
-        return 0
-    return sum(
-        1
-        for path in journals.rglob("*.md")
-        if path.is_file() and is_scannable_graph_markdown(path, graph_root)
-    )
+        return 0, 0
+    total = 0
+    ai = 0
+    for path in journals.rglob("*.md"):
+        if not path.is_file() or not is_scannable_graph_markdown(path, graph_root):
+            continue
+        total += 1
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if is_plumber_authored_page(text):
+            ai += 1
+    return total, ai
 
 
 def _count_catalog_summaries(graph_root: Path) -> int:
@@ -252,13 +263,16 @@ def _compute_graph_analytics_uncached(
     current_ai_pages = _count_current_ai_pages(root)
     total_links_scanned = _count_links_scanned(root)
     human_pages = max(0, total_pages_scanned - current_ai_pages)
+    total_journals, ai_journals = _count_journal_metrics(root)
+    human_journals = max(0, total_journals - ai_journals)
     human_links = max(0, total_links_scanned - ai_links_injected)
     alias_index = cached_build_alias_index(root)
     return GraphAnalytics(
         total_pages=total_pages_scanned,
-        total_journals=_count_journals(root),
+        total_journals=total_journals,
         total_links=total_links_scanned,
         human_pages=human_pages,
+        human_journals=human_journals,
         human_links=human_links,
         ai_pages=current_ai_pages,
         ai_links=ai_links_injected,

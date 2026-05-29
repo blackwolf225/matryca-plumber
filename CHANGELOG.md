@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Sovereign UI settings** — Infrastructure drawer exposes `LLM_API_KEY` as **API Token** (password field); persisted to `.env` on save. Required only for cloud OpenAI-compatible endpoints.
+
 ## [1.8.5] - 2026-05-29
 
 ### Changed

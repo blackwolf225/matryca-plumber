@@ -25,6 +25,7 @@ export interface GraphAnalytics {
   total_journals: number
   total_links: number
   human_pages: number
+  human_journals: number
   human_links: number
   ai_pages: number
   ai_links: number
@@ -42,6 +43,7 @@ export const DEFAULT_GRAPH_ANALYTICS: GraphAnalytics = {
   total_journals: 0,
   total_links: 0,
   human_pages: 0,
+  human_journals: 0,
   human_links: 0,
   ai_pages: 0,
   ai_links: 0,
@@ -156,17 +158,22 @@ export function normalizeGraphAnalytics(raw: unknown): GraphAnalytics {
       : resolvedTotalLinks
   const aiPages = readNumber(source, 'ai_pages', 'aiPages')
   const aiLinks = readNumber(source, 'ai_links', 'aiLinks')
+  const totalJournals = readNumber(source, 'total_journals', 'totalJournals')
   const humanPages = hasExplicitField(source, 'human_pages', 'humanPages')
     ? readNumber(source, 'human_pages', 'humanPages')
     : Math.max(0, totalPages - aiPages)
+  const humanJournals = hasExplicitField(source, 'human_journals', 'humanJournals')
+    ? readNumber(source, 'human_journals', 'humanJournals')
+    : totalJournals
   const humanLinks = hasExplicitField(source, 'human_links', 'humanLinks')
     ? readNumber(source, 'human_links', 'humanLinks')
     : Math.max(0, resolvedTotalLinks - aiLinks)
   return {
     total_pages: totalPages,
-    total_journals: readNumber(source, 'total_journals', 'totalJournals'),
+    total_journals: totalJournals,
     total_links: resolvedTotalLinks,
     human_pages: humanPages,
+    human_journals: humanJournals,
     human_links: humanLinks,
     ai_pages: aiPages,
     ai_links: aiLinks,
@@ -300,6 +307,7 @@ export interface PlumberConfig {
   logseq_graph_path: string
   lm_studio_url: string
   lm_model: string
+  llm_api_key: string
   low_priority_mode: boolean
   thermal_delay_bootstrap: number
   thermal_delay_cognitive: number

@@ -18,7 +18,7 @@ export function FeatureStatusBar({ daemonStatus, config, frozen }: FeatureStatus
       aria-label="Pipeline capability status"
     >
       <span className="mb-2 block text-xs font-medium uppercase tracking-[0.25em] text-theme-muted">
-        Modules
+        Active Modules
       </span>
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {PLUMBER_MODULE_SPECS.map((module) => {

@@ -108,6 +108,7 @@ class GraphAnalyticsResponse(BaseModel):
     total_journals: int = 0
     total_links: int = 0
     human_pages: int = 0
+    human_journals: int = 0
     human_links: int = 0
     ai_pages: int = 0
     ai_links: int = 0
@@ -171,6 +172,7 @@ class PlumberConfigResponse(BaseModel):
     logseq_graph_path: str
     lm_studio_url: str
     lm_model: str
+    llm_api_key: str
     low_priority_mode: bool
     thermal_delay_bootstrap: float
     thermal_delay_cognitive: float
@@ -195,6 +197,7 @@ class PlumberConfigResponse(BaseModel):
             logseq_graph_path=graph_path,
             lm_studio_url=config.lm_base_url,
             lm_model=config.lm_model,
+            llm_api_key=config.llm_api_key,
             low_priority_mode=config.low_priority_mode,
             thermal_delay_bootstrap=config.thermal_delay_bootstrap,
             thermal_delay_cognitive=config.thermal_delay_cognitive,
@@ -350,6 +353,7 @@ _ENV_KEY_MAP: dict[str, str] = {
     "logseq_graph_path": "LOGSEQ_GRAPH_PATH",
     "lm_studio_url": "LLM_BASE_URL",
     "lm_model": "LLM_MODEL_NAME",
+    "llm_api_key": "LLM_API_KEY",
     "low_priority_mode": "MATRYCA_PLUMBER_LOW_PRIORITY_MODE",
     "thermal_delay_bootstrap": "MATRYCA_THERMAL_DELAY_BOOTSTRAP",
     "thermal_delay_cognitive": "MATRYCA_THERMAL_DELAY_COGNITIVE",

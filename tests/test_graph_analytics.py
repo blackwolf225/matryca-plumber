@@ -38,6 +38,7 @@ def test_compute_graph_analytics_counts_topology(tmp_path: Path) -> None:
     assert metrics.total_pages == 3
     assert metrics.ai_pages == 1
     assert metrics.human_pages == 2
+    assert metrics.human_journals == 1
     assert metrics.total_links == 1
     assert metrics.human_links == 1
     assert metrics.ai_links == 0
@@ -48,6 +49,21 @@ def test_compute_graph_analytics_counts_topology(tmp_path: Path) -> None:
     assert metrics.semantic_cache_mb > 0.0
     assert metrics.context_acceleration == round(100 / 3, 1)
     assert metrics.status == "online"
+
+
+def test_compute_graph_analytics_human_journals_exclude_plumber_stamp(tmp_path: Path) -> None:
+    journals = tmp_path / "journals"
+    journals.mkdir()
+    (journals / "2026_05_01.md").write_text("- daily note\n", encoding="utf-8")
+    (journals / "2026_05_02.md").write_text(
+        "made-by:: matryca plumber v1.0.0\n- agent journal\n",
+        encoding="utf-8",
+    )
+
+    metrics = compute_graph_analytics(tmp_path)
+
+    assert metrics.total_journals == 2
+    assert metrics.human_journals == 1
 
 
 def test_compute_graph_analytics_subtracts_agent_ledger(tmp_path: Path) -> None:
