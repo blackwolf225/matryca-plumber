@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-05-29
+
 ### Fixed
 
 - **CI** — `ruff format` on `maintenance_daemon.py`; GitHub Actions upgraded to Node 24–compatible action majors (`checkout@v6`, `setup-node@v6`, `setup-uv@v8`).

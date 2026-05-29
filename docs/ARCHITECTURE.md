@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.8.2 (Ironclad + edge-performance layer)  
+**Version:** 1.8.3 (Ironclad + edge-performance layer)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
