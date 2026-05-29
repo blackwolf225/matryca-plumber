@@ -2315,9 +2315,7 @@ class MaintenanceDaemon:
                     if refreshed_mtime is not None:
                         baseline_mtime = refreshed_mtime
                 alias_index = self._compiled_alias_index() if self.bootstrap_complete else None
-                enable_semantic_routing = (
-                    self.bootstrap_complete and lint_config.semantic_routing
-                )
+                enable_semantic_routing = self.bootstrap_complete and lint_config.semantic_routing
                 enable_backprop = self.bootstrap_complete and lint_config.backpropagate_links
                 if baseline_mtime is not None and file_mtime_drifted(path, baseline_mtime):
                     logger.warning(
