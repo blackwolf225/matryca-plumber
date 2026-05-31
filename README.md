@@ -100,7 +100,8 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Claude Desktop Integration (FastMCP)**: Six MCP tools (five mega-tools + **`store_fact`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Telos & Identity (in-graph persona)**: Optional `pages/matryca___config.md` or `pages/matryca-config.md` with `- # Telos` and `- # AI Constraints` headings — injected into daemon LLM prompts and MCP output; **`store_fact`** appends durable preferences under Constraints ([`docs/openspec/identity-config.md`](docs/openspec/identity-config.md)).
 
 ---
 
@@ -187,6 +188,9 @@ On first start (daemon, CLI, MCP, or UI), Matryca Plumber **automatically create
 - **`logs/`** (or paths from `MATRYCA_PLUMBER_LOG_PATH` / `MATRYCA_LOGURU_LOG_PATH`)
 - **`<parent-of-your-vault>/matryca-l1/`** — session rules beside the vault (not inside `pages/`); optional override via `MATRYCA_L1_PATH`
 - **`<vault>/.matryca_semantic_cache/`**, **`templates/`**, and **`matryca-wiki.yml`** (from `matryca-wiki.example.yml` when absent)
+- **In-memory graph index** at startup (AST cache); **identity** loaded when a Telos/Constraints config page exists
+
+The **identity config page** is not auto-created (use Logseq or `store_fact`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md).
 
 See [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) for rationale (L1 vs L2, idempotency, and what is intentionally *not* auto-created).
 

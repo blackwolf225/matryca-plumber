@@ -42,6 +42,17 @@ The daemon polls `pages/` and `journals/` under `LOGSEQ_GRAPH_PATH`, calls a loc
 
 Persistent artifacts at the graph root include `.matryca_daemon_state.json` (checkpoint + AI impact ledger), `.matryca_plumber_daemon.lock` / `.pid`, and `.matryca_semantic_cache/`. **Before** the first harvest or lint cycle, `prepare_matryca_runtime()` (see [Runtime bootstrap](#runtime-bootstrap)) ensures log directories, the sibling `matryca-l1/` folder, cache/templates paths, and an optional seeded `matryca-wiki.yml` exist.
 
+#### Reactive graph stack (daemon)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| File watcher | `src/daemon/file_watcher.py` | Debounced `watchdog` on `pages/` + `journals/`; wakes duty cycle on external edits |
+| AST RAM cache | `src/daemon/ast_cache.py` | `LogseqGraph` full load + per-page `invalidate_and_reload_page` |
+| Identity store | `src/daemon/config_layer.py` | Telos / AI Constraints from config page; LLM + MCP injection |
+| Post-write hooks | `src/daemon/post_write_hooks.py` | After atomic markdown writes: cache delta, identity refresh, robot git commit |
+
+Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
+
 ### 2. Sovereign UI (React + FastAPI control room)
 
 **Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8500`
@@ -58,7 +69,7 @@ The UI never becomes a second source of truth: it reads daemon checkpoints and l
 
 **Entry:** `matryca-plumber` with **no** CLI-shaped argv → `src/main.py` (lazy-imported from `plumber_entry.py`)
 
-`register_mcp_tools` exposes the same mega-tools (`write_logseq_outline`, `read_graph_data`, `mutate_graph_data`, …) to external orchestrators. **`guard_mcp_tool`** maps domain errors to LLM-safe strings; **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
+`register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** for in-graph identity updates. **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
 
 **Routing fix (`plumber_entry.py`):** the `matryca-plumber` console script inspects `sys.argv`. Known CLI commands (`plumber`, `read`, `search`, shorthand `start`/`status`/…) route to `cli.main` **without** importing FastMCP. Bare invocations (typical MCP host stdio spawn) fall through to `main.main()`. This disentangles **operator CLI stdout** from **MCP JSON-RPC on stdio** — a class of integration bugs that plagued single-entrypoint packages.
 
@@ -258,10 +269,11 @@ Every Matryca Plumber surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **
 | Semantic cache dir | `<vault>/.matryca_semantic_cache/` | `master_catalog.json`, `backlink_counts.json`, `semantic_clusters.json`, per-inference `*.json`; excluded from `pages/` scans |
 | Templates dir | `<vault>/templates/` (or YAML `templates_subdir`) | `read_logseq_template` |
 | Wiki orchestration | `<vault>/matryca-wiki.yml` | Seeded from `matryca-wiki.example.yml` when missing |
+| AST + identity RAM | `get_graph_ast_cache`, `get_identity_store` | Graph index bootstrap; Telos/Constraints load when config page exists |
 
-**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
+**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
 
-Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md).
+Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md). Identity page format: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
 ---
 
@@ -474,6 +486,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`v1.8-OPTIMIZATION-PLAN.md`](v1.8-OPTIMIZATION-PLAN.md) — v1.8 scope, env vars, verification
 - [`v1.8-SOFTWARE-EDGE-PLAN.md`](v1.8-SOFTWARE-EDGE-PLAN.md) — CPU sandbox, frozen prefix, adaptive LLM, mmap
 - [`openspec/llm-performance.md`](openspec/llm-performance.md) — LLM performance engineering contract
+- [`openspec/identity-config.md`](openspec/identity-config.md) — Telos / AI Constraints and `store_fact`
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy
 - [`../README.md`](../README.md) — operator quick start
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — `make check`, dev setup

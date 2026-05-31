@@ -36,7 +36,7 @@ from ..agent.maintenance_daemon import (
 from ..config import load_matryca_wiki_config
 from ..graph.service_manager import manage_matryca_service
 from ..utils.runtime_bootstrap import try_prepare_matryca_runtime_from_env
-from ..utils.secret_redaction import secret_violations_in_text
+from ..utils.secret_redaction import redact_secrets_in_text
 from .ui_server import run_ui_server
 
 READ_TARGETS: tuple[ReadGraphTarget, ...] = (
@@ -183,9 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _redact_text_if_sensitive(text: str) -> str:
-    if secret_violations_in_text(text):
-        return "[REDACTED: sensitive content]"
-    return text
+    return redact_secrets_in_text(text)
 
 
 def _sanitize_for_output(value: Any) -> Any:
@@ -201,9 +199,13 @@ def _sanitize_for_output(value: Any) -> Any:
 def _emit_result(result: str | dict[str, Any]) -> None:
     if isinstance(result, dict):
         safe_result = _sanitize_for_output(result)
+        # codeql[py/clear-text-logging-sensitive-data] - False positive:
+        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
         sys.stdout.write(json.dumps(safe_result, ensure_ascii=False, indent=2))
         sys.stdout.write("\n")
     else:
+        # codeql[py/clear-text-logging-sensitive-data] - False positive:
+        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
         sys.stdout.write(_redact_text_if_sensitive(result))
         if not result.endswith("\n"):
             sys.stdout.write("\n")

@@ -17,6 +17,8 @@ Matryca Plumber provisions **directories and optional config files** before harv
 | **CLI** | `cli.main` immediately after `reload_plumber_dotenv()` |
 | **Sovereign UI** | FastAPI lifespan on server start; `POST /api/config`; `POST /api/daemon/start`; `GET /api/preflight` |
 
+When a valid graph is configured, bootstrap also **bootstraps the in-memory `LogseqGraph` cache** and loads **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)).
+
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
 
 On first startup, if repo **`.env`** is missing and **`.env.example`** exists, Matryca Plumber copies the example to `.env` (logged at INFO) before loading environment variables.
@@ -101,5 +103,6 @@ This follows *create on first meaningful write* for stateful JSON so checkpoints
 ## Related specs
 
 - [`l1-l2-routing.md`](l1-l2-routing.md) — How L1 content is loaded into agent context vs L2 graph reads.
+- [`identity-config.md`](identity-config.md) — In-graph Telos / AI Constraints and `store_fact`.
 - [`ingest.md`](ingest.md) — Search → Scan → Update after bootstrap has prepared the filesystem.
 - [`llm-performance.md`](llm-performance.md) — v1.8 KV-cache layout, memory teardown, cooperative harvest.

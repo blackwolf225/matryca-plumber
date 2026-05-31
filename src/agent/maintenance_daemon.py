@@ -23,6 +23,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from ..config import load_matryca_wiki_config
+from ..daemon.ast_cache import get_graph_ast_cache
+from ..daemon.file_watcher import FileEventKind, GraphFileWatcher
 from ..graph.alias_index import (
     AliasIndex,
     iter_alias_source_paths,
@@ -1372,6 +1374,7 @@ def append_structural_lint_warning(
             graph_root=graph_root,
             baseline_mtime=baseline_mtime,
             validate_block_refs=False,
+            robot_commit_summary="appended structural lint warning",
         )
 
 
@@ -1425,11 +1428,13 @@ def apply_semantic_page_result(
         body = "".join(lines)
         if not _semantic_index_section_present(body):
             body = body.rstrip("\n") + _format_index_section(result, lint_outcome=lint_outcome)
+        commit_summary = f"semantic index update on {page_title}"
         if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
             page_path,
             body.encode("utf-8"),
             graph_root=graph_root,
             baseline_mtime=baseline_mtime,
+            robot_commit_summary=commit_summary,
         ):
             logger.warning(
                 "File modified by user during inference, aborting write to prevent data loss: {}",
@@ -1438,7 +1443,12 @@ def apply_semantic_page_result(
             lint_outcome.write_aborted = True
             return lint_outcome
         if baseline_mtime is None:
-            atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
+            atomic_write_bytes(
+                page_path,
+                body.encode("utf-8"),
+                graph_root=graph_root,
+                robot_commit_summary=commit_summary,
+            )
     patch_generational_caches_for_paths(graph_root, [page_path])
 
     links_backpropagated = 0
@@ -1826,6 +1836,8 @@ class MaintenanceDaemon:
         self._stop_requested = False
         self._shutdown_in_progress = False
         self._shutdown_event = threading.Event()
+        self._cycle_wake = threading.Event()
+        self._file_watcher: GraphFileWatcher | None = None
         self._inflight_writes = threading.Condition()
         self._active_write_count = 0
         self._state_persist_failed = False
@@ -1988,10 +2000,34 @@ class MaintenanceDaemon:
         with contextlib.suppress(Exception):
             save_daemon_state(self.graph_root, checkpoint)
 
+        self._stop_file_watcher()
         remove_pid_file(self.graph_root)
         _release_daemon_process_lock(self.graph_root)
         clear_page_write_locks()
         sweep_matryca_lock_sidecars(self.graph_root)
+
+    def _on_watchdog_change(self, path: Path, kind: FileEventKind) -> None:
+        """Refresh AST cache and wake the duty cycle after debounced vault edits."""
+        get_graph_ast_cache(self.graph_root).apply_file_event(path, kind)
+        from ..daemon.config_layer import refresh_identity_config
+
+        refresh_identity_config(self.graph_root, path)
+        self._cycle_wake.set()
+
+    def _start_file_watcher(self) -> None:
+        if self._file_watcher is not None:
+            return
+        watcher = GraphFileWatcher(
+            self.graph_root,
+            on_debounced_change=self._on_watchdog_change,
+        )
+        watcher.start()
+        self._file_watcher = watcher
+
+    def _stop_file_watcher(self) -> None:
+        if self._file_watcher is not None:
+            self._file_watcher.stop()
+            self._file_watcher = None
 
     def _sync_runtime_config(self, state: DaemonState) -> DaemonState:
         """Align LLM client and persisted state with the active environment block."""
@@ -2705,6 +2741,7 @@ class MaintenanceDaemon:
 
         try:
             self.run_bootstrap_pipeline(state)
+            self._start_file_watcher()
             while not self._stop_requested:
                 self.run_cycle(state)
                 if not self._state_persist_failed:
@@ -2716,7 +2753,14 @@ class MaintenanceDaemon:
                     )
                 if self._stop_requested:
                     break
-                if self._shutdown_event.wait(timeout=self.poll_seconds):
+                deadline = time.monotonic() + self.poll_seconds
+                while not self._stop_requested and time.monotonic() < deadline:
+                    remaining = deadline - time.monotonic()
+                    if self._cycle_wake.wait(timeout=remaining):
+                        self._cycle_wake.clear()
+                    if self._shutdown_event.is_set():
+                        break
+                if self._shutdown_event.is_set():
                     break
         finally:
             self._finalize_graceful_shutdown(state)

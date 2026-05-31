@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from loguru import logger
 
+from ..daemon.config_layer import append_identity_to_mcp_payload
 from ..graph.path_sandbox import PathTraversalSecurityError
 from .mcp_telemetry import _matryca_debug_enabled
 
@@ -64,7 +65,12 @@ def guard_mcp_tool[F: Callable[..., Awaitable[Any]]](fn: F) -> F:
     @functools.wraps(fn)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
-            return await fn(*args, **kwargs)
+            result = await fn(*args, **kwargs)
+            if fn.__name__ == "store_fact":
+                return result
+            if isinstance(result, (str, dict)):
+                return append_identity_to_mcp_payload(result)
+            return result
         except PathTraversalSecurityError as exc:
             logger.bind(tool=fn.__name__).warning("MCP tool security error: {}", exc)
             return format_tool_error(
@@ -86,4 +92,4 @@ def guard_mcp_tool[F: Callable[..., Awaitable[Any]]](fn: F) -> F:
     return cast(F, wrapper)
 
 
-__all__ = ["format_tool_error", "guard_mcp_tool"]
+__all__ = ["append_identity_to_mcp_payload", "format_tool_error", "guard_mcp_tool"]

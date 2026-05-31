@@ -239,7 +239,12 @@ def refactor_logseq_blocks(
 
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=graph_root)
+        atomic_write_bytes(
+            path,
+            new_text.encode("utf-8"),
+            graph_root=graph_root,
+            robot_commit_summary="reparent blocks",
+        )
 
         return ReparentResult(
             ok=True,

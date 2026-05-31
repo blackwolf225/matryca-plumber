@@ -26,6 +26,7 @@ from .graph_tool_helpers import (
 )
 from .mcp_telemetry import mcp_tool_info, mcp_tool_session
 from .mcp_tool_guard import guard_mcp_tool
+from .memory_tools import dispatch_store_fact
 from .outline_models import (
     Domain,
     EntityType,
@@ -43,11 +44,11 @@ class AppContext:
 
 
 def register_mcp_tools(mcp: FastMCP) -> None:
-    """Register five consolidated MCP mega-tools on the FastMCP application.
+    """Register consolidated MCP tools on the FastMCP application.
 
     Tools: ``read_graph_data``, ``search_graph``, ``mutate_graph``, ``refactor_blocks``,
-    ``run_linter`` — each routes by a ``typing.Literal`` discriminator to existing graph/RAG
-    helpers (see module-level docstrings on each handler).
+    ``run_linter``, ``store_fact`` — each routes by a ``typing.Literal`` discriminator to
+    existing graph/RAG helpers (see module-level docstrings on each handler).
 
     Args:
         mcp: The application instance created in :mod:`src.main`.
@@ -217,6 +218,20 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             await mcp_tool_info(ctx, "Wiki lint scan complete.")
             return wiki_report
         return await dispatch_lint(wiki_config, linter_name)
+
+    @safe_tool()
+    async def store_fact(
+        ctx: Context[ServerSession, AppContext],
+        fact: str,
+    ) -> dict[str, Any]:
+        """Persist a user preference, rule, or fact across sessions.
+
+        Appends ``fact`` as a bullet under ``- # AI Constraints`` on ``pages/matryca-config.md``
+        (created with Telos/Constraints headings when missing). Use this tool to permanently
+        remember operator preferences for future MCP and daemon LLM runs.
+        """
+        _ = ctx
+        return await dispatch_store_fact(fact)
 
 
 __all__ = [

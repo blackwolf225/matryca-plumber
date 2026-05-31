@@ -1,5 +1,8 @@
 # Optional Matryca wiki orchestration (copy to matryca-wiki.yml beside your graph or set MATRYCA_WIKI_CONFIG).
 # Logseq markdown shape stays authoritative via logseq-matryca-parser; this file is metadata only.
+#
+# Operator persona (Telos / AI Constraints) lives on a Logseq page, not in this YAML — see pages/matryca___config.md
+# or pages/matryca-config.md and docs/openspec/identity-config.md (MCP store_fact).
 
 namespaces:
   - Wiki

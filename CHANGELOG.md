@@ -9,7 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Telos & Identity layer** — In-graph persona on `matryca/config` or `matryca-config` (`- # Telos`, `- # AI Constraints`); reactive refresh via AST cache + file watcher; LLM system-prompt injection; MCP identity footer; **`store_fact`** MCP tool appends durable preferences under AI Constraints on `pages/matryca-config.md` (`src/daemon/config_layer.py`, `src/agent/memory_tools.py`, `docs/openspec/identity-config.md`).
+- **Reactive daemon file watching** — `watchdog` observer on `pages/` and `journals/` with debounced change detection (`MATRYCA_WATCH_DEBOUNCE_MS`) wakes the maintenance duty cycle instead of waiting only on poll interval (`src/daemon/file_watcher.py`).
+- **In-memory AST cache** — `LogseqGraph` bootstrap and per-file `invalidate_and_reload_page` deltas for MCP/daemon reads (`src/daemon/ast_cache.py`).
+- **Surgical robot git commits** — Post-write GitPython commits stage only the modified `.md` file(s) with `robot(matryca): AI auto-update - …` messages; on by default when the graph root is a git repo (`MATRYCA_GIT_ROBOT_COMMIT`, `src/daemon/git_audit.py`).
 - **Sovereign UI settings** — Infrastructure drawer exposes `LLM_API_KEY` as **API Token** (password field); persisted to `.env` on save. Required only for cloud OpenAI-compatible endpoints.
+
+### Changed
+
+- **Git audit trail** — Retired pre-write `MATRYCA_GIT_SNAPSHOT_ON_WRITE` / `git add -A` snapshots; robot commits run after successful atomic writes via post-write hooks.
+
+### Removed
+
+- **`src/agent/git_snapshot.py`** — Replaced by `src/daemon/git_audit.py` post-write commits.
+
+### Security
+
+- **CLI stdout sanitization** — Machine output masks OpenAI (`sk-`), Anthropic (`sk-ant-`), Bearer, and Logseq credential properties in-place via `redact_secrets_in_text` instead of replacing entire payloads; CodeQL `py/clear-text-logging-sensitive-data` suppressions document stdout as the intentional CLI channel (`src/cli/__init__.py`).
 
 ## [1.8.5] - 2026-05-29
 

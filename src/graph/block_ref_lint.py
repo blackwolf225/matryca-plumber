@@ -76,7 +76,11 @@ def _ref_registered(graph: LogseqGraph, ref: str) -> bool:
     return graph.get_node_by_embed_ref(ref) is not None
 
 
-def lint_block_refs_in_graph(graph_root: str | Path) -> BlockRefLintResult:
+def lint_block_refs_in_graph(
+    graph_root: str | Path,
+    *,
+    graph: LogseqGraph | None = None,
+) -> BlockRefLintResult:
     """Flag ``((uuid))`` refs whose targets are absent from the parser's global node registry."""
     root = Path(graph_root).expanduser().resolve(strict=False)
     pages = root / "pages"
@@ -96,7 +100,10 @@ def lint_block_refs_in_graph(graph_root: str | Path) -> BlockRefLintResult:
 
     from .alias_index import iter_scannable_pages_markdown
 
-    graph = LogseqGraph.load_directory(root)
+    if graph is None:
+        from ..daemon.ast_cache import get_graph_ast_cache
+
+        graph = get_graph_ast_cache(root).get_graph()
     pages_scanned = len(iter_scannable_pages_markdown(root))
     all_nodes = graph.query().execute()
     defined_ids = len(all_nodes)

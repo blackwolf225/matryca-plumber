@@ -188,7 +188,12 @@ def _process_page(
 
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=graph_root)
+        atomic_write_bytes(
+            path,
+            new_text.encode("utf-8"),
+            graph_root=graph_root,
+            robot_commit_summary="split large blocks",
+        )
         return hits, None, [str(path)]
 
 

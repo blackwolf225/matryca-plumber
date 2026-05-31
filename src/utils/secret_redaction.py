@@ -8,8 +8,9 @@ import re
 _CRED_PROP = re.compile(
     r"(?i)\b(token::|password::|secret::|api-key::|api\.key::)\s*\S+",
 )
-_SK_OPENAI = re.compile(r"\bsk-[a-zA-Z0-9]{20,}\b")
-_BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b")
+_SK_ANTHROPIC = re.compile(r"\bsk-ant-[A-Za-z0-9_-]{8,}\b")
+_SK_OPENAI = re.compile(r"\bsk-(?!ant-)[A-Za-z0-9_-]{8,}\b")
+_BEARER = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=_-]{20,}\b")
 _AWS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
 _JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")
 
@@ -22,6 +23,7 @@ _REDACT_ENV_KEYS = frozenset(
 
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (_CRED_PROP, "[REDACTED_CREDENTIAL_PROPERTY]"),
+    (_SK_ANTHROPIC, "[REDACTED_API_KEY]"),
     (_SK_OPENAI, "[REDACTED_API_KEY]"),
     (_BEARER, "Bearer [REDACTED]"),
     (_AWS_KEY, "[REDACTED_AWS_KEY]"),
@@ -62,6 +64,8 @@ def secret_violations_in_text(blob: str) -> list[str]:
     issues: list[str] = []
     if _CRED_PROP.search(blob):
         issues.append("credential-like property (token/password/secret/api-key) in payload")
+    if _SK_ANTHROPIC.search(blob):
+        issues.append("possible Anthropic-style API key material in payload")
     if _SK_OPENAI.search(blob):
         issues.append("possible OpenAI-style API key material in payload")
     if _BEARER.search(blob):

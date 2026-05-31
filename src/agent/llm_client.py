@@ -18,6 +18,7 @@ from loguru import logger
 from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 from pydantic import BaseModel, ValidationError
 
+from ..daemon.config_layer import inject_identity_into_system_prompt
 from ..graph.insights_engine import INSIGHTS_SYSTEM_PROMPT
 from ..utils.agent_debug_log import agent_debug_log, completion_usage_tokens
 from ..utils.json_repair import (
@@ -682,6 +683,7 @@ class InstructorLLMClient:
         prompt: str,
         stateless: bool,
     ) -> list[ChatMessage]:
+        system_prompt = inject_identity_into_system_prompt(system_prompt)
         if stateless:
             self.reset_execution_history()
             return [
@@ -733,11 +735,12 @@ class InstructorLLMClient:
 
     def _compress_history_via_llm(self, compression_prompt: str) -> str:
         started = time.perf_counter()
+        compression_system = inject_identity_into_system_prompt(COMPRESSION_SYSTEM_PROMPT)
         response = call_openai_with_transport_retries(
             lambda: self._raw_client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
+                    {"role": "system", "content": compression_system},
                     {"role": "user", "content": compression_prompt},
                 ],
                 temperature=0.1,

@@ -13,6 +13,7 @@ from logseq_matryca_parser.logos_core import LogseqNode
 from loguru import logger
 
 from ..config import MatrycaWikiConfig
+from ..daemon.ast_cache import get_graph_ast_cache
 from ..graph.advanced_query_block import (
     resolve_advanced_query_preset,
     wrap_logseq_advanced_query,
@@ -51,7 +52,6 @@ from ..rag.local_query import format_keyword_query_markdown
 from ..rag.matryca_hooks import get_page_spatial_context
 from ..utils.json_repair import loads_repaired_json
 from .alias_state import resolve_pipe_target, resolve_target
-from .git_snapshot import snapshot_git_working_tree
 from .graph_tool_helpers import (
     MutateGraphAction,
     ReadGraphTarget,
@@ -76,6 +76,10 @@ from .routing_hint import (
     routing_hint_for_entity_alias_preflight,
     routing_hint_for_write_outline,
 )
+
+
+def _cached_graph(graph_root: Path) -> LogseqGraph:
+    return get_graph_ast_cache(graph_root).get_graph()
 
 
 def _resolve_graph_node(graph: LogseqGraph, block_uuid: str) -> LogseqNode | None:
@@ -106,7 +110,7 @@ def _resolve_chain_parent_uuid(
     graph_root = Path(graph_path).expanduser().resolve()
     graph: LogseqGraph | None = None
     for attempt in range(2):
-        graph = LogseqGraph.load_directory(graph_root)
+        graph = _cached_graph(graph_root)
         by_id = graph.get_node_by_embed_ref(written_id)
         if by_id is not None:
             return written_id
@@ -134,7 +138,7 @@ def _resolve_chain_parent_uuid(
 def _occ_snapshot_for_block(graph_path: str | Path, block_uuid: str) -> OCCSnapshot | None:
     """Phase-1 OCC snapshot for the page file hosting ``block_uuid``."""
     graph_root = Path(graph_path).expanduser().resolve()
-    graph = LogseqGraph.load_directory(graph_root)
+    graph = _cached_graph(graph_root)
     node = _resolve_graph_node(graph, block_uuid)
     if node is None or not node.source_path:
         return None
@@ -152,7 +156,7 @@ def _headless_append_child(
     """Append a child block on disk under ``parent_uuid``; return the new block UUID."""
     graph_root = Path(graph_path).expanduser().resolve()
     new_uuid = str(uuid_module.uuid4())
-    graph = LogseqGraph.load_directory(graph_root)
+    graph = _cached_graph(graph_root)
     parent = _resolve_graph_node(graph, parent_uuid)
     if parent is None:
         msg = f"No node registered for uuid={parent_uuid}"
@@ -184,7 +188,7 @@ def _headless_append_child(
                 baseline_mtime=occ.baseline_mtime,
                 current_mtime=read_file_mtime(page_path),
             )
-        graph = LogseqGraph.load_directory(graph_root)
+        graph = _cached_graph(graph_root)
         parent = _resolve_graph_node(graph, parent_uuid)
         if parent is None:
             msg = f"No node registered for uuid={parent_uuid}"
@@ -214,11 +218,13 @@ def _headless_append_child(
 
         updated = "".join(strip_line_endings(ln) + canonical_line_suffix(ln) for ln in file_lines)
         baseline_mtime = occ.baseline_mtime if occ is not None else read_file_mtime(path)
+        commit_summary = f"appended block under parent {parent_uuid}"
         if baseline_mtime is None or not atomic_write_bytes_if_unchanged(
             path,
             updated.encode("utf-8"),
             graph_root=graph_root,
             baseline_mtime=baseline_mtime,
+            robot_commit_summary=commit_summary,
         ):
             raise OCCConflictError(
                 path,
@@ -240,20 +246,9 @@ def _headless_write_outline(
     from .outline_models import OutlineNode, outline_block_count, validate_outline_for_write
 
     root = validate_outline_for_write(outline)
-    git_snap: dict[str, object] = {
-        "enabled": False,
-        "skipped": True,
-        "reason": "LOGSEQ_GRAPH_PATH unset",
-        "committed": False,
-    }
-    if graph_path:
-        git_snap = snapshot_git_working_tree(
-            graph_path,
-            message="matryca: AI pre-edit snapshot",
-        )
 
     graph_root = Path(graph_path).expanduser().resolve()
-    graph = LogseqGraph.load_directory(graph_root)
+    graph = _cached_graph(graph_root)
     parent_node = _resolve_graph_node(graph, parent_block_uuid)
     occ: OCCSnapshot | None = None
     if parent_node is not None and parent_node.source_path:
@@ -292,7 +287,11 @@ def _headless_write_outline(
         "uuids": created_ids,
         "routing_hint": join_hint,
         "outline_block_count": outline_block_count(outline),
-        "git_snapshot": git_snap,
+        "git_snapshot": {
+            "committed": True,
+            "skipped": False,
+            "reason": "post-write robot commits via hooks",
+        },
     }
 
 
@@ -777,13 +776,15 @@ async def dispatch_refactor(
         page_ref = resolved_uuid.strip() or None
         min_chars = max(50, int(refactor_opts.get("min_chars", 400)))
         max_blocks = max(1, min(int(refactor_opts.get("max_blocks", 25)), 100))
-        git_snap: dict[str, object] = {"skipped": True, "reason": "dry_run"}
-        if not dry_run:
-            git_snap = await asyncio.to_thread(
-                snapshot_git_working_tree,
-                graph_path,
-                message="matryca: pre refactor_blocks split_large",
-            )
+        git_snap: dict[str, object] = (
+            {"skipped": True, "reason": "dry_run"}
+            if dry_run
+            else {
+                "committed": True,
+                "skipped": False,
+                "reason": "post-write robot commits via hooks",
+            }
+        )
 
         def _split() -> dict[str, Any]:
             return run_refactor_large_blocks(
@@ -811,13 +812,15 @@ async def dispatch_refactor(
                 "error": "For reparent, `payload` must be a JSON array of reparent groups.",
             }
         groups = cast(list[dict[str, Any]], groups_raw)
-        reparent_git: dict[str, object] = {"skipped": True, "reason": "dry_run"}
-        if not dry_run:
-            reparent_git = await asyncio.to_thread(
-                snapshot_git_working_tree,
-                graph_path,
-                message="matryca: pre refactor_blocks reparent",
-            )
+        reparent_git: dict[str, object] = (
+            {"skipped": True, "reason": "dry_run"}
+            if dry_run
+            else {
+                "committed": True,
+                "skipped": False,
+                "reason": "post-write robot commits via hooks",
+            }
+        )
 
         def _reparent() -> dict[str, Any]:
             return run_reparent_logseq_blocks(
@@ -876,7 +879,8 @@ async def dispatch_lint(
     if linter_name == "block_refs":
 
         def _refs() -> str:
-            result = lint_block_refs_in_graph(graph_path)
+            root = Path(graph_path).expanduser().resolve()
+            result = lint_block_refs_in_graph(root, graph=_cached_graph(root))
             logger.bind(
                 pages=result.pages_scanned,
                 issues=len(result.broken),

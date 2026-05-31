@@ -20,7 +20,7 @@ from src.agent.mcp_server import OutlineNode, register_mcp_tools
 
 
 def test_mcp_registers_five_mega_tools() -> None:
-    """Consolidated MCP surface exposes exactly five tool names."""
+    """Consolidated MCP surface exposes six tool names (five mega-tools + store_fact)."""
     app = FastMCP("matryca-test")
     register_mcp_tools(app)
     names = sorted(app._tool_manager._tools.keys())  # noqa: SLF001
@@ -30,6 +30,7 @@ def test_mcp_registers_five_mega_tools() -> None:
         "refactor_blocks",
         "run_linter",
         "search_graph",
+        "store_fact",
     ]
 
 
