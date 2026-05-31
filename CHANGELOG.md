@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Atomic document ingestion (Phase 2)** — **`ingest_document`** MCP tool parses external markdown via OS temp files (never under `pages/`), stamps fresh block UUIDs, appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, and updates `LOG` / `GLOSSARY` ledgers with OCC-safe writes (`src/agent/ingestion.py`, `docs/openspec/ingest.md`).
 - **Telos & Identity layer** — In-graph persona on `matryca/config` or `matryca-config` (`- # Telos`, `- # AI Constraints`); reactive refresh via AST cache + file watcher; LLM system-prompt injection; MCP identity footer; **`store_fact`** MCP tool appends durable preferences under AI Constraints on `pages/matryca-config.md` (`src/daemon/config_layer.py`, `src/agent/memory_tools.py`, `docs/openspec/identity-config.md`).
 - **Reactive daemon file watching** — `watchdog` observer on `pages/` and `journals/` with debounced change detection (`MATRYCA_WATCH_DEBOUNCE_MS`) wakes the maintenance duty cycle instead of waiting only on poll interval (`src/daemon/file_watcher.py`).
 - **In-memory AST cache** — `LogseqGraph` bootstrap and per-file `invalidate_and_reload_page` deltas for MCP/daemon reads (`src/daemon/ast_cache.py`).
@@ -17,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Documentation** — OpenSpec, `SYSTEM_PROMPT.md`, `README.md`, `ARCHITECTURE.md`, `PROJECT_DIARY.md`, and roadmaps aligned for seven MCP tools (`ingest_document` + `store_fact`).
 - **Git audit trail** — Retired pre-write `MATRYCA_GIT_SNAPSHOT_ON_WRITE` / `git add -A` snapshots; robot commits run after successful atomic writes via post-write hooks.
 
 ### Removed

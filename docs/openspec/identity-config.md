@@ -3,7 +3,7 @@
 **Roadmap:** Master architecture RFC — Phase 1 (persona layer)  
 **Implementation:** `src/daemon/config_layer.py`, `src/agent/memory_tools.py`  
 **Agent contract:** [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) (Identity + `store_fact`)  
-**Related:** [`l1-l2-routing.md`](l1-l2-routing.md), [`runtime-bootstrap.md`](runtime-bootstrap.md)
+**Related:** [`l1-l2-routing.md`](l1-l2-routing.md), [`runtime-bootstrap.md`](runtime-bootstrap.md), [`ingest.md`](ingest.md) (external Markdown capture)
 
 Matryca Plumber can load **operator role and durable rules** from a Logseq page inside the vault (L2), inject them into **daemon LLM system prompts** and **MCP tool output**, and append new preferences via the **`store_fact`** MCP tool.
 

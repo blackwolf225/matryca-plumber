@@ -15,7 +15,7 @@ This project exists so humans and **autonomous local systems** can collaborate o
 | **Autonomous runtime** | `src/agent/maintenance_daemon.py`, `src/agent/plumber_modules/`, `src/agent/plumber_config.py` | Duty-cycle scans, cognitive lints, thermal pacing, ledger / telemetry sync |
 | **Headless CRUD & graph plane** | `src/agent/graph_dispatch.py`, `src/graph/**`, **`logseq-matryca-parser`** | OCC, `page_rmw_lock`, atomic writes, fence dead zones, namespace / property parity |
 | **Operator control plane** | `src/cli/**` (incl. `ui_server.py`, `ui_auth.py`), `frontend/` | **Zero-Trust** local API (`X-Matryca-Token`), cockpit UX |
-| **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path |
+| **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path. Standalone tools: **`store_fact`** (identity), **`ingest_document`** (atomic external Markdown — see [`docs/openspec/ingest.md`](docs/openspec/ingest.md)). |
 
 Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge profile).
 

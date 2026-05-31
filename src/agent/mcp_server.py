@@ -24,6 +24,7 @@ from .graph_tool_helpers import (
     RunLinterName,
     SearchGraphMethod,
 )
+from .ingestion import dispatch_ingest_document
 from .mcp_telemetry import mcp_tool_info, mcp_tool_session
 from .mcp_tool_guard import guard_mcp_tool
 from .memory_tools import dispatch_store_fact
@@ -47,7 +48,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     """Register consolidated MCP tools on the FastMCP application.
 
     Tools: ``read_graph_data``, ``search_graph``, ``mutate_graph``, ``refactor_blocks``,
-    ``run_linter``, ``store_fact`` — each routes by a ``typing.Literal`` discriminator to
+    ``run_linter``, ``store_fact``, ``ingest_document`` — each routes by a ``typing.Literal``
+    discriminator (where applicable) to
     existing graph/RAG helpers (see module-level docstrings on each handler).
 
     Args:
@@ -232,6 +234,22 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         """
         _ = ctx
         return await dispatch_store_fact(fact)
+
+    @safe_tool()
+    async def ingest_document(
+        ctx: Context[ServerSession, AppContext],
+        source_name: str,
+        raw_text: str,
+    ) -> dict[str, Any]:
+        """Atomically ingest external markdown into the Logseq graph.
+
+        Parses ``raw_text`` via a temporary OS file (never under ``pages/``), assigns fresh
+        block UUIDs, appends a section to the ingest destination page (daily ``Ingest/YYYY-MM-DD``
+        or ``MATRYCA_INGEST_PAGE``), and updates ``LOG`` / ``GLOSSARY`` ledgers with OCC-safe
+        writes and optional robot git commits.
+        """
+        _ = ctx
+        return await dispatch_ingest_document(source_name, raw_text)
 
 
 __all__ = [

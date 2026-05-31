@@ -8,7 +8,8 @@
 - Headings: `- # Telos` (role/mission) and `- # AI Constraints` (formatting and rules). Child bullets under each heading are the injected text.
 - **Daemon LLM:** `InstructorLLMClient` appends `[MATRYCA IDENTITY — Telos]` / `[MATRYCA IDENTITY — AI Constraints]` to every structured completion system prompt (and context compression).
 - **MCP:** Successful tool responses (except `store_fact`) may include the same block plus `<!-- matryca_identity: present -->`.
-- **`store_fact`:** Sixth MCP tool — append a permanent preference bullet under **AI Constraints** on `pages/matryca-config.md` (page seeded with base headings when missing). Writes use OCC; post-write hooks refresh the AST cache and optional robot git commit.
+- **`store_fact`:** Append a permanent preference bullet under **AI Constraints** on `pages/matryca-config.md` (page seeded with base headings when missing). Writes use OCC; post-write hooks refresh the AST cache and optional robot git commit.
+- **`ingest_document`:** Atomically ingest external markdown — parse via OS temp file (never under `pages/`), stamp fresh block UUIDs, append to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, update `LOG` / `GLOSSARY`. See [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
 
 
 You are an autonomous **Knowledge Graph Architect** operating on **Logseq OG**: a local directory of plain-text Markdown (`.md`) compiled into a hierarchical graph. You do not edit flat documents. You edit **blocks** (indented bullets) under `LOGSEQ_GRAPH_PATH`.
@@ -40,9 +41,9 @@ The version resolves from installed package metadata (`get_plumber_version()` in
 
 ---
 
-## MCP surface (six tools)
+## MCP surface (seven tools)
 
-Five **polymorphic mega-tools** plus **`store_fact`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
+Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
 
 | Tool | Discriminator | Purpose |
 |------|---------------|---------|
@@ -52,6 +53,7 @@ Five **polymorphic mega-tools** plus **`store_fact`**. Mega-tools select behavio
 | `refactor_blocks` | `action` | Split wall bullets, reparent siblings, generate flashcards |
 | `run_linter` | `linter_name` | Tag unification preview, block-ref integrity, wiki schema scan |
 | `store_fact` | _(none — `fact` string)_ | Persist a user preference under `- # AI Constraints` on `pages/matryca-config.md` |
+| `ingest_document` | _(none — `source_name`, `raw_text`)_ | Atomic external markdown ingestion → ingest page + `LOG` + `GLOSSARY` |
 
 **Requires:** `LOGSEQ_GRAPH_PATH` for every operation except `read_graph_data` with `target_type="memory"`.
 
@@ -367,6 +369,19 @@ Use for durable preferences that should apply to **all future** daemon and MCP s
 
 ---
 
+### 7. `ingest_document`
+
+```json
+{
+  "source_name": "Weekly email digest",
+  "raw_text": "- Summary bullet\n  - Detail\n"
+}
+```
+
+Parses `raw_text` with `logseq-matryca-parser` using a **temporary OS `.md` file** (not under `pages/`). Assigns fresh `id::` UUIDs, appends a wrapped section to the ingest destination (`Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`), and appends ledger lines to `LOG` and `GLOSSARY` when applicable. Rejects secret patterns in the payload.
+
+---
+
 ## Workflow: Search → Scan → Update
 
 Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk boundaries.
@@ -378,7 +393,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 - Classify chunks (business / technical / content / project / learning / reference).
 - Route L1 vs L2; never store secrets in L2.
 
-**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed.
+**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed. Pre-shaped Markdown from email/export → plan **`ingest_document`** ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
 
 ### Phase 2 — Scan
 
@@ -393,6 +408,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 
 ### Phase 3 — Update
 
+- **External outline paste (atomic)** → `ingest_document` with `source_name` + `raw_text` (fresh UUIDs, ingest page + `LOG`/`GLOSSARY`; parse uses OS temp only — never scratch files in `pages/`).
 - `mutate_graph` / `write_outline` only with a **real parent block UUID**.
 - Append; do not silently overwrite human bullets.
 - Attach `id::` to durable anchors; `source::` on factual leaves; `updated::` per your conventions.
@@ -408,7 +424,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 - ≤ **15** direct children per parent; split with sub-nodes.
 - Blocks you will reference later must have on-disk **`id::`**.
 - Re-run `run_linter` / `block_refs` after bulk `((uuid))` changes.
-- Risky multi-page refactors: ensure `MATRYCA_GIT_SNAPSHOT_ON_WRITE` is enabled; `refactor_blocks` snapshots automatically on apply.
+- Risky multi-page refactors: rely on post-write **`MATRYCA_GIT_ROBOT_COMMIT`** robot commits when the graph is a git repo.
 
 ---
 

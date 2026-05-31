@@ -53,6 +53,15 @@ Persistent artifacts at the graph root include `.matryca_daemon_state.json` (che
 
 Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
+#### Atomic ingestion (MCP)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| Ingest pipeline | `src/agent/ingestion.py` | Parse external Markdown via OS temp file; stamp UUIDs; append ingest / `LOG` / `GLOSSARY` |
+| MCP surface | `src/agent/mcp_server.py` | `ingest_document(source_name, raw_text)` |
+
+Destination: daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`. Parse scratch files **must not** live under `pages/` (avoids `file_watcher` + AST churn). Spec: [`docs/openspec/ingest.md`](openspec/ingest.md).
+
 ### 2. Sovereign UI (React + FastAPI control room)
 
 **Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8500`
@@ -69,7 +78,7 @@ The UI never becomes a second source of truth: it reads daemon checkpoints and l
 
 **Entry:** `matryca-plumber` with **no** CLI-shaped argv → `src/main.py` (lazy-imported from `plumber_entry.py`)
 
-`register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** for in-graph identity updates. **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
+`register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** (identity) and **`ingest_document`** (atomic external markdown → ingest page + `LOG`/`GLOSSARY`, parse via OS temp files only). **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
 
 **Routing fix (`plumber_entry.py`):** the `matryca-plumber` console script inspects `sys.argv`. Known CLI commands (`plumber`, `read`, `search`, shorthand `start`/`status`/…) route to `cli.main` **without** importing FastMCP. Bare invocations (typical MCP host stdio spawn) fall through to `main.main()`. This disentangles **operator CLI stdout** from **MCP JSON-RPC on stdio** — a class of integration bugs that plagued single-entrypoint packages.
 
@@ -271,7 +280,7 @@ Every Matryca Plumber surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **
 | Wiki orchestration | `<vault>/matryca-wiki.yml` | Seeded from `matryca-wiki.example.yml` when missing |
 | AST + identity RAM | `get_graph_ast_cache`, `get_identity_store` | Graph index bootstrap; Telos/Constraints load when config page exists |
 
-**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
+**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), ingest / `LOG` / `GLOSSARY` pages (first `ingest_document`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
 
 Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md). Identity page format: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
@@ -451,6 +460,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/graph/page_write_lock.py` | Per-page RMW lock + LRU registry |
 | `src/graph/markdown_blocks.py` | `atomic_write_bytes*`, OCC helpers |
 | `src/agent/mcp_server.py` | `@mcp.tool()` handlers |
+| `src/agent/ingestion.py` | `ingest_document` / `process_ingestion` |
+| `src/agent/memory_tools.py` | `store_fact` |
 | `src/agent/mcp_telemetry.py` | Loguru bridge, `id(ctx)` session map |
 | `src/agent/mcp_tool_guard.py` | Tool error boundary (sanitized client messages) |
 | `src/utils/llm_url_policy.py` | Shared SSRF policy for inference base URLs |
@@ -476,6 +487,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.7.x** | Zero-Touch onboarding | Sovereign UI pre-flight, decoupled UI state, lock-before-LLM |
 | **1.8** | Edge computing & performance | PagePromptSession, adaptive `llm_client`, mmap reads, CPU sandbox, backlink index, BM25 slimming, cooperative harvest, memory teardown |
 | **1.8 round 4** | Pre-release audit | Stateless graph insights, compression persist sanitize, 8k block catalog, Phase 2 lock-on-write-only, `id::` excluded from property matchers |
+| **Unreleased** | Master RFC Phases 1–2 | Telos/Constraints identity + reactive daemon stack; **`ingest_document`** atomic ingestion (`docs/openspec/identity-config.md`, `docs/openspec/ingest.md`) |
 
 ---
 
@@ -487,6 +499,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`v1.8-SOFTWARE-EDGE-PLAN.md`](v1.8-SOFTWARE-EDGE-PLAN.md) — CPU sandbox, frozen prefix, adaptive LLM, mmap
 - [`openspec/llm-performance.md`](openspec/llm-performance.md) — LLM performance engineering contract
 - [`openspec/identity-config.md`](openspec/identity-config.md) — Telos / AI Constraints and `store_fact`
+- [`openspec/ingest.md`](openspec/ingest.md) — atomic `ingest_document` pipeline
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy
 - [`../README.md`](../README.md) — operator quick start
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — `make check`, dev setup

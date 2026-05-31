@@ -100,8 +100,9 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Six MCP tools (five mega-tools + **`store_fact`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Claude Desktop Integration (FastMCP)**: Seven MCP tools (five mega-tools + **`store_fact`** + **`ingest_document`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
 - **Telos & Identity (in-graph persona)**: Optional `pages/matryca___config.md` or `pages/matryca-config.md` with `- # Telos` and `- # AI Constraints` headings — injected into daemon LLM prompts and MCP output; **`store_fact`** appends durable preferences under Constraints ([`docs/openspec/identity-config.md`](docs/openspec/identity-config.md)).
+- **Atomic document ingestion**: **`ingest_document`** parses external Markdown via an OS temp file (never under `pages/`), stamps fresh `id::` UUIDs, and appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, with optional `LOG` / `GLOSSARY` ledgers ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
 
 ---
 
@@ -190,7 +191,7 @@ On first start (daemon, CLI, MCP, or UI), Matryca Plumber **automatically create
 - **`<vault>/.matryca_semantic_cache/`**, **`templates/`**, and **`matryca-wiki.yml`** (from `matryca-wiki.example.yml` when absent)
 - **In-memory graph index** at startup (AST cache); **identity** loaded when a Telos/Constraints config page exists
 
-The **identity config page** is not auto-created (use Logseq or `store_fact`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md).
+The **identity config page** is not auto-created (use Logseq or `store_fact`). **Ingest / LOG / GLOSSARY** pages are created on first `ingest_document` call. Optional `MATRYCA_INGEST_PAGE` pins a fixed inbox (e.g. `AI_Inbox`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) and [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
 
 See [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) for rationale (L1 vs L2, idempotency, and what is intentionally *not* auto-created).
 
@@ -250,6 +251,8 @@ make perf
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
 | [`docs/openspec/l1-l2-routing.md`](docs/openspec/l1-l2-routing.md) | L1 memory vs L2 graph routing for agents. |
+| [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) | Telos / AI Constraints and `store_fact`. |
+| [`docs/openspec/ingest.md`](docs/openspec/ingest.md) | `ingest_document` atomic ingestion pipeline. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |

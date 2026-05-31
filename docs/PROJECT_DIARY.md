@@ -10,22 +10,32 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
-## [2026-05-31] Unreleased — Telos & Identity layer + reactive daemon stack
+## [2026-05-31] Unreleased — Telos & Identity (Phase 1) + atomic ingestion (Phase 2)
 
 ### Context
 
-Master architecture RFC Phase 1: operator **role and durable rules** live on a Logseq config page inside the vault, refresh without daemon restart, and flow into every local LLM call and MCP tool response. **`store_fact`** lets MCP hosts append preferences under `- # AI Constraints` with the same OCC and post-write pipeline as other headless writes.
+Master architecture RFC **Phase 1:** operator **role and durable rules** live on a Logseq config page inside the vault, refresh without daemon restart, and flow into every local LLM call and MCP tool response. **`store_fact`** appends preferences under `- # AI Constraints`.
+
+**Phase 2:** external Markdown (exports, email bodies, agent drafts) enters the vault through a single **`ingest_document`** MCP tool — parser-first, fresh block UUIDs, ledger pages — without polluting `pages/` with parse scratch files (watchdog-safe OS temp paths).
 
 ### Milestones shipped
+
+**Phase 1 — persona**
 
 1. **`src/daemon/config_layer.py`** — Parse Telos/Constraints from `LogseqPage.root_nodes`; `IdentityConfigStore` with mtime invalidation; `inject_identity_into_system_prompt` / `append_identity_to_mcp_payload`.
 2. **Reactive stack** — `file_watcher.py`, `ast_cache.py`, `post_write_hooks.py`, `git_audit.py` (robot commits per file after Plumber writes).
 3. **`store_fact` MCP tool** — `src/agent/memory_tools.py`; writes always target `pages/matryca-config.md`.
-4. **OpenSpec** — [`docs/openspec/identity-config.md`](openspec/identity-config.md); cross-links in `l1-l2-routing.md`, `runtime-bootstrap.md`, `ARCHITECTURE.md`, `SYSTEM_PROMPT.md`, `README.md`.
+4. **OpenSpec** — [`docs/openspec/identity-config.md`](openspec/identity-config.md).
+
+**Phase 2 — atomic ingestion**
+
+5. **`src/agent/ingestion.py`** — `process_ingestion`, `resolve_ingest_destination_page_title`, `MATRYCA_INGEST_PAGE` / daily `Ingest/YYYY-MM-DD`, `LOG` + `GLOSSARY` ledgers, capped UUID audit lines.
+6. **`ingest_document` MCP tool** — seventh registered tool; `tempfile` parse + `os.unlink`; write order destination → LOG → GLOSSARY.
+7. **OpenSpec** — [`docs/openspec/ingest.md`](openspec/ingest.md); cross-links in `l1-l2-routing.md`, `ARCHITECTURE.md`, `SYSTEM_PROMPT.md`, `README.md`, `.env.example`.
 
 ### Architectural outcome
 
-**L1** (sibling `matryca-l1/`) remains session/deploy context; **in-graph identity** is vault-native persona for daemon + MCP. Read path prefers `matryca/config`; `store_fact` consolidates writes on `matryca-config`.
+**L1** (sibling `matryca-l1/`) remains session/deploy context; **in-graph identity** is vault-native persona for daemon + MCP (read `matryca/config`, write `matryca-config` via `store_fact`). **Ingestion** is vault-native capture: one append target per call (Option C), with audit trails on `LOG` / `GLOSSARY` instead of ad-hoc journal sprawl. Parse artifacts never touch `pages/`, so Phase 1 reactive indexing stays quiet during ingest-only MCP sessions.
 
 ---
 
