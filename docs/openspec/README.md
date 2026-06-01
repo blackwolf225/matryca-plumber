@@ -8,6 +8,9 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 
 | Document | Scope |
 |----------|--------|
+| [`link-verification.md`](link-verification.md) | v1.9 zero-LLM URL/asset hygiene, `.matryca_link_registry.json`, `dead-link::` / `missing-asset::`. |
+| [`agent-dx.md`](agent-dx.md) | v1.9 CLI `--json`, `context load`, `read subtree`, Journey Log on today's journal. |
+| [`dual-embedding.md`](dual-embedding.md) | Phase 3 dual vectors (content + applicability) and `search_graph` / `method=semantic`. |
 | [`ingest.md`](ingest.md) | **`ingest_document`** MCP tool — atomic external Markdown → ingest page + `LOG` / `GLOSSARY` (OS temp parse, OCC writes). |
 | [`identity-config.md`](identity-config.md) | In-graph **Telos** / **AI Constraints** and **`store_fact`**. |
 | [`lint.md`](lint.md) | On-disk lint: block refs + wiki convention pack. |

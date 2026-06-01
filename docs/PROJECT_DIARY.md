@@ -1,12 +1,44 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.8.0**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.0**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-01] v1.9.0 — Structural graph hygiene + agent DX
+
+### Context
+
+GitHub milestone **v1.9.0** (issues [#15](https://github.com/MarcoPorcellato/matryca-plumber/issues/15), [#16](https://github.com/MarcoPorcellato/matryca-plumber/issues/16)): surface **knowledge rot** and improve **headless agent ergonomics** without new LLM cognitive modules or auxiliary databases.
+
+### Milestones shipped
+
+**#15 — link verification**
+
+1. **`src/graph/link_verification.py`** — Extract → `.matryca_link_registry.json` → async `httpx` HEAD / `os.path.exists` → OCC `dead-link::` / `missing-asset::`.
+2. **Daemon integration** — `MaintenanceDaemon._finalize_link_and_journey_pass` at end of each duty cycle; passive extract on page reads.
+3. **OpenSpec** — [`docs/openspec/link-verification.md`](openspec/link-verification.md).
+
+**#16 — agent-centric DX**
+
+4. **CLI `--json`** — Global machine-readable envelope on `matryca` (`src/cli/__init__.py`).
+5. **`matryca context load`** — Semantic macro (`src/agent/context_load.py`).
+6. **`read subtree`** — MCP + CLI target with optional heading filter (`graph_tool_helpers.read_subtree_markdown`).
+7. **Journey Log** — `## 🤖 Matryca Activity` append to today's journal (`src/agent/journey_log.py`).
+8. **OpenSpec** — [`docs/openspec/agent-dx.md`](openspec/agent-dx.md).
+
+### Documentation
+
+Cross-linked **README**, **ARCHITECTURE** (v1.9 sections + mermaid), **SYSTEM_PROMPT**, **runtime-bootstrap** (registry sidecar), and **openspec/README**.
+
+### Architectural outcome
+
+Plumber remains **Markdown-only** as system of record: the link registry is a queue, Journey Log is a view, and agents get JSON/subtree/context primitives on the same `graph_dispatch` plane as MCP.
 
 ---
 
@@ -17,6 +49,8 @@ Entries are chronological (**newest first** within each major release block). Wh
 Master architecture RFC **Phase 1:** operator **role and durable rules** live on a Logseq config page inside the vault, refresh without daemon restart, and flow into every local LLM call and MCP tool response. **`store_fact`** appends preferences under `- # AI Constraints`.
 
 **Phase 2:** external Markdown (exports, email bodies, agent drafts) enters the vault through a single **`ingest_document`** MCP tool — parser-first, fresh block UUIDs, ledger pages — without polluting `pages/` with parse scratch files (watchdog-safe OS temp paths).
+
+**Phase 3:** optional **dual embeddings** per block (`vec_content` + `vec_applicability`) in `block_vectors.json`, hybrid `search_graph` / `method=semantic`, daemon indexing gated by `MATRYCA_DUAL_EMBEDDING_ENABLED` (no change to BM25 / TF-IDF clustering).
 
 ### Milestones shipped
 

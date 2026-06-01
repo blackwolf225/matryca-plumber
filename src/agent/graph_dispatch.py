@@ -66,6 +66,7 @@ from .graph_tool_helpers import (
     parse_json_object,
     parse_optional_json_query,
     read_block_ast_markdown,
+    read_subtree_markdown,
     read_xray_page_markdown,
 )
 from .l1_memory import read_l1_memory_async
@@ -368,6 +369,23 @@ async def dispatch_read(
             await asyncio.to_thread(read_block_ast_markdown, graph_path, block_query),
         )
 
+    if target_type == "subtree":
+        subtree_query = query.strip()
+        if not subtree_query:
+            return (
+                "For `target_type=subtree`, set `query` to `Page Title|block-uuid` "
+                'or JSON `{"page":"...","block_uuid":"...","heading":"optional"}`.'
+            )
+        try:
+            subtree_md = await asyncio.to_thread(
+                read_subtree_markdown,
+                graph_path,
+                subtree_query,
+            )
+        except ValueError as exc:
+            return str(exc)
+        return cap_llm_payload_chars(subtree_md)
+
     if target_type == "structural_hops":
         hop_opts = parse_optional_json_query(query)
         seeds_raw = str(hop_opts.get("seeds", query)).strip()
@@ -461,6 +479,40 @@ async def dispatch_search(
             limit=limit,
             mode="bm25",
         )
+
+    if method == "semantic":
+        sem_opts = parse_optional_json_query(query)
+        sem_query = str(sem_opts.get("query", sem_opts.get("keyword", query))).strip()
+        if not sem_query:
+            return (
+                "For `method=semantic`, set `query` to natural language or JSON "
+                'with `"query": "..."`. Requires MATRYCA_DUAL_EMBEDDING_ENABLED=true '
+                "and daemon-indexed block vectors."
+            )
+        sem_limit_raw = bounded_int_from_options(
+            sem_opts,
+            "limit",
+            default=15,
+            minimum=1,
+            maximum=100,
+        )
+        if isinstance(sem_limit_raw, str):
+            return sem_limit_raw
+        sem_limit = sem_limit_raw
+
+        def _run_semantic() -> str:
+            from ..semantic.embedding import OpenAICompatibleEmbeddingClient
+            from ..semantic.search import format_semantic_search_markdown
+
+            client = OpenAICompatibleEmbeddingClient()
+            return format_semantic_search_markdown(
+                graph_path,
+                sem_query,
+                embedding_client=client,
+                limit=sem_limit,
+            )
+
+        return await asyncio.to_thread(_run_semantic)
 
     if method == "regex":
         rx_opts = parse_optional_json_query(query)

@@ -32,7 +32,7 @@ This is non-negotiable for both MCP agents and the Plumber daemon. Patience beat
 **Authorship protocol:** Pages created by Matryca Plumber (seed pages, auto-split children, backlink contexts) are automatically stamped at the top of the file:
 
 ```text
-made-by:: matryca plumber v1.8.0
+made-by:: matryca plumber v1.9.0
 ```
 
 The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py`). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
@@ -47,7 +47,7 @@ Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**.
 
 | Tool | Discriminator | Purpose |
 |------|---------------|---------|
-| `read_graph_data` | `target_type` | Read pages, L1 memory, block excerpts, structural hops, dashboard, X-Ray aliases |
+| `read_graph_data` | `target_type` | Read pages, L1 memory, block excerpts, **subtree** (heading-filtered), structural hops, dashboard, X-Ray aliases |
 | `search_graph` | `method` | BM25, regex, unlinked mentions, journal tasks, entity resolution (`resolve_entity`) |
 | `mutate_graph` | `action` | Write outlines, edit properties, append journal, inject queries |
 | `refactor_blocks` | `action` | Split wall bullets, reparent siblings, generate flashcards |
@@ -63,7 +63,7 @@ Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**.
 
 - **Atomic unit:** the bullet (`- `), not the page paragraph.
 - **Hierarchy:** indentation = parent/child semantics.
-- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v1.8.0`.
+- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v1.9.0`.
 - **Block properties:** `key:: value` **immediately after the parent bullet text**, indented **exactly +2 spaces** relative to the bullet, **before** continuation lines or child bullets. Examples: `id::`, `source::`, `matryca-plumber:: true`.
 - **Multiline blocks (Shift+Enter):** continuation body lines inside one logical bullet must be padded to **`bullet_indent + 2 spaces`**. Only the first line has `- `. Never insert child bullets or orphan properties between continuation lines — this breaks Datalog indexing.
 - **Targetability:** durable anchors need `id:: <uuid>` on disk.
@@ -95,7 +95,7 @@ Classify only blocks you intentionally tag; children usually omit schema fields.
 
 **Required workflow:**
 
-1. **Read** — `read_graph_data` / `target_type="page"` (or `block_ast` for a subtree).
+1. **Read** — `read_graph_data` / `target_type="page"` (or `subtree` / `block_ast` for a focused excerpt).
 2. **Persist** — `mutate_graph` / `action="edit_property"` inject `id:: <uuid>` into the source block. Always `dry_run: true` first, then `dry_run: false`.
 3. **Reference** — Only after `id::` exists on disk, emit `((that-uuid))` in new content.
 
@@ -170,6 +170,19 @@ Loads L1 fast-context Markdown. `query` ignored.
 On-disk bullet subtree for one `id::` block (`Page Title|block-uuid`). Headless; no Logseq HTTP API.
 
 ```json
+{ "target_type": "subtree", "query": "My Project|aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }
+```
+
+Focused excerpt for one block; optional JSON `heading` to narrow to a single bulleted section (token-saving). Prefer over full `page` when you already know the anchor UUID.
+
+```json
+{
+  "target_type": "subtree",
+  "query": "{\"page\":\"My Project\",\"block_uuid\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"heading\":\"Implementation\"}"
+}
+```
+
+```json
 { "target_type": "structural_hops", "query": "Seed Page A, Seed Page B" }
 ```
 
@@ -202,7 +215,7 @@ X-Ray outline with `[n]` aliases; persists `.matryca_xray_state.json` at the gra
 { "method": "bm25", "query": "redis cache invalidation" }
 ```
 
-Okapi BM25 over `pages/**/*.md`. Not semantic embeddings. Optional:
+Okapi BM25 over `pages/**/*.md` remains the default lexical path. Optional **`method=semantic`** uses dual block embeddings when `MATRYCA_DUAL_EMBEDDING_ENABLED=true` (see [`docs/openspec/dual-embedding.md`](docs/openspec/dual-embedding.md)). Optional:
 
 ```json
 { "method": "bm25", "query": "{\"keyword\":\"redis cache\", \"limit\": 15}" }
@@ -398,7 +411,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 ### Phase 2 — Scan
 
 - `read_graph_data` / `page` for every page you will touch.
-- `block_ast` when you need raw subtree around one `id::`.
+- `subtree` when you need a focused excerpt (optional `heading` filter); `block_ast` for the raw on-disk splice around one `id::`.
 - `structural_hops` before creating entities that might duplicate existing pages.
 - `dashboard` for quick health before large edits.
 - `run_linter` / `block_refs` when editing many `((uuid))` refs.
@@ -443,14 +456,31 @@ If new information **contradicts** existing blocks, you **must not** silently ov
 
 ---
 
+## Agent-native CLI (same contract as MCP)
+
+When the host runs **`matryca`** instead of MCP tools:
+
+| Pattern | Example |
+|---------|---------|
+| JSON stdout | `matryca --json read page "My Project"` |
+| Context macro | `matryca context load "My Project"` or `… load "Page\|uuid"` |
+| Subtree read | `matryca read subtree "Page\|uuid"` |
+
+Spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Secrets are redacted in JSON output.
+
+**Plumber hygiene properties (daemon, read-only for agents):** Blocks may carry `dead-link:: true` or `missing-asset:: true` after background verification ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)). Do not remove these flags unless the operator fixed the URL or restored the asset.
+
+---
+
 ## Quick discriminator cheat sheet
 
 ```
-READ   page | memory | block_ast | structural_hops | dashboard
-SEARCH bm25 | regex | unlinked_mentions | journal_tasks | resolve_entity
+READ   page | memory | block_ast | subtree | structural_hops | dashboard | xray_page
+SEARCH bm25 | semantic | regex | unlinked_mentions | journal_tasks | resolve_entity
 MUTATE write_outline | edit_property | append_journal | inject_query
 REFACTOR split_large | reparent | generate_flashcards
 LINT   unify_tags | block_refs | full_wiki_scan
+CLI    matryca --json …  |  matryca context load <query>
 ```
 
-**Default safe sequence:** `memory` → `bm25` → `page` → plan → `dry_run: true` on mutators → apply → `block_refs`.
+**Default safe sequence:** `memory` → `bm25` → `page` (or `context load`) → plan → `dry_run: true` on mutators → apply → `block_refs`.

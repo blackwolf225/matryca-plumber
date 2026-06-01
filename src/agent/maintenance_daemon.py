@@ -46,6 +46,12 @@ from ..graph.insights_engine import (
     run_graph_insights_engine,
 )
 from ..graph.json_flock import cross_process_json_flock
+from ..graph.link_verification import (
+    link_verify_enabled,
+    merge_page_links_into_registry,
+    register_page_links_from_path,
+    run_link_verification_cycle,
+)
 from ..graph.logseq_uuid import find_malformed_block_refs, is_malformed_block_ref_error
 from ..graph.markdown_blocks import (
     atomic_write_bytes,
@@ -89,6 +95,7 @@ from ..utils.runtime_bootstrap import prepare_matryca_runtime
 from ..utils.token_logger import OperationType, TokenLogger
 from .control_room_progress import refresh_phase2_cognitive_totals
 from .cooperative_yield import bootstrap_checkpoint_every
+from .journey_log import JourneyCycleStats, append_journey_log, journey_log_enabled
 from .llm_client import (
     InstructorLLMClient as _BaseInstructorLLMClient,
 )
@@ -1478,6 +1485,37 @@ def apply_semantic_page_result(
     return lint_outcome
 
 
+def run_dual_embedding_after_semantic_write(
+    graph_root: Path,
+    page_path: Path,
+    page_title: str,
+    llm_client: object,
+) -> None:
+    """Best-effort dual block indexing when ``MATRYCA_DUAL_EMBEDDING_ENABLED`` is set."""
+    from loguru import logger
+
+    from ..semantic.applicability import InstructorApplicabilityLLM
+    from ..semantic.config import dual_embedding_enabled
+    from ..semantic.embedding import OpenAICompatibleEmbeddingClient
+    from ..semantic.indexer import index_page_blocks
+
+    if not dual_embedding_enabled():
+        return
+    try:
+        index_page_blocks(
+            graph_root,
+            page_path,
+            page_title,
+            llm_client=InstructorApplicabilityLLM(llm_client),
+            embedding_client=OpenAICompatibleEmbeddingClient(),
+        )
+    except Exception as exc:  # noqa: BLE001 — never fail semantic write path
+        logger.bind(page=page_title, path=str(page_path)).warning(
+            "Dual embedding sidecar failed: {}",
+            exc,
+        )
+
+
 def append_semantic_index(
     graph_root: Path,
     page_path: Path,
@@ -2354,6 +2392,9 @@ class MaintenanceDaemon:
                 status="skipped",
             )
             return True
+        if link_verify_enabled():
+            with contextlib.suppress(OSError):
+                merge_page_links_into_registry(self.graph_root, path, content)
         return False
 
     def _process_llm_cycle_file(
@@ -2388,6 +2429,9 @@ class MaintenanceDaemon:
             baseline_mtime = occ_snapshot(path) if path.is_file() else None
             if path.is_file():
                 content = path.read_text(encoding="utf-8", errors="replace")
+                if link_verify_enabled():
+                    with contextlib.suppress(OSError):
+                        merge_page_links_into_registry(self.graph_root, path, content)
             cognitive_outcome: CognitiveLintOutcome | None = None
             prompt_session: PagePromptSession | None = None
             if self.bootstrap_complete and lint_config.any_enabled:
@@ -2485,6 +2529,12 @@ class MaintenanceDaemon:
                 status="processed",
             )
             self._sync_catalog_after_page_write(path, title)
+            run_dual_embedding_after_semantic_write(
+                self.graph_root,
+                path,
+                title,
+                self.llm_client,
+            )
         except PageLockUnavailableError as exc:
             self.token_logger.log_structural_lint_warning(
                 target_file=path,
@@ -2570,6 +2620,32 @@ class MaintenanceDaemon:
             error=message,
         )
 
+    def _finalize_link_and_journey_pass(
+        self,
+        *,
+        llm_files_processed: int,
+        fast_track_files: int,
+    ) -> None:
+        """Background link verification + optional journal journey log."""
+        stats = JourneyCycleStats(
+            llm_files_processed=llm_files_processed,
+            fast_track_files=fast_track_files,
+        )
+        if link_verify_enabled():
+            try:
+                link_result = run_link_verification_cycle(self.graph_root)
+                stats.links_checked = link_result.checked
+                stats.dead_links_flagged = link_result.flagged_blocks
+                if link_result.flagged_blocks:
+                    stats.notes.append(
+                        f"flagged {link_result.flagged_blocks} block(s) with hygiene properties",
+                    )
+            except OSError as exc:
+                logger.warning("Link verification cycle skipped: {}", exc)
+        if journey_log_enabled():
+            with contextlib.suppress(OSError):
+                append_journey_log(str(self.graph_root), stats)
+
     def run_cycle(self, state: DaemonState | None = None) -> DaemonState:
         """Drain fast-skippable pending files, then up to ``max_files_per_cycle`` LLM turns."""
         state = self._sync_runtime_config(state or load_daemon_state(self.graph_root))
@@ -2617,9 +2693,11 @@ class MaintenanceDaemon:
             heal_daemon_state_ledger(self.graph_root, state)
             state.status = "idle"
             save_daemon_state(self.graph_root, state)
+            self._finalize_link_and_journey_pass(llm_files_processed=0, fast_track_files=0)
             return state
 
         cycle_budget = max(1, self.max_files_per_cycle)
+        fast_track_count = 0
         for path in pending:
             if self._stop_requested:
                 state.status = "stopped"
@@ -2629,6 +2707,10 @@ class MaintenanceDaemon:
             if self._try_fast_track_cycle_file(path, state):
                 self._save_cycle_checkpoint(state, path=path)
                 cycle_budget -= 1
+                fast_track_count += 1
+                if link_verify_enabled():
+                    with contextlib.suppress(OSError):
+                        register_page_links_from_path(self.graph_root, path)
 
         if self._stop_requested:
             self._prune_stale_catalog_entries()
@@ -2708,6 +2790,10 @@ class MaintenanceDaemon:
         maybe_release_after_cycle(
             llm_turns=llm_turns_this_cycle,
             graph_root=self.graph_root,
+        )
+        self._finalize_link_and_journey_pass(
+            llm_files_processed=llm_turns_this_cycle,
+            fast_track_files=fast_track_count,
         )
         return state
 

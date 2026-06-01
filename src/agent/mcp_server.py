@@ -85,6 +85,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         **``target_type=block_ast``** — ``query`` = ``Page Title|block-uuid`` (pipe-separated).
         Raw on-disk bullet subtree for that ``id::`` block (headless; no Logseq HTTP API).
 
+        **``target_type=subtree``** — ``query`` = ``Page Title|block-uuid`` or JSON with
+        ``page``, ``block_uuid``, optional ``heading`` to narrow nested bullets
+        (token-saving reads).
+
         **``target_type=structural_hops``** — ``query`` = comma-separated seed page titles,
         or JSON ``{"seeds":"A, B", "max_depth": 3, "max_per_level": 40}``. BFS over wikilinks,
         shared tags, and light ``type::`` / ``domain::`` rings (no vectors).
@@ -121,6 +125,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         **``method=bm25``** — ``query`` = natural-language keywords (e.g. ``redis cache``), or JSON
         ``{"keyword":"...", "limit":15}``. Ranks ``pages/**/*.md`` by Okapi BM25.
 
+        **``method=semantic``** — Hybrid search over dual block embeddings (content +
+        applicability). Requires ``MATRYCA_DUAL_EMBEDDING_ENABLED=true`` and daemon indexing.
+        ``query`` = natural language or JSON ``{"query":"...", "limit":15}``.
+
         **``method=regex``** — ``query`` = Python regex pattern (line scan in ``pages/``), or JSON
         ``{"pattern":"TODO|LATER", "limit":50}``.
 
@@ -140,9 +148,18 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 "(first run or cache miss may take a moment)…",
             )
             async with mcp_tool_session(ctx):
-                bm25_md = await dispatch_search(method, query)
+                result_md = await dispatch_search(method, query)
             await mcp_tool_info(ctx, "Local page query complete.")
-            return bm25_md
+            return result_md
+        if method == "semantic":
+            await mcp_tool_info(
+                ctx,
+                "Embedding query and scoring dual block vectors (content + applicability)…",
+            )
+            async with mcp_tool_session(ctx):
+                result_md = await dispatch_search(method, query)
+            await mcp_tool_info(ctx, "Semantic block search complete.")
+            return result_md
         return await dispatch_search(method, query)
 
     @safe_tool()

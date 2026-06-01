@@ -11,6 +11,7 @@ import json
 import sys
 from typing import Any
 
+from ..agent.context_load import load_agent_context
 from ..agent.graph_dispatch import (
     dispatch_lint,
     dispatch_mutate,
@@ -43,12 +44,14 @@ READ_TARGETS: tuple[ReadGraphTarget, ...] = (
     "page",
     "memory",
     "block_ast",
+    "subtree",
     "structural_hops",
     "dashboard",
     "xray_page",
 )
 SEARCH_METHODS: tuple[SearchGraphMethod, ...] = (
     "bm25",
+    "semantic",
     "regex",
     "unlinked_mentions",
     "journal_tasks",
@@ -75,6 +78,11 @@ LINTER_NAMES: tuple[RunLinterName, ...] = (
 def build_parser() -> argparse.ArgumentParser:
     """Construct the top-level CLI parser and domain subcommands."""
     parser = argparse.ArgumentParser(prog="matryca", description="Agent-native Logseq graph CLI")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit structured JSON on stdout (machine-readable for agents)",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     read_p = sub.add_parser(
@@ -146,6 +154,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Linter to run",
     )
 
+    context_p = sub.add_parser(
+        "context",
+        help="Semantic macro: load page or block subtree context for agents",
+    )
+    context_sub = context_p.add_subparsers(dest="context_action", required=True)
+    context_load = context_sub.add_parser(
+        "load",
+        help="Bundle spatial page context or a focused block subtree",
+    )
+    context_load.add_argument(
+        "query",
+        help="Page title or `Page Title|block-uuid` for subtree focus",
+    )
+
     service_p = sub.add_parser(
         "service",
         help="Manage background system daemon integration",
@@ -196,7 +218,25 @@ def _sanitize_for_output(value: Any) -> Any:
     return value
 
 
-def _emit_result(result: str | dict[str, Any]) -> None:
+def _wrap_cli_json(command: str, result: str | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result, dict):
+        payload: dict[str, Any] = {"ok": result.get("ok", True), "command": command, **result}
+    else:
+        payload = {"ok": True, "command": command, "text": result}
+    sanitized = _sanitize_for_output(payload)
+    if not isinstance(sanitized, dict):
+        return {"ok": True, "command": command, "text": str(sanitized)}
+    return sanitized
+
+
+def _emit_result(result: str | dict[str, Any], *, as_json: bool = False, command: str = "") -> None:
+    if as_json:
+        safe_result = _wrap_cli_json(command, result)
+        # codeql[py/clear-text-logging-sensitive-data] - False positive:
+        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
+        sys.stdout.write(json.dumps(safe_result, ensure_ascii=False, indent=2))
+        sys.stdout.write("\n")
+        return
     if isinstance(result, dict):
         safe_result = _sanitize_for_output(result)
         # codeql[py/clear-text-logging-sensitive-data] - False positive:
@@ -221,6 +261,7 @@ async def run_cli(args: argparse.Namespace) -> int:
     """Dispatch parsed CLI arguments to graph handlers."""
     wiki_config = load_matryca_wiki_config()
     command = args.command
+    as_json = bool(getattr(args, "json", False))
 
     if command == "read":
         read_out = await dispatch_read(
@@ -228,12 +269,19 @@ async def run_cli(args: argparse.Namespace) -> int:
             args.target_type,
             args.query,
         )
-        _emit_result(read_out)
+        if as_json:
+            _emit_result(
+                {"target_type": args.target_type, "query": args.query, "content": read_out},
+                as_json=True,
+                command=command,
+            )
+        else:
+            _emit_result(read_out)
         return 0
 
     if command == "search":
         search_out: str | dict[str, Any] = await dispatch_search(args.method, args.query)
-        _emit_result(search_out)
+        _emit_result(search_out, as_json=as_json, command=command)
         return 0
 
     if command == "mutate":
@@ -242,7 +290,7 @@ async def run_cli(args: argparse.Namespace) -> int:
             args.target,
             args.payload,
         )
-        _emit_result(mutate_out)
+        _emit_result(mutate_out, as_json=as_json, command=command)
         if mutate_out.get("ok") is False:
             return 1
         return 0
@@ -253,19 +301,36 @@ async def run_cli(args: argparse.Namespace) -> int:
             args.target_uuid,
             args.payload,
         )
-        _emit_result(refactor_out)
+        _emit_result(refactor_out, as_json=as_json, command=command)
         if refactor_out.get("ok") is False:
             return 1
         return 0
 
     if command == "lint":
         lint_out: str | dict[str, Any] = await dispatch_lint(wiki_config, args.linter_name)
-        _emit_result(lint_out)
+        if as_json and isinstance(lint_out, str):
+            _emit_result(
+                {"linter_name": args.linter_name, "report_markdown": lint_out},
+                as_json=True,
+                command=command,
+            )
+        else:
+            _emit_result(lint_out, as_json=as_json, command=command)
         return 0
+
+    if command == "context":
+        if args.context_action == "load":
+            context_out = await load_agent_context(args.query)
+            _emit_result(context_out, as_json=as_json, command="context load")
+            if context_out.get("ok") is False:
+                return 1
+            return 0
+        _emit_error(f"unknown context action: {args.context_action}")
+        return 2
 
     if command == "service":
         service_out: dict[str, Any] = manage_matryca_service(args.action)
-        _emit_result(service_out)
+        _emit_result(service_out, as_json=as_json, command=command)
         if service_out.get("ok") is False:
             return 1
         return 0
@@ -278,19 +343,19 @@ async def run_cli(args: argparse.Namespace) -> int:
                 start_daemon_foreground(graph_root)
                 return 0
             start_out = start_daemon_detached(graph_root)
-            _emit_result(start_out)
+            _emit_result(start_out, as_json=as_json, command=command)
             return 0 if start_out.get("ok") is not False else 1
         if plumber_action == "stop":
             stop_out = stop_daemon(graph_root)
-            _emit_result(stop_out)
+            _emit_result(stop_out, as_json=as_json, command=command)
             return 0
         if plumber_action == "audit":
             audit_out = run_plumber_audit(graph_root)
-            _emit_result(audit_out)
+            _emit_result(audit_out, as_json=as_json, command=command)
             return 0 if audit_out.get("ok") is not False else 1
         if plumber_action == "cluster":
             cluster_out = run_plumber_cluster(graph_root)
-            _emit_result(cluster_out)
+            _emit_result(cluster_out, as_json=as_json, command=command)
             return 0 if cluster_out.get("ok") is not False else 1
         _emit_error(f"unknown plumber action: {plumber_action}")
         return 2

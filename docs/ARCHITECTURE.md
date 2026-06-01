@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.8.3 (Ironclad + edge-performance layer)  
+**Version:** 1.9.0 (Structural graph hygiene + agent DX)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -24,7 +24,9 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 
 **Quality bar:** **550+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
 
-**v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. No new semantic features. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
+**v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
+
+**v1.9 focus:** **Structural graph hygiene** without new LLM cognitive modules — zero-LLM link rot detection, OCC-safe `dead-link::` / `missing-asset::` flags, agent-native CLI (`--json`, `context load`, `read subtree`), and Journey Log visibility in today's journal. See [Structural link verification (v1.9)](#structural-link-verification-v19) and [Agent-centric DX (v1.9)](#agent-centric-dx-v19).
 
 ---
 
@@ -61,6 +63,37 @@ Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 | MCP surface | `src/agent/mcp_server.py` | `ingest_document(source_name, raw_text)` |
 
 Destination: daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`. Parse scratch files **must not** live under `pages/` (avoids `file_watcher` + AST churn). Spec: [`docs/openspec/ingest.md`](openspec/ingest.md).
+
+#### Dual embedding (optional MCP semantic search)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| Block vectors | `src/semantic/store.py` | `block_vectors.json` — `vec_content` + `vec_applicability` per UUID |
+| Indexer | `src/semantic/indexer.py` | Daemon sidecar after semantic writes when `MATRYCA_DUAL_EMBEDDING_ENABLED` |
+| Retrieval | `src/semantic/search.py` | `search_graph` / `method=semantic` hybrid cosine |
+
+Does not replace BM25 or TF-IDF page clustering. Spec: [`docs/openspec/dual-embedding.md`](openspec/dual-embedding.md).
+
+#### Structural link verification (v1.9)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| Extract + registry | `src/graph/link_verification.py` | Passive URL/asset harvest → `.matryca_link_registry.json` |
+| Verify + flag | same | Async `httpx` HEAD + filesystem checks; OCC property stamps |
+| Cycle hook | `MaintenanceDaemon._finalize_link_and_journey_pass` | End-of-cycle batch + Journey Log stats |
+
+Spec: [`docs/openspec/link-verification.md`](openspec/link-verification.md).
+
+#### Agent-centric DX (v1.9)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| JSON CLI | `src/cli/__init__.py` | Global `--json` stdout envelope |
+| Context macro | `src/agent/context_load.py` | `matryca context load` |
+| Subtree reads | `src/agent/graph_tool_helpers.py` | `read_subtree_markdown` + MCP `target_type=subtree` |
+| Journey Log | `src/agent/journey_log.py` | Append `## 🤖 Matryca Activity` to today's journal |
+
+Spec: [`docs/openspec/agent-dx.md`](openspec/agent-dx.md).
 
 ### 2. Sovereign UI (React + FastAPI control room)
 
@@ -421,6 +454,67 @@ Full operator and env reference: [`openspec/llm-performance.md`](openspec/llm-pe
 
 ---
 
+## Structural link verification (v1.9)
+
+**Goal:** Surface **knowledge rot** (dead URLs, missing assets) without LLM cost or blocking the duty-cycle event loop.
+
+```mermaid
+sequenceDiagram
+  participant D as MaintenanceDaemon
+  participant P as pages/*.md
+  participant R as .matryca_link_registry.json
+  participant NET as httpx HEAD
+  participant J as journals/today.md
+
+  Note over D,P: During run_cycle — passive extract
+  D->>P: read page (fast-track or LLM path)
+  D->>R: merge URL/asset entries keyed by block UUID
+
+  Note over D,NET: End of cycle — verify batch
+  D->>R: load pending entries
+  D->>NET: HEAD URLs (timeout MATRYCA_LINK_VERIFY_TIMEOUT)
+  D->>P: os.path.exists for assets
+  alt strikes >= threshold
+    D->>P: OCC write dead-link:: / missing-asset::
+  end
+```
+
+| Property | Meaning |
+|----------|---------|
+| `dead-link:: true` | External URL failed HEAD or returned ≥400 |
+| `missing-asset:: true` | Resolved asset path not on disk |
+
+**Not created at bootstrap:** the registry file appears on first extract. It is **not** indexed as graph content.
+
+---
+
+## Agent-centric DX (v1.9)
+
+**Goal:** Make the headless daemon and CLI **legible to external LLM hosts** while preserving the single `graph_dispatch` mutation plane.
+
+```mermaid
+flowchart TB
+  subgraph cli [matryca CLI]
+    JSON["--json envelope"]
+    CTX["context load"]
+    RST["read subtree"]
+  end
+
+  subgraph shared [Shared headless plane]
+    GD[graph_dispatch.py]
+    AST[logseq-matryca-parser + ast_cache]
+  end
+
+  JSON --> GD
+  CTX --> GD
+  RST --> GD
+  GD --> AST
+```
+
+**Journey Log** closes the operator feedback loop: after each cycle, optional append to `journals/YYYY_MM_DD.md` summarizes indexing, link checks, and flags — inspired by LogseqBrain-style journal auditing, backed by Matryca OCC.
+
+---
+
 ## Distribution and entry points
 
 ### Zero-install and global install
@@ -462,6 +556,10 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/agent/mcp_server.py` | `@mcp.tool()` handlers |
 | `src/agent/ingestion.py` | `ingest_document` / `process_ingestion` |
 | `src/agent/memory_tools.py` | `store_fact` |
+| `src/graph/link_verification.py` | Link rot registry, async verify, hygiene properties |
+| `src/agent/journey_log.py` | Duty-cycle journal summaries |
+| `src/agent/context_load.py` | `context load` semantic macro |
+| `src/semantic/` | Dual block embeddings + hybrid semantic search |
 | `src/agent/mcp_telemetry.py` | Loguru bridge, `id(ctx)` session map |
 | `src/agent/mcp_tool_guard.py` | Tool error boundary (sanitized client messages) |
 | `src/utils/llm_url_policy.py` | Shared SSRF policy for inference base URLs |
@@ -487,7 +585,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.7.x** | Zero-Touch onboarding | Sovereign UI pre-flight, decoupled UI state, lock-before-LLM |
 | **1.8** | Edge computing & performance | PagePromptSession, adaptive `llm_client`, mmap reads, CPU sandbox, backlink index, BM25 slimming, cooperative harvest, memory teardown |
 | **1.8 round 4** | Pre-release audit | Stateless graph insights, compression persist sanitize, 8k block catalog, Phase 2 lock-on-write-only, `id::` excluded from property matchers |
-| **Unreleased** | Master RFC Phases 1–2 | Telos/Constraints identity + reactive daemon stack; **`ingest_document`** atomic ingestion (`docs/openspec/identity-config.md`, `docs/openspec/ingest.md`) |
+| **1.9** | Structural graph hygiene | Link verification sidecar, Journey Log, CLI `--json`, `context load`, `read subtree` |
+| **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
 
 ---
 
@@ -500,6 +599,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/llm-performance.md`](openspec/llm-performance.md) — LLM performance engineering contract
 - [`openspec/identity-config.md`](openspec/identity-config.md) — Telos / AI Constraints and `store_fact`
 - [`openspec/ingest.md`](openspec/ingest.md) — atomic `ingest_document` pipeline
+- [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
+- [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy
 - [`../README.md`](../README.md) — operator quick start
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — `make check`, dev setup
