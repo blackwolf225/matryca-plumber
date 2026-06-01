@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Journey log pending leak** — After appending `## 🤖 Matryca Activity` to today's journal, the daemon records `journals/YYYY_MM_DD.md` in file state so `list_pending_files` does not re-queue it on the next cycle (`src/agent/maintenance_daemon.py`).
 - **Link verification hygiene** — Re-check flagged registry entries; GET fallback when HEAD is inconclusive; merge-safe registry persistence; prune removed page links; clear on-graph `dead-link::` / `missing-asset::` on recovery; journey log splits URL vs asset flag counts (`src/graph/link_verification.py`, `src/agent/maintenance_daemon.py`).
 - **Dual embedding durability** — `block_vectors.json` uses cross-process flock + atomic write, survives `clear_semantic_cache`, prunes stale block UUIDs per page, validates embedding dimensions, caps search scan via `MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES` (`src/semantic/`).
 - **`context load` subtree** — Subtree reads run in a worker thread; invalid `Page|uuid` queries return structured errors instead of raising (`src/agent/context_load.py`).

@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -45,6 +45,7 @@ from ..graph.graph_analytics import reconcile_telemetry_ledger
 from ..graph.insights_engine import (
     run_graph_insights_engine,
 )
+from ..graph.journal_task_scan import journal_file_path
 from ..graph.json_flock import cross_process_json_flock
 from ..graph.link_verification import (
     link_verify_enabled,
@@ -2625,8 +2626,22 @@ class MaintenanceDaemon:
             error=message,
         )
 
+    def _settle_journey_journal_in_state(self, state: DaemonState) -> bool:
+        """Record today's journal as settled so the next pending scan ignores daemon appends."""
+        path = journal_file_path(self.graph_root, date.today())
+        if not path.is_file():
+            return False
+        key = _daemon_file_key(self.graph_root, path)
+        state.files[key] = FileState(
+            mtime=path.stat().st_mtime,
+            processed_at=datetime.now(tz=UTC).isoformat(),
+            status="skipped",
+        )
+        return True
+
     def _finalize_link_and_journey_pass(
         self,
+        state: DaemonState,
         *,
         llm_files_processed: int,
         fast_track_files: int,
@@ -2649,9 +2664,14 @@ class MaintenanceDaemon:
                     )
             except OSError as exc:
                 logger.warning("Link verification cycle skipped: {}", exc)
+        journey_state_updated = False
         if journey_log_enabled():
             with contextlib.suppress(OSError):
-                append_journey_log(str(self.graph_root), stats)
+                result = append_journey_log(str(self.graph_root), stats)
+                if result.get("ok") and result.get("code") == "applied":
+                    journey_state_updated = self._settle_journey_journal_in_state(state)
+        if journey_state_updated:
+            save_daemon_state(self.graph_root, state)
 
     def run_cycle(self, state: DaemonState | None = None) -> DaemonState:
         """Drain fast-skippable pending files, then up to ``max_files_per_cycle`` LLM turns."""
@@ -2700,7 +2720,11 @@ class MaintenanceDaemon:
             heal_daemon_state_ledger(self.graph_root, state)
             state.status = "idle"
             save_daemon_state(self.graph_root, state)
-            self._finalize_link_and_journey_pass(llm_files_processed=0, fast_track_files=0)
+            self._finalize_link_and_journey_pass(
+                state,
+                llm_files_processed=0,
+                fast_track_files=0,
+            )
             return state
 
         cycle_budget = max(1, self.max_files_per_cycle)
@@ -2799,6 +2823,7 @@ class MaintenanceDaemon:
             graph_root=self.graph_root,
         )
         self._finalize_link_and_journey_pass(
+            state,
             llm_files_processed=llm_turns_this_cycle,
             fast_track_files=fast_track_count,
         )
