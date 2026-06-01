@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-01
+
 ### Added
 
+- **Structural link verification (#15)** — Passive extract of `http(s)://` URLs and local `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks on the daemon duty cycle; OCC-safe `dead-link::` / `missing-asset::` block properties after repeated failures (`src/graph/link_verification.py`).
+- **Agent-centric DX (#16)** — Global CLI `--json` for machine-readable stdout; `matryca context load` semantic macro; `read subtree` for focused block/header extracts; Journey Log appends `## 🤖 Matryca Activity` to today's journal after each duty cycle (`src/cli/__init__.py`, `src/agent/journey_log.py`, `src/agent/context_load.py`).
 - **Documentation (v1.9)** — OpenSpec [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) and [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md); ARCHITECTURE/README/SYSTEM_PROMPT/PROJECT_DIARY aligned with mermaid diagrams for link hygiene and agent DX.
 - **Dual embedding strategy (Phase 3)** — Applicability synthesis + dual vectors per block (`vec_content`, `vec_applicability`) in `.matryca_semantic_cache/block_vectors.json`; hybrid cosine retrieval via `search_graph` / `method=semantic`; daemon indexing gated by `MATRYCA_DUAL_EMBEDDING_ENABLED` (`src/semantic/`, `docs/openspec/dual-embedding.md`).
 - **Atomic document ingestion (Phase 2)** — **`ingest_document`** MCP tool parses external markdown via OS temp files (never under `pages/`), stamps fresh block UUIDs, appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, and updates `LOG` / `GLOSSARY` ledgers with OCC-safe writes (`src/agent/ingestion.py`, `docs/openspec/ingest.md`).
@@ -39,13 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **CLI stdout sanitization** — Machine output masks OpenAI (`sk-`), Anthropic (`sk-ant-`), Bearer, and Logseq credential properties in-place via `redact_secrets_in_text` instead of replacing entire payloads; CodeQL `py/clear-text-logging-sensitive-data` suppressions document stdout as the intentional CLI channel (`src/cli/__init__.py`).
-
-## [1.9.0] - 2026-06-01
-
-### Added
-
-- **Structural link verification (#15)** — Passive extract of `http(s)://` URLs and local `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks on the daemon duty cycle; OCC-safe `dead-link::` / `missing-asset::` block properties after repeated failures (`src/graph/link_verification.py`).
-- **Agent-centric DX (#16)** — Global CLI `--json` for machine-readable stdout; `matryca context load` semantic macro; `read subtree` for focused block/header extracts; Journey Log appends `## 🤖 Matryca Activity` to today's journal after each duty cycle (`src/cli/__init__.py`, `src/agent/journey_log.py`, `src/agent/context_load.py`).
 
 ## [1.8.5] - 2026-05-29
 
