@@ -138,3 +138,8 @@ addopts = "--cov=src --cov-report=term-missing:skip-covered --cov-fail-under=70"
 markers = [
     "slow: performance or memory soak tests (excluded from default CI)",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
+]
