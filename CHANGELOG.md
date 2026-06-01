@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-06-01
+
+### Changed
+
+- **Link verification** — Ruff formatting and minor readability in `src/graph/link_verification.py` and `src/semantic/store.py`; registry batch tests use consolidated mock patches (`tests/test_link_verification.py`).
+
 ## [1.9.0] - 2026-06-01
 
 ### Added
