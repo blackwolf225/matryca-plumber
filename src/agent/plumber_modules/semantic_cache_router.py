@@ -26,6 +26,7 @@ _RESERVED_CACHE_JSON = frozenset(
         "master_catalog.json",
         "backlink_counts.json",
         "semantic_clusters.json",
+        "block_vectors.json",
     },
 )
 _DEFAULT_MEMORY_ENTRIES = 512

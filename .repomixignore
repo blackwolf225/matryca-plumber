@@ -78,3 +78,43 @@ ROADMAP_LOGSEQ_SUPERPOWERS.md
 ROADMAP_PHASE_5_6.md
 ROADMAP_MLDOC_COMPLIANCE.md
 ROADMAP_IRONCLAD_SHIELD.md
+
+# Cache e VAs (Inutili per l'LLM)
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Build e Distribuzione
+dist/
+build/
+*.egg-info/
+*.spec
+
+# File di Lock (Troppo lunghi e illeggibili, a meno di non dover debuggare un pacchetto)
+uv.lock
+poetry.lock
+package-lock.json
+
+# Media e Assets visivi (L'LLM non può "leggere" le immagini nei file di testo)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+assets/images/
+
+# Fixture di test massicce (Toglile solo se hai dump enormi di logseq graph nei test)
+# tests/fixtures/**/*.json 
+# tests/fixtures/**/*.md
+
+# Log generati dal sistema
+*.log
+.DS_Store

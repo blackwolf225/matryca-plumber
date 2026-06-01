@@ -15,7 +15,7 @@ interface FieldSpec {
   key: keyof PlumberConfig
   label: string
   description: string
-  type: 'text' | 'number' | 'boolean' | 'lm-model'
+  type: 'text' | 'password' | 'number' | 'boolean' | 'lm-model'
   step?: string
   badge?: string
   badgeClass?: string
@@ -43,7 +43,8 @@ const INFRA_FIELDS: FieldSpec[] = [
   {
     key: 'lm_studio_url',
     label: 'LLM Base URL',
-    description: 'OpenAI-compatible endpoint (LM Studio: :1234/v1, Ollama: :11434/v1).',
+    description:
+      'OpenAI-compatible endpoint: LOCAL (LM Studio: :1234/v1, Ollama: :11434/v1) or CLOUD.',
     type: 'text',
   },
   {
@@ -51,6 +52,13 @@ const INFRA_FIELDS: FieldSpec[] = [
     label: 'LLM Model',
     description: 'Exact model id from your provider (Ollama requires the precise tag, e.g. llama3:8b).',
     type: 'lm-model',
+  },
+  {
+    key: 'llm_api_key',
+    label: 'API Token',
+    description:
+      'Bearer token sent as Authorization on cloud OpenAI-compatible endpoints. Required only for CLOUD; local LM Studio / Ollama may use dummy-key.',
+    type: 'password',
   },
   {
     key: 'thermal_delay_bootstrap',
@@ -431,11 +439,12 @@ function ConfigField({
         </>
       ) : (
         <input
-          type="text"
+          type={field.type === 'password' ? 'password' : 'text'}
           value={String(draft[field.key])}
           onChange={(event) =>
             onChange(field.key, event.target.value as PlumberConfig[typeof field.key])
           }
+          autoComplete={field.type === 'password' ? 'off' : undefined}
           className={INPUT_CLASS}
         />
       )}

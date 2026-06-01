@@ -231,6 +231,7 @@ def atomic_write_bytes_if_unchanged(
     graph_root: str | Path,
     baseline_mtime: float,
     validate_block_refs: bool = True,
+    robot_commit_summary: str | None = None,
 ) -> bool:
     """Commit only when ``baseline_mtime`` still matches. Returns ``True`` when written."""
     if file_mtime_drifted(file_path, baseline_mtime):
@@ -242,6 +243,7 @@ def atomic_write_bytes_if_unchanged(
             graph_root=graph_root,
             validate_block_refs=validate_block_refs,
             baseline_mtime=baseline_mtime,
+            robot_commit_summary=robot_commit_summary,
         )
     except OCCConflictError:
         return False
@@ -255,6 +257,7 @@ def atomic_write_bytes(
     graph_root: str | Path,
     validate_block_refs: bool = True,
     baseline_mtime: float | None = None,
+    robot_commit_summary: str | None = None,
 ) -> None:
     """Write ``data`` to ``file_path`` via temp file, ``fsync``, and atomic ``os.replace``.
 
@@ -311,6 +314,14 @@ def atomic_write_bytes(
                     current_mtime=read_file_mtime(file_path),
                 )
             _commit_once()
+            if is_markdown:
+                from ..daemon.post_write_hooks import emit_post_write_commit
+
+                emit_post_write_commit(
+                    graph_root=graph_root,
+                    path=path,
+                    summary=robot_commit_summary,
+                )
             return
         except OCCConflictError:
             raise

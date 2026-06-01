@@ -21,12 +21,14 @@ ReadGraphTarget = Literal[
     "page",
     "memory",
     "block_ast",
+    "subtree",
     "structural_hops",
     "dashboard",
     "xray_page",
 ]
 SearchGraphMethod = Literal[
     "bm25",
+    "semantic",
     "regex",
     "unlinked_mentions",
     "journal_tasks",
@@ -172,6 +174,78 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
     )
 
 
+def read_subtree_markdown(graph_path: str, query: str) -> str:
+    """Return Markdown for a block subtree; optional ``# Heading`` filter in JSON query."""
+    from .alias_state import resolve_pipe_target
+
+    resolved_query = resolve_pipe_target(graph_path, query)
+    opts: dict[str, Any] = {}
+    page_ref = resolved_query
+    block_uuid = ""
+    if resolved_query.strip().startswith("{"):
+        opts = parse_optional_json_query(resolved_query)
+        page_ref = str(opts.get("page", "")).strip()
+        block_uuid = str(opts.get("block_uuid", opts.get("uuid", ""))).strip()
+    else:
+        parts = [p.strip() for p in resolved_query.split("|", 1)]
+        if len(parts) == 2:
+            page_ref, block_uuid = parts[0], parts[1]
+    heading_filter = str(opts.get("heading", "")).strip() if opts else ""
+
+    if not page_ref or not block_uuid:
+        msg = (
+            "Invalid subtree query. Use `Page Title|block-uuid` or JSON "
+            '`{"page":"...","block_uuid":"...","heading":"optional"}`.'
+        )
+        raise ValueError(msg)
+
+    path = graph_safe_page_path(graph_path, page_ref)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    stripped = [ln.rstrip("\n") for ln in lines]
+    loc = locate_block_by_uuid(stripped, block_uuid)
+    if loc is None:
+        return (
+            f"Block `{block_uuid}` not found on page `{page_ref}`. "
+            "Confirm the UUID matches an `id::` line on that page."
+        )
+    b_idx, _id_idx, end = loc
+    excerpt_lines = lines[b_idx:end]
+    if heading_filter:
+        heading_needle = heading_filter.lstrip("#").strip().lower()
+        filtered: list[str] = []
+        include = False
+        bullet_match = re.compile(r"^(\s*)-\s+(.*)$")
+        root_indent: int | None = None
+        for line in excerpt_lines:
+            stripped_line = line.rstrip("\n")
+            match = bullet_match.match(stripped_line)
+            if match:
+                indent = len(match.group(1))
+                text_part = match.group(2).strip()
+                if root_indent is None:
+                    root_indent = indent
+                if text_part.lstrip("#").strip().lower() == heading_needle:
+                    include = True
+                    filtered = [line]
+                    continue
+                if include and indent > (root_indent or 0):
+                    filtered.append(line)
+                elif include and indent <= (root_indent or 0):
+                    break
+            elif include:
+                filtered.append(line)
+        excerpt_lines = filtered or excerpt_lines
+
+    excerpt = "".join(excerpt_lines)
+    return (
+        f"# Subtree excerpt\n\n"
+        f"- **Page:** [[{page_ref}]]\n"
+        f"- **Block UUID:** `{block_uuid}`\n\n"
+        f"```markdown\n{excerpt.rstrip()}\n```\n"
+    )
+
+
 def read_block_ast_markdown(graph_path: str, query: str) -> str:
     """Return the on-disk Markdown subtree for one block (page title + ``id::`` UUID)."""
     from .alias_state import resolve_pipe_target
@@ -291,5 +365,6 @@ __all__ = [
     "parse_json_object",
     "parse_optional_json_query",
     "read_block_ast_markdown",
+    "read_subtree_markdown",
     "read_xray_page_markdown",
 ]

@@ -21,7 +21,7 @@
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **v1.8 — Edge performance on Ironclad.** Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.8** adds no new semantic features — only **Zero-Prefill** prompts (`PagePromptSession`), **adaptive structured output**, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops** and vaults up to **~10,000** pages. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **v1.9 — Structural graph hygiene + agent DX.** Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -92,6 +92,21 @@ Install it as a LaunchAgent/systemd service so it wakes up with your OS:
 matryca service install
 ```
 
+### 5. Agent-native CLI (v1.9 — optional, no MCP required)
+
+Same headless contract as MCP tools; add **`--json`** for structured stdout:
+
+```bash
+export LOGSEQ_GRAPH_PATH=/path/to/your/graph
+
+matryca --json read page "My Project"
+matryca context load "My Project"
+matryca context load "My Project|aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+matryca --json read subtree '{"page":"My Project","block_uuid":"…","heading":"Implementation"}'
+```
+
+Full spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Background link checks: [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md).
+
 ---
 
 ## 🧠 What does it actually do?
@@ -102,7 +117,11 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Use Claude to query and mutate your Logseq graph natively. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Claude Desktop Integration (FastMCP)**: Seven MCP tools (five mega-tools + **`store_fact`** + **`ingest_document`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Telos & Identity (in-graph persona)**: Optional `pages/matryca___config.md` or `pages/matryca-config.md` with `- # Telos` and `- # AI Constraints` headings — injected into daemon LLM prompts and MCP output; **`store_fact`** appends durable preferences under Constraints ([`docs/openspec/identity-config.md`](docs/openspec/identity-config.md)).
+- **Atomic document ingestion**: **`ingest_document`** parses external Markdown via an OS temp file (never under `pages/`), stamps fresh `id::` UUIDs, and appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, with optional `LOG` / `GLOSSARY` ledgers ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
+- **Structural link verification (v1.9)**: Passive harvest of URLs and `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks; OCC-safe **`dead-link::`** / **`missing-asset::`** block properties ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)).
+- **Agent-centric DX (v1.9)**: Global CLI **`--json`**, **`matryca context load`**, **`read subtree`**, and **Journey Log** (`## 🤖 Matryca Activity` on today's journal) ([`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md)).
 
 ---
 
@@ -156,6 +175,8 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * ⚡ **Context Acceleration Shield:** Shrinks megabyte-class pages to Phase 1 summaries or semantic skeletons before they reach the local LLM — essential on CPU-only hardware.
 * 🛡️ **TRIZ-governed LLM resilience:** Caps completion tokens, balanced-brace JSON extraction, prose sanitization on compression/history paths, stateless ontology reports, and an 8k block-catalog cap on semantic index prompts — see [`docs/resilience-llm-json-triz.md`](docs/resilience-llm-json-triz.md).
 * 🖥️ **Edge computing profile (v1.8):** KV-cache-aligned prompts (`PagePromptSession`), bounded RAM (BM25 postings-lite, semantic cache LRU, post-bootstrap teardown), and cooperative bootstrap I/O — tuned for **16 GB laptops** and vaults up to **~10,000** pages. See [docs/v1.8-OPTIMIZATION-PLAN.md](docs/v1.8-OPTIMIZATION-PLAN.md).
+* 🔗 **Structural hygiene (v1.9):** Background link rot and missing-asset detection without LLM tokens; visible duty-cycle summaries in your daily journal.
+* 🤖 **Agent-native CLI (v1.9):** `matryca --json …` for machine-readable stdout; `matryca context load` and `read subtree` to shrink context windows.
 
 ---
 
@@ -189,6 +210,9 @@ On first start (daemon, CLI, MCP, or UI), Matryca Plumber **automatically create
 - **`logs/`** (or paths from `MATRYCA_PLUMBER_LOG_PATH` / `MATRYCA_LOGURU_LOG_PATH`)
 - **`<parent-of-your-vault>/matryca-l1/`** — session rules beside the vault (not inside `pages/`); optional override via `MATRYCA_L1_PATH`
 - **`<vault>/.matryca_semantic_cache/`**, **`templates/`**, and **`matryca-wiki.yml`** (from `matryca-wiki.example.yml` when absent)
+- **In-memory graph index** at startup (AST cache); **identity** loaded when a Telos/Constraints config page exists
+
+The **identity config page** is not auto-created (use Logseq or `store_fact`). **Ingest / LOG / GLOSSARY** pages are created on first `ingest_document` call. Optional `MATRYCA_INGEST_PAGE` pins a fixed inbox (e.g. `AI_Inbox`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) and [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
 
 See [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) for rationale (L1 vs L2, idempotency, and what is intentionally *not* auto-created).
 
@@ -241,13 +265,18 @@ make perf
 | Document | Description |
 |----------|-------------|
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, `made-by::` authorship, OCC rules. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.8 edge performance. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
+| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX). |
 | [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) | LLM prompt layout, memory, and I/O contracts. |
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
 | [`docs/openspec/l1-l2-routing.md`](docs/openspec/l1-l2-routing.md) | L1 memory vs L2 graph routing for agents. |
+| [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) | Telos / AI Constraints and `store_fact`. |
+| [`docs/openspec/ingest.md`](docs/openspec/ingest.md) | `ingest_document` atomic ingestion pipeline. |
+| [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) | v1.9 URL/asset hygiene and sidecar registry. |
+| [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) | v1.9 CLI JSON, context macro, Journey Log. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |

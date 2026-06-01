@@ -351,6 +351,7 @@ def edit_block_property_lines(
             new_bytes,
             graph_root=root,
             baseline_mtime=write_mtime,
+            robot_commit_summary="edited block properties",
         ):
             return PropertyLineEditOutcome(
                 ok=False,

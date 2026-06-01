@@ -123,6 +123,13 @@ def prepare_matryca_runtime(
     )
     ensure_graph_runtime_directories(graph_root, templates_subdir=cfg.templates_subdir)
     ensure_matryca_wiki_config_file(graph_root, l1_dir=l1_dir)
+    from ..daemon import register_daemon_post_write_hooks
+    from ..daemon.ast_cache import get_graph_ast_cache
+    from ..daemon.config_layer import get_identity_store
+
+    get_graph_ast_cache(graph_root).bootstrap()
+    get_identity_store(graph_root).reload_if_stale(force=True)
+    register_daemon_post_write_hooks(graph_root)
 
 
 def try_prepare_matryca_runtime_from_env() -> None:

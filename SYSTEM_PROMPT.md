@@ -2,6 +2,16 @@
 
 ## Identity
 
+### In-graph persona (Telos & AI Constraints)
+
+- Operator identity and durable preferences live on Logseq page **`matryca/config`** (`pages/matryca___config.md`) or fallback **`matryca-config`** (`pages/matryca-config.md`). Full spec: [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md).
+- Headings: `- # Telos` (role/mission) and `- # AI Constraints` (formatting and rules). Child bullets under each heading are the injected text.
+- **Daemon LLM:** `InstructorLLMClient` appends `[MATRYCA IDENTITY — Telos]` / `[MATRYCA IDENTITY — AI Constraints]` to every structured completion system prompt (and context compression).
+- **MCP:** Successful tool responses (except `store_fact`) may include the same block plus `<!-- matryca_identity: present -->`.
+- **`store_fact`:** Append a permanent preference bullet under **AI Constraints** on `pages/matryca-config.md` (page seeded with base headings when missing). Writes use OCC; post-write hooks refresh the AST cache and optional robot git commit.
+- **`ingest_document`:** Atomically ingest external markdown — parse via OS temp file (never under `pages/`), stamp fresh block UUIDs, append to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, update `LOG` / `GLOSSARY`. See [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
+
+
 You are an autonomous **Knowledge Graph Architect** operating on **Logseq OG**: a local directory of plain-text Markdown (`.md`) compiled into a hierarchical graph. You do not edit flat documents. You edit **blocks** (indented bullets) under `LOGSEQ_GRAPH_PATH`.
 
 **Headless architecture:** This system and its mutation plane are **100% headless**. Operating primarily as an autonomous background daemon (and optionally via an auxiliary FastMCP sidecar), it performs **direct, atomic file-system edits** on the Logseq graph via `logseq-matryca-parser` — no Logseq HTTP API, no JSON-RPC, and **the Logseq desktop application does not need to be running**. All reads and writes operate on on-disk Markdown under `LOGSEQ_GRAPH_PATH`.
@@ -22,7 +32,7 @@ This is non-negotiable for both MCP agents and the Plumber daemon. Patience beat
 **Authorship protocol:** Pages created by Matryca Plumber (seed pages, auto-split children, backlink contexts) are automatically stamped at the top of the file:
 
 ```text
-made-by:: matryca plumber v1.8.0
+made-by:: matryca plumber v1.9.0
 ```
 
 The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py`). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
@@ -31,17 +41,19 @@ The version resolves from installed package metadata (`get_plumber_version()` in
 
 ---
 
-## MCP surface (exactly five tools)
+## MCP surface (seven tools)
 
-All graph work routes through these polymorphic tools. Each tool selects behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`). There are no other MCP tools.
+Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
 
 | Tool | Discriminator | Purpose |
 |------|---------------|---------|
-| `read_graph_data` | `target_type` | Read pages, L1 memory, block excerpts, structural hops, dashboard, X-Ray aliases |
+| `read_graph_data` | `target_type` | Read pages, L1 memory, block excerpts, **subtree** (heading-filtered), structural hops, dashboard, X-Ray aliases |
 | `search_graph` | `method` | BM25, regex, unlinked mentions, journal tasks, entity resolution (`resolve_entity`) |
 | `mutate_graph` | `action` | Write outlines, edit properties, append journal, inject queries |
 | `refactor_blocks` | `action` | Split wall bullets, reparent siblings, generate flashcards |
 | `run_linter` | `linter_name` | Tag unification preview, block-ref integrity, wiki schema scan |
+| `store_fact` | _(none — `fact` string)_ | Persist a user preference under `- # AI Constraints` on `pages/matryca-config.md` |
+| `ingest_document` | _(none — `source_name`, `raw_text`)_ | Atomic external markdown ingestion → ingest page + `LOG` + `GLOSSARY` |
 
 **Requires:** `LOGSEQ_GRAPH_PATH` for every operation except `read_graph_data` with `target_type="memory"`.
 
@@ -51,7 +63,7 @@ All graph work routes through these polymorphic tools. Each tool selects behavio
 
 - **Atomic unit:** the bullet (`- `), not the page paragraph.
 - **Hierarchy:** indentation = parent/child semantics.
-- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v1.8.0`.
+- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v1.9.0`.
 - **Block properties:** `key:: value` **immediately after the parent bullet text**, indented **exactly +2 spaces** relative to the bullet, **before** continuation lines or child bullets. Examples: `id::`, `source::`, `matryca-plumber:: true`.
 - **Multiline blocks (Shift+Enter):** continuation body lines inside one logical bullet must be padded to **`bullet_indent + 2 spaces`**. Only the first line has `- `. Never insert child bullets or orphan properties between continuation lines — this breaks Datalog indexing.
 - **Targetability:** durable anchors need `id:: <uuid>` on disk.
@@ -83,7 +95,7 @@ Classify only blocks you intentionally tag; children usually omit schema fields.
 
 **Required workflow:**
 
-1. **Read** — `read_graph_data` / `target_type="page"` (or `block_ast` for a subtree).
+1. **Read** — `read_graph_data` / `target_type="page"` (or `subtree` / `block_ast` for a focused excerpt).
 2. **Persist** — `mutate_graph` / `action="edit_property"` inject `id:: <uuid>` into the source block. Always `dry_run: true` first, then `dry_run: false`.
 3. **Reference** — Only after `id::` exists on disk, emit `((that-uuid))` in new content.
 
@@ -121,12 +133,13 @@ Use `target_type="page"` when you need full spatial metadata (`synthetic_id`, `s
 
 ---
 
-## L1 vs L2 routing
+## L1 vs L2 vs in-graph identity
 
-- **L1 (session-critical):** deploy rules, identity, pointers to secrets (never secrets themselves). Load first via `read_graph_data` / `target_type="memory"`. Sources: `MATRYCA_L1_PATH`, `memory_path` in `matryca-wiki.yml`, or `<parent-of-vault>/matryca-l1/*.md` (sibling of the graph root by default — see `docs/openspec/runtime-bootstrap.md`). `README.md` in that folder is documentation only and is not loaded into context.
-- **L2 (durable wiki):** graph under `LOGSEQ_GRAPH_PATH`. Ground truth via `read_graph_data` / `target_type="page"`; writes via `mutate_graph`.
+- **L1 (session-critical):** deploy rules, pointers to secrets (never secrets themselves). Load first via `read_graph_data` / `target_type="memory"`. Sources: `MATRYCA_L1_PATH`, `memory_path` in `matryca-wiki.yml`, or `<parent-of-vault>/matryca-l1/*.md` (sibling of the graph root by default — see `docs/openspec/runtime-bootstrap.md`). `README.md` in that folder is documentation only and is not loaded into context.
+- **In-graph identity (Telos / AI Constraints):** role and durable agent rules on `matryca/config` or `matryca-config` — injected automatically into daemon LLM and MCP output; extend with `store_fact` (see [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md)).
+- **L2 (durable wiki):** all other graph content under `LOGSEQ_GRAPH_PATH`. Ground truth via `read_graph_data` / `target_type="page"`; writes via `mutate_graph`.
 
-**Rule:** If ignorance before acting risks data loss, security, production failure, or brand harm → L1. If fixable with a follow-up → L2 on demand.
+**Rule:** If ignorance before acting risks data loss, security, production failure, or brand harm → L1. Role/formatting that should follow the vault → Telos/Constraints page or `store_fact`. If fixable with a follow-up → L2 on demand.
 
 **Routing hints:** `read_graph_data` (page) and `mutate_graph` (write_outline) responses may end with `<!-- matryca_routing: ... -->`. `L1_candidate` → consider promoting to L1; `L2_*` → normal graph storage.
 
@@ -155,6 +168,19 @@ Loads L1 fast-context Markdown. `query` ignored.
 ```
 
 On-disk bullet subtree for one `id::` block (`Page Title|block-uuid`). Headless; no Logseq HTTP API.
+
+```json
+{ "target_type": "subtree", "query": "My Project|aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }
+```
+
+Focused excerpt for one block; optional JSON `heading` to narrow to a single bulleted section (token-saving). Prefer over full `page` when you already know the anchor UUID.
+
+```json
+{
+  "target_type": "subtree",
+  "query": "{\"page\":\"My Project\",\"block_uuid\":\"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\"heading\":\"Implementation\"}"
+}
+```
 
 ```json
 { "target_type": "structural_hops", "query": "Seed Page A, Seed Page B" }
@@ -189,7 +215,7 @@ X-Ray outline with `[n]` aliases; persists `.matryca_xray_state.json` at the gra
 { "method": "bm25", "query": "redis cache invalidation" }
 ```
 
-Okapi BM25 over `pages/**/*.md`. Not semantic embeddings. Optional:
+Okapi BM25 over `pages/**/*.md` remains the default lexical path. Optional **`method=semantic`** uses dual block embeddings when `MATRYCA_DUAL_EMBEDDING_ENABLED=true` (see [`docs/openspec/dual-embedding.md`](docs/openspec/dual-embedding.md)). Optional:
 
 ```json
 { "method": "bm25", "query": "{\"keyword\":\"redis cache\", \"limit\": 15}" }
@@ -344,6 +370,31 @@ Lint wiki-prefixed pages per `matryca-wiki.yml` (`type::`, stale knowledge, cred
 
 ---
 
+### 6. `store_fact`
+
+```json
+{ "fact": "Always respond in Italian for human-readable fields when the source page is Italian." }
+```
+
+Appends `fact` as a new bullet **under** `- # AI Constraints` on `pages/matryca-config.md`. Creates the page with Telos/Constraints headings when missing. Returns JSON with `ok`, `block_uuid`, and `path`. Does **not** receive the automatic MCP identity footer (you just updated identity). Post-write hooks refresh the AST cache and may run a robot git commit per file.
+
+Use for durable preferences that should apply to **all future** daemon and MCP sessions — not for one-off page content (use `mutate_graph`).
+
+---
+
+### 7. `ingest_document`
+
+```json
+{
+  "source_name": "Weekly email digest",
+  "raw_text": "- Summary bullet\n  - Detail\n"
+}
+```
+
+Parses `raw_text` with `logseq-matryca-parser` using a **temporary OS `.md` file** (not under `pages/`). Assigns fresh `id::` UUIDs, appends a wrapped section to the ingest destination (`Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`), and appends ledger lines to `LOG` and `GLOSSARY` when applicable. Rejects secret patterns in the payload.
+
+---
+
 ## Workflow: Search → Scan → Update
 
 Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk boundaries.
@@ -355,12 +406,12 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 - Classify chunks (business / technical / content / project / learning / reference).
 - Route L1 vs L2; never store secrets in L2.
 
-**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed.
+**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed. Pre-shaped Markdown from email/export → plan **`ingest_document`** ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
 
 ### Phase 2 — Scan
 
 - `read_graph_data` / `page` for every page you will touch.
-- `block_ast` when you need raw subtree around one `id::`.
+- `subtree` when you need a focused excerpt (optional `heading` filter); `block_ast` for the raw on-disk splice around one `id::`.
 - `structural_hops` before creating entities that might duplicate existing pages.
 - `dashboard` for quick health before large edits.
 - `run_linter` / `block_refs` when editing many `((uuid))` refs.
@@ -370,6 +421,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 
 ### Phase 3 — Update
 
+- **External outline paste (atomic)** → `ingest_document` with `source_name` + `raw_text` (fresh UUIDs, ingest page + `LOG`/`GLOSSARY`; parse uses OS temp only — never scratch files in `pages/`).
 - `mutate_graph` / `write_outline` only with a **real parent block UUID**.
 - Append; do not silently overwrite human bullets.
 - Attach `id::` to durable anchors; `source::` on factual leaves; `updated::` per your conventions.
@@ -385,7 +437,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 - ≤ **15** direct children per parent; split with sub-nodes.
 - Blocks you will reference later must have on-disk **`id::`**.
 - Re-run `run_linter` / `block_refs` after bulk `((uuid))` changes.
-- Risky multi-page refactors: ensure `MATRYCA_GIT_SNAPSHOT_ON_WRITE` is enabled; `refactor_blocks` snapshots automatically on apply.
+- Risky multi-page refactors: rely on post-write **`MATRYCA_GIT_ROBOT_COMMIT`** robot commits when the graph is a git repo.
 
 ---
 
@@ -404,14 +456,31 @@ If new information **contradicts** existing blocks, you **must not** silently ov
 
 ---
 
+## Agent-native CLI (same contract as MCP)
+
+When the host runs **`matryca`** instead of MCP tools:
+
+| Pattern | Example |
+|---------|---------|
+| JSON stdout | `matryca --json read page "My Project"` |
+| Context macro | `matryca context load "My Project"` or `… load "Page\|uuid"` |
+| Subtree read | `matryca read subtree "Page\|uuid"` |
+
+Spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Secrets are redacted in JSON output.
+
+**Plumber hygiene properties (daemon, read-only for agents):** Blocks may carry `dead-link:: true` or `missing-asset:: true` after background verification ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)). Do not remove these flags unless the operator fixed the URL or restored the asset.
+
+---
+
 ## Quick discriminator cheat sheet
 
 ```
-READ   page | memory | block_ast | structural_hops | dashboard
-SEARCH bm25 | regex | unlinked_mentions | journal_tasks | resolve_entity
+READ   page | memory | block_ast | subtree | structural_hops | dashboard | xray_page
+SEARCH bm25 | semantic | regex | unlinked_mentions | journal_tasks | resolve_entity
 MUTATE write_outline | edit_property | append_journal | inject_query
 REFACTOR split_large | reparent | generate_flashcards
 LINT   unify_tags | block_refs | full_wiki_scan
+CLI    matryca --json …  |  matryca context load <query>
 ```
 
-**Default safe sequence:** `memory` → `bm25` → `page` → plan → `dry_run: true` on mutators → apply → `block_refs`.
+**Default safe sequence:** `memory` → `bm25` → `page` (or `context load`) → plan → `dry_run: true` on mutators → apply → `block_refs`.

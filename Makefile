@@ -1,4 +1,4 @@
-.PHONY: help install format lint typecheck test test-resilience check clean
+.PHONY: help install format lint typecheck test test-fast test-fast-parallel test-resilience check clean
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -18,6 +18,12 @@ typecheck: ## Run mypy for strict type checking
 
 test: ## Run the pytest suite
 	uv run pytest -q
+
+test-fast: ## Fast local/release gate: no coverage, skip security soak hang
+	uv run pytest --no-cov --ignore=tests/test_security_remediation.py -q
+
+test-fast-parallel: ## test-fast with pytest-xdist (-n auto); daemon tests may flake
+	uv run pytest -n auto --no-cov --ignore=tests/test_security_remediation.py -q
 
 test-resilience: ## LLM JSON resilience + semantic cache tests (no coverage gate)
 	uv run pytest -q tests/test_json_repair.py tests/test_llm_client_adaptive.py tests/test_semantic_cache_router.py --no-cov

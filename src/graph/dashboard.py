@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from logseq_matryca_parser.graph import LogseqGraph
-
 from ..config import MatrycaWikiConfig
 from .block_ref_lint import lint_block_refs_in_graph
 
@@ -43,12 +41,14 @@ def collect_dashboard_stats(graph_root: str | Path) -> DashboardStats:
             continue
         newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
 
-    graph = LogseqGraph.load_directory(root)
+    from ..daemon.ast_cache import get_graph_ast_cache
+
+    graph = get_graph_ast_cache(root).get_graph()
     id_tally = sum(
         1 for node in graph.query().execute() if node.source_uuid or node.properties.get("id")
     )
 
-    lint = lint_block_refs_in_graph(root)
+    lint = lint_block_refs_in_graph(root, graph=graph)
     broken = sum(1 for b in lint.broken if b.reason in {"invalid_uuid", "unresolved"})
 
     newest_iso: str | None = None

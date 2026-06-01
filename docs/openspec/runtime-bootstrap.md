@@ -17,6 +17,8 @@ Matryca Plumber provisions **directories and optional config files** before harv
 | **CLI** | `cli.main` immediately after `reload_plumber_dotenv()` |
 | **Sovereign UI** | FastAPI lifespan on server start; `POST /api/config`; `POST /api/daemon/start`; `GET /api/preflight` |
 
+When a valid graph is configured, bootstrap also **bootstraps the in-memory `LogseqGraph` cache** and loads **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)).
+
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
 
 On first startup, if repo **`.env`** is missing and **`.env.example`** exists, Matryca Plumber copies the example to `.env` (logged at INFO) before loading environment variables.
@@ -70,6 +72,7 @@ or `memory_path` in `matryca-wiki.yml`. Bootstrap will create that path and seed
 | `.matryca_semantic_cache/backlink_counts.json` | Persisted incoming wikilink counts (v1.8 — avoids full-graph rescans) |
 | `.matryca_semantic_cache/semantic_clusters.json` | Louvain neighborhoods for Phase 2 cluster cycles |
 | `.matryca_semantic_cache/*.json` (hash names) | Per-operation semantic inference cache (TTL); **not** deleted when reserved files above are present |
+| `.matryca_link_registry.json` | Ephemeral link/asset verification queue (v1.9 — not a system of record; see [`link-verification.md`](link-verification.md)) |
 | `templates/` (or `templates_subdir` from wiki YAML) | Template Markdown for `read_logseq_template` |
 
 **Rationale:** Cache and templates must exist before the first catalog save or template read; creating them at startup avoids racey `mkdir` scattered through writers.
@@ -93,6 +96,7 @@ or `memory_path` in `matryca-wiki.yml`. Bootstrap will create that path and seed
 | **`.matryca_daemon_state.json`**, **`.matryca_xray_state.json`** | Runtime ledgers — created on first checkpoint / X-Ray session |
 | **Daemon PID / lock files** | Created when the daemon process starts |
 | **`master_catalog.json` body** | Populated by bootstrap harvest, not empty placeholders |
+| **`.matryca_link_registry.json`** | Created on first link extract (v1.9); verification queue only — see [`link-verification.md`](link-verification.md) |
 
 This follows *create on first meaningful write* for stateful JSON so checkpoints stay honest.
 
@@ -101,5 +105,8 @@ This follows *create on first meaningful write* for stateful JSON so checkpoints
 ## Related specs
 
 - [`l1-l2-routing.md`](l1-l2-routing.md) — How L1 content is loaded into agent context vs L2 graph reads.
-- [`ingest.md`](ingest.md) — Search → Scan → Update after bootstrap has prepared the filesystem.
+- [`identity-config.md`](identity-config.md) — In-graph Telos / AI Constraints and `store_fact`.
+- [`ingest.md`](ingest.md) — `ingest_document` (ingest / `LOG` / `GLOSSARY` pages created on first use, not at bootstrap).
 - [`llm-performance.md`](llm-performance.md) — v1.8 KV-cache layout, memory teardown, cooperative harvest.
+- [`link-verification.md`](link-verification.md) — v1.9 link registry and hygiene properties.
+- [`agent-dx.md`](agent-dx.md) — v1.9 CLI JSON, context macro, Journey Log.

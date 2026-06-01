@@ -6,6 +6,7 @@ export function emptyPlumberConfig(): PlumberConfig {
     logseq_graph_path: '',
     lm_studio_url: 'http://localhost:1234/v1',
     lm_model: 'local-model',
+    llm_api_key: 'dummy-key',
     low_priority_mode: true,
     thermal_delay_bootstrap: 2,
     thermal_delay_cognitive: 2,

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-06-01
+
+### Added
+
+- **Structural link verification (#15)** — Passive extract of `http(s)://` URLs and local `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks on the daemon duty cycle; OCC-safe `dead-link::` / `missing-asset::` block properties after repeated failures (`src/graph/link_verification.py`).
+- **Agent-centric DX (#16)** — Global CLI `--json` for machine-readable stdout; `matryca context load` semantic macro; `read subtree` for focused block/header extracts; Journey Log appends `## 🤖 Matryca Activity` to today's journal after each duty cycle (`src/cli/__init__.py`, `src/agent/journey_log.py`, `src/agent/context_load.py`).
+- **Documentation (v1.9)** — OpenSpec [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) and [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md); ARCHITECTURE/README/SYSTEM_PROMPT/PROJECT_DIARY aligned with mermaid diagrams for link hygiene and agent DX.
+- **Dual embedding strategy (Phase 3)** — Applicability synthesis + dual vectors per block (`vec_content`, `vec_applicability`) in `.matryca_semantic_cache/block_vectors.json`; hybrid cosine retrieval via `search_graph` / `method=semantic`; daemon indexing gated by `MATRYCA_DUAL_EMBEDDING_ENABLED` (`src/semantic/`, `docs/openspec/dual-embedding.md`).
+- **Atomic document ingestion (Phase 2)** — **`ingest_document`** MCP tool parses external markdown via OS temp files (never under `pages/`), stamps fresh block UUIDs, appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, and updates `LOG` / `GLOSSARY` ledgers with OCC-safe writes (`src/agent/ingestion.py`, `docs/openspec/ingest.md`).
+- **Telos & Identity layer** — In-graph persona on `matryca/config` or `matryca-config` (`- # Telos`, `- # AI Constraints`); reactive refresh via AST cache + file watcher; LLM system-prompt injection; MCP identity footer; **`store_fact`** MCP tool appends durable preferences under AI Constraints on `pages/matryca-config.md` (`src/daemon/config_layer.py`, `src/agent/memory_tools.py`, `docs/openspec/identity-config.md`).
+- **Reactive daemon file watching** — `watchdog` observer on `pages/` and `journals/` with debounced change detection (`MATRYCA_WATCH_DEBOUNCE_MS`) wakes the maintenance duty cycle instead of waiting only on poll interval (`src/daemon/file_watcher.py`).
+- **In-memory AST cache** — `LogseqGraph` bootstrap and per-file `invalidate_and_reload_page` deltas for MCP/daemon reads (`src/daemon/ast_cache.py`).
+- **Surgical robot git commits** — Post-write GitPython commits stage only the modified `.md` file(s) with `robot(matryca): AI auto-update - …` messages; on by default when the graph root is a git repo (`MATRYCA_GIT_ROBOT_COMMIT`, `src/daemon/git_audit.py`).
+- **Sovereign UI settings** — Infrastructure drawer exposes `LLM_API_KEY` as **API Token** (password field); persisted to `.env` on save. Required only for cloud OpenAI-compatible endpoints.
+
+### Fixed
+
+- **Link verification hygiene** — Re-check flagged registry entries; GET fallback when HEAD is inconclusive; merge-safe registry persistence; prune removed page links; clear on-graph `dead-link::` / `missing-asset::` on recovery; journey log splits URL vs asset flag counts (`src/graph/link_verification.py`, `src/agent/maintenance_daemon.py`).
+- **Dual embedding durability** — `block_vectors.json` uses cross-process flock + atomic write, survives `clear_semantic_cache`, prunes stale block UUIDs per page, validates embedding dimensions, caps search scan via `MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES` (`src/semantic/`).
+- **`context load` subtree** — Subtree reads run in a worker thread; invalid `Page|uuid` queries return structured errors instead of raising (`src/agent/context_load.py`).
+- **Second-pass hygiene** — Link recovery waits for successful on-graph property clear; block-vector cache reloads when `block_vectors.json` mtime changes; indexer prunes vectors for empty/missing AST pages; metrics workflow uses strict JSON parse and timezone-aware dates (`.github/workflows/metrics-saver.yml`).
+- **Third-pass hardening** — Idempotent link flag when hygiene property already exists; bounded GET fallback (404→GET); no strike inflation on already-flagged rows; registry purge when page file deleted; AST-miss indexing skips prune; vector save under instance lock; semantic search cap prefers newest blocks (`src/graph/link_verification.py`, `src/semantic/`).
+- **Fourth-pass hardening** — Indexer keeps vectors on transient embed failures; link registry purge on watcher `deleted`; canonical AST page keys for `block_vectors.json`; lexical pre-filter before semantic search cap; bounded GET with range + explicit close; empty-page semantic apply records `skipped` (`src/semantic/`, `src/agent/maintenance_daemon.py`).
+
+### Changed
+
+- **Documentation** — OpenSpec, `SYSTEM_PROMPT.md`, `README.md`, `ARCHITECTURE.md`, `PROJECT_DIARY.md`, and roadmaps aligned for seven MCP tools (`ingest_document` + `store_fact`).
+- **Git audit trail** — Retired pre-write `MATRYCA_GIT_SNAPSHOT_ON_WRITE` / `git add -A` snapshots; robot commits run after successful atomic writes via post-write hooks.
+
+### Removed
+
+- **`src/agent/git_snapshot.py`** — Replaced by `src/daemon/git_audit.py` post-write commits.
+
+### Security
+
+- **CLI stdout sanitization** — Machine output masks OpenAI (`sk-`), Anthropic (`sk-ant-`), Bearer, and Logseq credential properties in-place via `redact_secrets_in_text` instead of replacing entire payloads; CodeQL `py/clear-text-logging-sensitive-data` suppressions document stdout as the intentional CLI channel (`src/cli/__init__.py`).
+
 ## [1.8.5] - 2026-05-29
 
 ### Changed

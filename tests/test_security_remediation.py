@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from src.agent.git_snapshot import _status_includes_sensitive_paths
 from src.cli.ui_auth import reset_ui_token_for_tests
 from src.cli.ui_server import _require_loopback_client, app
+from src.daemon.git_audit import path_is_sensitive_for_git
 from src.graph.path_sandbox import PathTraversalSecurityError, assert_path_within_graph
 from src.graph.property_line_edit import _apply_pattern
 from src.utils.config_paths import resolve_optional_path_under_allowed_roots
@@ -77,6 +77,14 @@ def test_redact_secrets_in_text_masks_common_shapes() -> None:
     assert "Bearer [REDACTED]" in redacted
 
 
+def test_redact_secrets_in_text_masks_anthropic_key() -> None:
+    key = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890"
+    redacted = redact_secrets_in_text(f"anthropic: {key}")
+    assert key not in redacted
+    assert "[REDACTED_API_KEY]" in redacted
+    assert redacted.startswith("anthropic: ")
+
+
 def test_token_logger_redacts_prompts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MATRYCA_PLUMBER_LOG_REDACT_SECRETS", "true")
     log_path = tmp_path / "ops.log"
@@ -98,9 +106,9 @@ def test_property_rules_path_must_be_under_allowed_roots() -> None:
     assert resolve_optional_path_under_allowed_roots("/etc/passwd") is None
 
 
-def test_git_status_sensitive_path_detection() -> None:
-    assert _status_includes_sensitive_paths("?? .env\n")
-    assert not _status_includes_sensitive_paths("?? pages/Note.md\n")
+def test_git_sensitive_path_detection() -> None:
+    assert path_is_sensitive_for_git(".env")
+    assert not path_is_sensitive_for_git("pages/Note.md")
 
 
 def test_graph_path_for_config_rejects_outside_allowed_roots(

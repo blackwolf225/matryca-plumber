@@ -32,6 +32,8 @@ Actionable checklist derived from [MehmetGoekce/llm-wiki](https://github.com/Meh
 
 - [x] **Openspec-style internal docs** — Add `docs/openspec/` with trimmed specs (ingest phases, lint rules, L1/L2 routing) pointing to this roadmap for traceability. **Create:** `docs/openspec/*.md` (markdown only).
 
+- [x] **Atomic external Markdown ingestion (`ingest_document`)** — Master RFC Phase 2: parser-first ingest via OS temp file (never `pages/`), fresh block UUIDs, append to `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, `LOG` / `GLOSSARY` ledgers, OCC + robot git. **Create:** `src/agent/ingestion.py`, `tests/test_atomic_ingestion.py`. **Modify:** `src/agent/mcp_server.py`, `docs/openspec/ingest.md`, `SYSTEM_PROMPT.md`, `.env.example`.
+
 - [x] **Query / RAG bridge (lightweight)** — Optional MCP tool: given a keyword, rank pages by simple token frequency or parser-backed block text scan (no SQLite; in-memory index built per call). Bridges toward llm-wiki `/wiki query` without a vector DB. **Create:** `src/rag/local_query.py`. **Modify:** `src/agent/mcp_server.py`, tests.
 
 ---

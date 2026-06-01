@@ -17,7 +17,7 @@ from src.cli import build_parser, main, run_cli
 BLOCK_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 
-def test_parser_exposes_seven_subcommands() -> None:
+def test_parser_exposes_eight_subcommands() -> None:
     parser = build_parser()
     sub_action = next(
         action
@@ -25,6 +25,7 @@ def test_parser_exposes_seven_subcommands() -> None:
         if isinstance(action, argparse._SubParsersAction)  # noqa: SLF001
     )
     assert sorted(sub_action.choices) == [
+        "context",
         "lint",
         "mutate",
         "plumber",
@@ -33,6 +34,13 @@ def test_parser_exposes_seven_subcommands() -> None:
         "search",
         "service",
     ]
+
+
+def test_parser_global_json_flag() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["--json", "read", "memory"])
+    assert args.json is True
+    assert args.command == "read"
 
 
 @pytest.mark.parametrize(

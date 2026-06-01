@@ -4,11 +4,15 @@
 
 Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com/MehmetGoekce/llm-wiki) openspec, mapped to this repository.
 
-**Canonical checklists:** [`ROADMAP_LLM_WIKI.md`](../../ROADMAP_LLM_WIKI.md), [`ROADMAP_LLM_WIKI_PHASE_3.md`](../../ROADMAP_LLM_WIKI_PHASE_3.md) in the repo root.
+**Canonical checklists:** [`roadmaps/ROADMAP_LLM_WIKI.md`](../roadmaps/ROADMAP_LLM_WIKI.md), [`roadmaps/ROADMAP_LLM_WIKI_PHASE_3.md`](../roadmaps/ROADMAP_LLM_WIKI_PHASE_3.md).
 
 | Document | Scope |
 |----------|--------|
-| [`ingest.md`](ingest.md) | Search → Scan → Update ingest phases (MCP + Logseq OG). |
+| [`link-verification.md`](link-verification.md) | v1.9 zero-LLM URL/asset hygiene, `.matryca_link_registry.json`, `dead-link::` / `missing-asset::`. |
+| [`agent-dx.md`](agent-dx.md) | v1.9 CLI `--json`, `context load`, `read subtree`, Journey Log on today's journal. |
+| [`dual-embedding.md`](dual-embedding.md) | Phase 3 dual vectors (content + applicability) and `search_graph` / `method=semantic`. |
+| [`ingest.md`](ingest.md) | **`ingest_document`** MCP tool — atomic external Markdown → ingest page + `LOG` / `GLOSSARY` (OS temp parse, OCC writes). |
+| [`identity-config.md`](identity-config.md) | In-graph **Telos** / **AI Constraints** and **`store_fact`**. |
 | [`lint.md`](lint.md) | On-disk lint: block refs + wiki convention pack. |
 | [`l1-l2-routing.md`](l1-l2-routing.md) | L1 memory vs L2 graph routing and MCP hints. |
 | [`runtime-bootstrap.md`](runtime-bootstrap.md) | Startup directory/config provisioning (logs, L1, cache, wiki YAML). |
@@ -16,4 +20,4 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 | [`../v1.8-SOFTWARE-EDGE-PLAN.md`](../v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
 | [`../v1.8-OPTIMIZATION-PLAN.md`](../v1.8-OPTIMIZATION-PLAN.md) | v1.8 operator env vars, verification matrix, load testing. |
 
-Implementation entry points: `src/main.py`, `src/utils/runtime_bootstrap.py`, `src/agent/mcp_server.py`, `src/config.py`, `src/graph/`, `src/rag/`.
+Implementation entry points: `src/main.py`, `src/utils/runtime_bootstrap.py`, `src/agent/mcp_server.py`, `src/agent/ingestion.py`, `src/config.py`, `src/graph/`, `src/rag/`.

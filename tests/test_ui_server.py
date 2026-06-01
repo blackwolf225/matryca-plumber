@@ -245,6 +245,7 @@ def test_get_config_returns_live_lint_settings(
                 f'LOGSEQ_GRAPH_PATH="{graph_root}"',
                 'LLM_BASE_URL="http://localhost:9999/v1"',
                 'LLM_MODEL_NAME="gemma-4-e4b-it"',
+                'LLM_API_KEY="sk-test-cloud-key"',
                 "MATRYCA_PLUMBER_LOW_PRIORITY_MODE=false",
                 "MATRYCA_THERMAL_DELAY_BOOTSTRAP=3.5",
                 "MATRYCA_THERMAL_DELAY_COGNITIVE=1.5",
@@ -277,6 +278,7 @@ def test_get_config_returns_live_lint_settings(
     assert payload["logseq_graph_path"] == str(graph_root)
     assert payload["lm_studio_url"] == "http://localhost:9999/v1"
     assert payload["lm_model"] == "gemma-4-e4b-it"
+    assert payload["llm_api_key"] == "sk-test-cloud-key"
     assert payload["low_priority_mode"] is False
     assert payload["thermal_delay_bootstrap"] == 3.5
     assert payload["thermal_delay_cognitive"] == 1.5
@@ -310,6 +312,7 @@ def test_post_config_updates_dotenv(
         "logseq_graph_path": str(graph),
         "lm_studio_url": "http://localhost:1234/v1",
         "lm_model": "qwen3-8b",
+        "llm_api_key": "sk-saved-from-ui",
         "low_priority_mode": True,
         "thermal_delay_bootstrap": 2.5,
         "thermal_delay_cognitive": 1.25,
@@ -345,6 +348,7 @@ def test_post_config_updates_dotenv(
     assert "MATRYCA_PLUMBER_COMPRESSION_TRIGGER_TOKENS=90000" in written
     assert "MATRYCA_PLUMBER_COMPRESSION_TARGET_TOKENS=25000" in written
     assert "LLM_MODEL_NAME=qwen3-8b" in written
+    assert "LLM_API_KEY=sk-saved-from-ui" in written
     assert "MATRYCA_LINT_BACKPROPAGATE_LINKS=true" in written
     assert "MATRYCA_LINT_DISABLE_SEMANTIC_CORRECTIONS=false" in written
     assert "MATRYCA_LINT_PROPERTY_HYGIENE=true" in written
@@ -365,6 +369,7 @@ def test_post_config_rejects_unsafe_lm_studio_url(
         "logseq_graph_path": str(graph),
         "lm_studio_url": "http://169.254.169.254/latest/meta-data/",
         "lm_model": "qwen3-8b",
+        "llm_api_key": "dummy-key",
         "low_priority_mode": True,
         "thermal_delay_bootstrap": 2.5,
         "thermal_delay_cognitive": 1.25,

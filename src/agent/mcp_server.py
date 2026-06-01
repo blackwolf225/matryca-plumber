@@ -24,8 +24,10 @@ from .graph_tool_helpers import (
     RunLinterName,
     SearchGraphMethod,
 )
+from .ingestion import dispatch_ingest_document
 from .mcp_telemetry import mcp_tool_info, mcp_tool_session
 from .mcp_tool_guard import guard_mcp_tool
+from .memory_tools import dispatch_store_fact
 from .outline_models import (
     Domain,
     EntityType,
@@ -43,11 +45,12 @@ class AppContext:
 
 
 def register_mcp_tools(mcp: FastMCP) -> None:
-    """Register five consolidated MCP mega-tools on the FastMCP application.
+    """Register consolidated MCP tools on the FastMCP application.
 
     Tools: ``read_graph_data``, ``search_graph``, ``mutate_graph``, ``refactor_blocks``,
-    ``run_linter`` — each routes by a ``typing.Literal`` discriminator to existing graph/RAG
-    helpers (see module-level docstrings on each handler).
+    ``run_linter``, ``store_fact``, ``ingest_document`` — each routes by a ``typing.Literal``
+    discriminator (where applicable) to
+    existing graph/RAG helpers (see module-level docstrings on each handler).
 
     Args:
         mcp: The application instance created in :mod:`src.main`.
@@ -81,6 +84,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
         **``target_type=block_ast``** — ``query`` = ``Page Title|block-uuid`` (pipe-separated).
         Raw on-disk bullet subtree for that ``id::`` block (headless; no Logseq HTTP API).
+
+        **``target_type=subtree``** — ``query`` = ``Page Title|block-uuid`` or JSON with
+        ``page``, ``block_uuid``, optional ``heading`` to narrow nested bullets
+        (token-saving reads).
 
         **``target_type=structural_hops``** — ``query`` = comma-separated seed page titles,
         or JSON ``{"seeds":"A, B", "max_depth": 3, "max_per_level": 40}``. BFS over wikilinks,
@@ -118,6 +125,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         **``method=bm25``** — ``query`` = natural-language keywords (e.g. ``redis cache``), or JSON
         ``{"keyword":"...", "limit":15}``. Ranks ``pages/**/*.md`` by Okapi BM25.
 
+        **``method=semantic``** — Hybrid search over dual block embeddings (content +
+        applicability). Requires ``MATRYCA_DUAL_EMBEDDING_ENABLED=true`` and daemon indexing.
+        ``query`` = natural language or JSON ``{"query":"...", "limit":15}``.
+
         **``method=regex``** — ``query`` = Python regex pattern (line scan in ``pages/``), or JSON
         ``{"pattern":"TODO|LATER", "limit":50}``.
 
@@ -137,9 +148,18 @@ def register_mcp_tools(mcp: FastMCP) -> None:
                 "(first run or cache miss may take a moment)…",
             )
             async with mcp_tool_session(ctx):
-                bm25_md = await dispatch_search(method, query)
+                result_md = await dispatch_search(method, query)
             await mcp_tool_info(ctx, "Local page query complete.")
-            return bm25_md
+            return result_md
+        if method == "semantic":
+            await mcp_tool_info(
+                ctx,
+                "Embedding query and scoring dual block vectors (content + applicability)…",
+            )
+            async with mcp_tool_session(ctx):
+                result_md = await dispatch_search(method, query)
+            await mcp_tool_info(ctx, "Semantic block search complete.")
+            return result_md
         return await dispatch_search(method, query)
 
     @safe_tool()
@@ -217,6 +237,36 @@ def register_mcp_tools(mcp: FastMCP) -> None:
             await mcp_tool_info(ctx, "Wiki lint scan complete.")
             return wiki_report
         return await dispatch_lint(wiki_config, linter_name)
+
+    @safe_tool()
+    async def store_fact(
+        ctx: Context[ServerSession, AppContext],
+        fact: str,
+    ) -> dict[str, Any]:
+        """Persist a user preference, rule, or fact across sessions.
+
+        Appends ``fact`` as a bullet under ``- # AI Constraints`` on ``pages/matryca-config.md``
+        (created with Telos/Constraints headings when missing). Use this tool to permanently
+        remember operator preferences for future MCP and daemon LLM runs.
+        """
+        _ = ctx
+        return await dispatch_store_fact(fact)
+
+    @safe_tool()
+    async def ingest_document(
+        ctx: Context[ServerSession, AppContext],
+        source_name: str,
+        raw_text: str,
+    ) -> dict[str, Any]:
+        """Atomically ingest external markdown into the Logseq graph.
+
+        Parses ``raw_text`` via a temporary OS file (never under ``pages/``), assigns fresh
+        block UUIDs, appends a section to the ingest destination page (daily ``Ingest/YYYY-MM-DD``
+        or ``MATRYCA_INGEST_PAGE``), and updates ``LOG`` / ``GLOSSARY`` ledgers with OCC-safe
+        writes and optional robot git commits.
+        """
+        _ = ctx
+        return await dispatch_ingest_document(source_name, raw_text)
 
 
 __all__ = [

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "matryca-plumber"
-version = "1.8.5"
+version = "1.9.0"
 description = "Enterprise-grade, local-first autonomous background AI daemon and headless mutation plane for Logseq OG."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,8 @@ dependencies = [
     "uvicorn>=0.32.0,<1.0.0",
     "httpx>=0.28.0,<1.0.0",
     "packaging>=24.0,<26.0",
+    "watchdog>=6.0.0",
+    "gitpython>=3.1.50",
 ]
 
 [project.urls]
@@ -43,6 +45,7 @@ dev = [
     "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=6.0.0,<7.0.0",
+    "pytest-xdist>=3.8.0,<4.0.0",
     "ruff>=0.8.0,<1.0.0",
     "mypy>=1.13.0,<2.0.0",
 ]
