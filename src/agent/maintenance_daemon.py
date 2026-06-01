@@ -1419,6 +1419,8 @@ def apply_semantic_page_result(
             prev = ""
             baseline_mtime = None
         if not prev.strip():
+            lint_outcome.skipped += 1
+            lint_outcome.skip_reasons.append("empty_page_body")
             return lint_outcome
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
             logger.warning(
@@ -1496,7 +1498,7 @@ def run_dual_embedding_after_semantic_write(
 
     from ..semantic.applicability import InstructorApplicabilityLLM
     from ..semantic.config import dual_embedding_enabled
-    from ..semantic.embedding import OpenAICompatibleEmbeddingClient
+    from ..semantic.embedding import get_openai_embedding_client
     from ..semantic.indexer import index_page_blocks
 
     if not dual_embedding_enabled():
@@ -1507,7 +1509,7 @@ def run_dual_embedding_after_semantic_write(
             page_path,
             page_title,
             llm_client=InstructorApplicabilityLLM(llm_client),
-            embedding_client=OpenAICompatibleEmbeddingClient(),
+            embedding_client=get_openai_embedding_client(),
         )
     except Exception as exc:  # noqa: BLE001 — never fail semantic write path
         logger.bind(page=page_title, path=str(page_path)).warning(
@@ -2050,6 +2052,9 @@ class MaintenanceDaemon:
         from ..daemon.config_layer import refresh_identity_config
 
         refresh_identity_config(self.graph_root, path)
+        if kind == "deleted" and link_verify_enabled():
+            with contextlib.suppress(OSError):
+                register_page_links_from_path(self.graph_root, path)
         self._cycle_wake.set()
 
     def _start_file_watcher(self) -> None:
@@ -2635,10 +2640,12 @@ class MaintenanceDaemon:
             try:
                 link_result = run_link_verification_cycle(self.graph_root)
                 stats.links_checked = link_result.checked
-                stats.dead_links_flagged = link_result.flagged_blocks
-                if link_result.flagged_blocks:
+                stats.dead_links_flagged = link_result.flagged_url_blocks
+                stats.missing_assets_flagged = link_result.flagged_asset_blocks
+                flagged_total = link_result.flagged_blocks
+                if flagged_total:
                     stats.notes.append(
-                        f"flagged {link_result.flagged_blocks} block(s) with hygiene properties",
+                        f"flagged {flagged_total} block(s) with hygiene properties",
                     )
             except OSError as exc:
                 logger.warning("Link verification cycle skipped: {}", exc)

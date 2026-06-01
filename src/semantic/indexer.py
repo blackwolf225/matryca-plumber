@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from logseq_matryca_parser.logos_core import LogseqNode
+from logseq_matryca_parser.logos_core import LogseqNode, LogseqPage
 from loguru import logger
 
 from ..daemon.ast_cache import get_graph_ast_cache
@@ -28,6 +28,29 @@ def _block_text(node: LogseqNode) -> str:
     return " ".join(part.strip() for part in parts if part.strip()).strip()
 
 
+def _prune_page_vectors(graph_root: Path, page_title: str, keep_uuids: set[str]) -> int:
+    store = load_block_vector_store(graph_root)
+    pruned = store.remove_blocks_for_page_except(page_title, keep_uuids)
+    if pruned > 0:
+        store.save()
+    return pruned
+
+
+def _resolve_page_in_graph(graph: object, page_title: str) -> tuple[LogseqPage | None, str]:
+    """Return ``(page, canonical_title)`` using the graph's page map key when possible."""
+    pages = getattr(graph, "pages", None)
+    if not isinstance(pages, dict):
+        return None, page_title
+    direct = pages.get(page_title)
+    if direct is not None:
+        return direct, page_title
+    fold = page_title.casefold()
+    for key, candidate in pages.items():
+        if isinstance(key, str) and key.casefold() == fold:
+            return candidate, key
+    return None, page_title
+
+
 def _iter_indexable_nodes(roots: list[LogseqNode]) -> list[LogseqNode]:
     collected: list[LogseqNode] = []
 
@@ -40,6 +63,15 @@ def _iter_indexable_nodes(roots: list[LogseqNode]) -> list[LogseqNode]:
     for root in roots:
         walk(root)
     return collected
+
+
+def _indexable_block_ids(nodes: list[LogseqNode]) -> set[str]:
+    ids: set[str] = set()
+    for node in nodes:
+        block_id = _block_uuid(node)
+        if block_id and _block_text(node):
+            ids.add(block_id)
+    return ids
 
 
 def index_page_blocks(
@@ -58,13 +90,17 @@ def index_page_blocks(
     cache = get_graph_ast_cache(root)
     cache.apply_file_event(page_path, "modified")
     graph = cache.get_graph()
-    page = graph.pages.get(page_title)
+    page, canonical_title = _resolve_page_in_graph(graph, page_title)
     if page is None:
-        logger.bind(page=page_title).debug("Skipping dual embed: page not in AST cache")
+        logger.bind(page=page_title).debug(
+            "Skipping dual embed: page not in AST cache (vectors left unchanged)",
+        )
         return 0
 
     nodes = _iter_indexable_nodes(list(page.root_nodes))
+    keep_uuids = _indexable_block_ids(nodes)
     if not nodes:
+        _prune_page_vectors(root, canonical_title, keep_uuids)
         return 0
 
     store = load_block_vector_store(root)
@@ -83,28 +119,29 @@ def index_page_blocks(
             vec_content = embedding_client.embed_text(text)
             vec_app = embedding_client.embed_text(applicability)
         except Exception as exc:  # noqa: BLE001 — best-effort per block
-            logger.bind(uuid=block_id, page=page_title).warning(
+            logger.bind(uuid=block_id, page=canonical_title).warning(
                 "Dual embedding failed for block: {}",
                 exc,
             )
             continue
 
-        store.upsert(
+        if store.upsert(
             block_id,
             BlockVectorRecord(
-                page_title=page_title,
+                page_title=canonical_title,
                 block_text=text,
                 applicability_text=applicability,
                 vec_content=vec_content,
                 vec_applicability=vec_app,
                 updated_at=now,
             ),
-        )
-        indexed += 1
+        ):
+            indexed += 1
 
-    if indexed > 0:
+    pruned = store.remove_blocks_for_page_except(canonical_title, keep_uuids)
+    if indexed > 0 or pruned > 0:
         store.save()
-    logger.bind(page=page_title, blocks=indexed).info("Dual embedding indexed blocks")
+    logger.bind(page=canonical_title, blocks=indexed).info("Dual embedding indexed blocks")
     return indexed
 
 

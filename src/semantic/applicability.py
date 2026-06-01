@@ -27,7 +27,7 @@ class ApplicabilityLLM(Protocol):
 
 
 def build_applicability_prompt(block_text: str) -> str:
-    return _APPLICABILITY_USER_TEMPLATE.format(block_text=block_text.strip())
+    return _APPLICABILITY_USER_TEMPLATE.replace("{block_text}", block_text.strip())
 
 
 def synthesize_applicability(block_text: str, llm_client: ApplicabilityLLM) -> str:

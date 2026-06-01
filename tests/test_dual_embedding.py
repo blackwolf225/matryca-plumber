@@ -209,6 +209,235 @@ def test_index_page_blocks_when_enabled(
     assert block_id in store.blocks
 
 
+def test_index_page_blocks_preserves_vectors_when_embed_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from logseq_matryca_parser.logos_core import LogseqNode, LogseqPage
+
+    block_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    node = LogseqNode.model_validate(
+        {
+            "uuid": block_id,
+            "source_uuid": block_id,
+            "content": "Alpha bullet",
+            "clean_text": "Alpha bullet",
+            "indent_level": 0,
+            "properties": {"id": block_id},
+            "children": [],
+            "synthetic_id": False,
+        },
+    )
+    page = LogseqPage.model_validate(
+        {
+            "title": "Demo",
+            "raw_content": "- Alpha bullet",
+            "root_nodes": [node],
+        },
+    )
+
+    class _FakeGraph:
+        pages = {"Demo": page}
+
+    class _FakeCache:
+        def apply_file_event(self, path: Path, kind: str) -> None:
+            _ = path, kind
+
+        def get_graph(self) -> _FakeGraph:
+            return _FakeGraph()
+
+    class _FailingApplicability:
+        def complete_applicability(self, block_text: str) -> str:
+            raise RuntimeError("embed down")
+
+    monkeypatch.setattr(
+        "src.semantic.indexer.get_graph_ast_cache",
+        lambda _root: _FakeCache(),
+    )
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        block_id,
+        BlockVectorRecord(
+            page_title="Demo",
+            block_text="old",
+            applicability_text="old",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[1.0, 0.0],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    page_path = tmp_path / "pages" / "Demo.md"
+    page_path.parent.mkdir(parents=True)
+    page_path.write_text(f"- Alpha bullet\n  id:: {block_id}\n", encoding="utf-8")
+
+    count = index_page_blocks(
+        tmp_path,
+        page_path,
+        "Demo",
+        llm_client=_FailingApplicability(),
+        embedding_client=MockEmbeddingClient(),
+    )
+    assert count == 0
+    reloaded = load_block_vector_store(tmp_path, force_reload=True)
+    assert block_id in reloaded.blocks
+
+
+def test_index_page_blocks_keeps_vectors_when_page_missing_from_ast(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+
+    class _EmptyGraph:
+        pages: dict[str, object] = {}
+
+    class _FakeCache:
+        def apply_file_event(self, path: Path, kind: str) -> None:
+            _ = path, kind
+
+        def get_graph(self) -> _EmptyGraph:
+            return _EmptyGraph()
+
+    monkeypatch.setattr(
+        "src.semantic.indexer.get_graph_ast_cache",
+        lambda _root: _FakeCache(),
+    )
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "keep-me",
+        BlockVectorRecord(
+            page_title="Demo",
+            block_text="stale",
+            applicability_text="stale",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[1.0, 0.0],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    page_path = tmp_path / "pages" / "Demo.md"
+    page_path.parent.mkdir(parents=True)
+    page_path.write_text("- x\n", encoding="utf-8")
+
+    count = index_page_blocks(
+        tmp_path,
+        page_path,
+        "Demo",
+        llm_client=MockApplicabilityLLM(),
+        embedding_client=MockEmbeddingClient(),
+    )
+    assert count == 0
+    reloaded = load_block_vector_store(tmp_path, force_reload=True)
+    assert "keep-me" in reloaded.blocks
+
+
+def test_index_page_blocks_prunes_when_no_indexable_nodes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from logseq_matryca_parser.logos_core import LogseqPage
+
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+    page = LogseqPage.model_validate(
+        {
+            "title": "Demo",
+            "raw_content": "- plain bullet without id",
+            "root_nodes": [],
+        },
+    )
+
+    class _FakeGraph:
+        pages = {"Demo": page}
+
+    class _FakeCache:
+        def apply_file_event(self, path: Path, kind: str) -> None:
+            _ = path, kind
+
+        def get_graph(self) -> _FakeGraph:
+            return _FakeGraph()
+
+    monkeypatch.setattr(
+        "src.semantic.indexer.get_graph_ast_cache",
+        lambda _root: _FakeCache(),
+    )
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "orphan-uuid",
+        BlockVectorRecord(
+            page_title="Demo",
+            block_text="stale",
+            applicability_text="stale",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[1.0, 0.0],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    page_path = tmp_path / "pages" / "Demo.md"
+    page_path.parent.mkdir(parents=True)
+    page_path.write_text("- plain bullet without id\n", encoding="utf-8")
+
+    count = index_page_blocks(
+        tmp_path,
+        page_path,
+        "Demo",
+        llm_client=MockApplicabilityLLM(),
+        embedding_client=MockEmbeddingClient(),
+    )
+    assert count == 0
+    reloaded = load_block_vector_store(tmp_path, force_reload=True)
+    assert "orphan-uuid" not in reloaded.blocks
+
+
+def test_block_vector_store_reload_when_disk_mtime_changes(tmp_path: Path) -> None:
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "uuid-a",
+        BlockVectorRecord(
+            page_title="P",
+            block_text="alpha",
+            applicability_text="when alpha",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[0.8, 0.2],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    first = load_block_vector_store(tmp_path)
+    assert "uuid-a" in first.blocks
+
+    path = first.store_path(tmp_path)
+    import json
+    import time
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["blocks"]["uuid-b"] = {
+        "page_title": "P",
+        "block_text": "beta",
+        "applicability_text": "when beta",
+        "vec_content": [0.0, 1.0],
+        "vec_applicability": [0.2, 0.8],
+        "updated_at": "t2",
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    time.sleep(0.02)
+
+    second = load_block_vector_store(tmp_path)
+    assert "uuid-b" in second.blocks
+
+
 def test_index_page_blocks_skips_without_flag_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

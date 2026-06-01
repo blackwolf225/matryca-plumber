@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Protocol, runtime_checkable
 
 from openai import OpenAI
@@ -44,7 +45,21 @@ class OpenAICompatibleEmbeddingClient:
         return [float(x) for x in vector]
 
 
+_client_lock = threading.Lock()
+_cached_openai_embedding_client: OpenAICompatibleEmbeddingClient | None = None
+
+
+def get_openai_embedding_client() -> OpenAICompatibleEmbeddingClient:
+    """Reuse one OpenAI-compatible embeddings client per process."""
+    global _cached_openai_embedding_client
+    with _client_lock:
+        if _cached_openai_embedding_client is None:
+            _cached_openai_embedding_client = OpenAICompatibleEmbeddingClient()
+        return _cached_openai_embedding_client
+
+
 __all__ = [
     "EmbeddingClient",
     "OpenAICompatibleEmbeddingClient",
+    "get_openai_embedding_client",
 ]

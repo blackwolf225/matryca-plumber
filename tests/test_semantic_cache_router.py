@@ -92,3 +92,18 @@ def test_cache_get_evicts_oversize_payload(
     huge = {"summary": "x" * 200}
     assert cache_put(graph_root, "index", key, huge) is None
     assert cache_get(graph_root, "index", key) is None
+
+
+def test_clear_semantic_cache_preserves_block_vectors(graph_root: Path) -> None:
+    clear_semantic_cache(graph_root)
+    cache_dir = graph_root / ".matryca_semantic_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    vectors = cache_dir / "block_vectors.json"
+    vectors.write_text('{"version":1,"blocks":{}}\n', encoding="utf-8")
+    ephemeral = cache_dir / "ephemeral_cache.json"
+    ephemeral.write_text('{"namespace":"x","payload":{}}\n', encoding="utf-8")
+
+    clear_semantic_cache(graph_root)
+
+    assert vectors.is_file()
+    assert not ephemeral.is_file()

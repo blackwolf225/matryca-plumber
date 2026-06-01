@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -11,11 +12,34 @@ from typing import Any
 
 from loguru import logger
 
+from ..graph.json_flock import cross_process_json_flock
+
 BLOCK_VECTORS_FILENAME = "block_vectors.json"
 BLOCK_VECTORS_VERSION = 1
 
 _lock = threading.Lock()
 _loaded: dict[str, BlockVectorStore] = {}
+_disk_mtimes: dict[str, float] = {}
+
+
+def _graph_cache_key(graph_root: Path) -> str:
+    return str(graph_root.expanduser().resolve(strict=False))
+
+
+def _block_vectors_mtime(path: Path) -> float:
+    if not path.is_file():
+        return 0.0
+    return path.stat().st_mtime
+
+
+def _semantic_search_max_candidates() -> int:
+    raw = os.environ.get("MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES", "").strip()
+    if not raw:
+        return 50_000
+    try:
+        return max(100, min(500_000, int(raw)))
+    except ValueError:
+        return 50_000
 
 
 @dataclass(slots=True)
@@ -58,6 +82,7 @@ class BlockVectorStore:
     graph_root: Path
     version: int = BLOCK_VECTORS_VERSION
     updated_at: str | None = None
+    embedding_dim: int | None = None
     blocks: dict[str, BlockVectorRecord] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
@@ -73,6 +98,7 @@ class BlockVectorStore:
         return {
             "version": self.version,
             "updated_at": self.updated_at,
+            "embedding_dim": self.embedding_dim,
             "blocks": payload,
         }
 
@@ -84,16 +110,66 @@ class BlockVectorStore:
             for block_uuid, rec in raw.items():
                 if isinstance(rec, dict):
                     blocks[str(block_uuid)] = BlockVectorRecord.from_json(rec)
+        dim_raw = payload.get("embedding_dim")
+        embedding_dim = int(dim_raw) if isinstance(dim_raw, int) else None
+        if embedding_dim is None and blocks:
+            first = next(iter(blocks.values()))
+            if first.vec_content:
+                embedding_dim = len(first.vec_content)
         return cls(
             graph_root=graph_root,
             version=int(payload.get("version", BLOCK_VECTORS_VERSION)),
             updated_at=payload.get("updated_at"),
+            embedding_dim=embedding_dim,
             blocks=blocks,
         )
 
-    def upsert(self, block_uuid: str, record: BlockVectorRecord) -> None:
+    def _validate_vector(self, vector: list[float], *, block_uuid: str) -> bool:
+        if not vector:
+            logger.warning("Empty embedding vector for block {}", block_uuid)
+            return False
+        dim = len(vector)
+        with self._lock:
+            expected = self.embedding_dim
+            if expected is None:
+                self.embedding_dim = dim
+                return True
+            if dim != expected:
+                logger.warning(
+                    "Embedding dim mismatch for {}: got {} expected {} "
+                    "(reindex after MATRYCA_EMBEDDING_MODEL change)",
+                    block_uuid,
+                    dim,
+                    expected,
+                )
+                return False
+        return True
+
+    def upsert(self, block_uuid: str, record: BlockVectorRecord) -> bool:
+        if not self._validate_vector(record.vec_content, block_uuid=block_uuid):
+            return False
+        if not self._validate_vector(record.vec_applicability, block_uuid=block_uuid):
+            return False
         with self._lock:
             self.blocks[block_uuid] = record
+        return True
+
+    def remove_blocks_for_page_except(
+        self,
+        page_title: str,
+        keep_uuids: set[str],
+    ) -> int:
+        removed = 0
+        with self._lock:
+            stale = [
+                uid
+                for uid, rec in self.blocks.items()
+                if rec.page_title == page_title and uid not in keep_uuids
+            ]
+            for uid in stale:
+                del self.blocks[uid]
+                removed += 1
+        return removed
 
     def iter_records(self) -> list[tuple[str, BlockVectorRecord]]:
         with self._lock:
@@ -102,18 +178,25 @@ class BlockVectorStore:
     def save(self) -> None:
         path = self.store_path(self.graph_root)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
+        with cross_process_json_flock(path), self._lock:
             self.updated_at = datetime.now(tz=UTC).isoformat()
             payload = {
                 "version": self.version,
                 "updated_at": self.updated_at,
+                "embedding_dim": self.embedding_dim,
                 "blocks": {
                     str(block_uuid): record.to_json()
                     for block_uuid, record in sorted(self.blocks.items())
                 },
             }
             data = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-        path.write_text(data, encoding="utf-8")
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(data, encoding="utf-8")
+            tmp.replace(path)
+        key = _graph_cache_key(self.graph_root)
+        with _lock:
+            _disk_mtimes[key] = _block_vectors_mtime(path)
+            _loaded[key] = self
 
 
 def load_block_vector_store(
@@ -122,21 +205,24 @@ def load_block_vector_store(
     force_reload: bool = False,
 ) -> BlockVectorStore:
     """Load or create the block vector store for ``graph_root``."""
-    key = str(graph_root.expanduser().resolve(strict=False))
+    key = _graph_cache_key(graph_root)
+    path = BlockVectorStore.store_path(Path(key))
+    disk_mtime = _block_vectors_mtime(path)
     with _lock:
-        if not force_reload and key in _loaded:
+        if not force_reload and key in _loaded and _disk_mtimes.get(key) == disk_mtime:
             return _loaded[key]
 
-        path = BlockVectorStore.store_path(Path(key))
         store = BlockVectorStore(graph_root=Path(key))
         if path.is_file():
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
+                with cross_process_json_flock(path):
+                    payload = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(payload, dict):
                     store = BlockVectorStore.from_json(Path(key), payload)
             except (OSError, json.JSONDecodeError) as exc:
                 logger.warning("Failed to load block_vectors.json: {}", exc)
         _loaded[key] = store
+        _disk_mtimes[key] = disk_mtime
         return store
 
 
@@ -144,6 +230,7 @@ def clear_block_vector_store_cache() -> None:
     """Drop in-memory stores (tests)."""
     with _lock:
         _loaded.clear()
+        _disk_mtimes.clear()
 
 
 __all__ = [
@@ -151,6 +238,7 @@ __all__ = [
     "BLOCK_VECTORS_VERSION",
     "BlockVectorRecord",
     "BlockVectorStore",
+    "_semantic_search_max_candidates",
     "clear_block_vector_store_cache",
     "load_block_vector_store",
 ]

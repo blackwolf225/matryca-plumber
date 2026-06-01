@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Surgical robot git commits** — Post-write GitPython commits stage only the modified `.md` file(s) with `robot(matryca): AI auto-update - …` messages; on by default when the graph root is a git repo (`MATRYCA_GIT_ROBOT_COMMIT`, `src/daemon/git_audit.py`).
 - **Sovereign UI settings** — Infrastructure drawer exposes `LLM_API_KEY` as **API Token** (password field); persisted to `.env` on save. Required only for cloud OpenAI-compatible endpoints.
 
+### Fixed
+
+- **Link verification hygiene** — Re-check flagged registry entries; GET fallback when HEAD is inconclusive; merge-safe registry persistence; prune removed page links; clear on-graph `dead-link::` / `missing-asset::` on recovery; journey log splits URL vs asset flag counts (`src/graph/link_verification.py`, `src/agent/maintenance_daemon.py`).
+- **Dual embedding durability** — `block_vectors.json` uses cross-process flock + atomic write, survives `clear_semantic_cache`, prunes stale block UUIDs per page, validates embedding dimensions, caps search scan via `MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES` (`src/semantic/`).
+- **`context load` subtree** — Subtree reads run in a worker thread; invalid `Page|uuid` queries return structured errors instead of raising (`src/agent/context_load.py`).
+- **Second-pass hygiene** — Link recovery waits for successful on-graph property clear; block-vector cache reloads when `block_vectors.json` mtime changes; indexer prunes vectors for empty/missing AST pages; metrics workflow uses strict JSON parse and timezone-aware dates (`.github/workflows/metrics-saver.yml`).
+- **Third-pass hardening** — Idempotent link flag when hygiene property already exists; bounded GET fallback (404→GET); no strike inflation on already-flagged rows; registry purge when page file deleted; AST-miss indexing skips prune; vector save under instance lock; semantic search cap prefers newest blocks (`src/graph/link_verification.py`, `src/semantic/`).
+- **Fourth-pass hardening** — Indexer keeps vectors on transient embed failures; link registry purge on watcher `deleted`; canonical AST page keys for `block_vectors.json`; lexical pre-filter before semantic search cap; bounded GET with range + explicit close; empty-page semantic apply records `skipped` (`src/semantic/`, `src/agent/maintenance_daemon.py`).
+
 ### Changed
 
 - **Documentation** — OpenSpec, `SYSTEM_PROMPT.md`, `README.md`, `ARCHITECTURE.md`, `PROJECT_DIARY.md`, and roadmaps aligned for seven MCP tools (`ingest_document` + `store_fact`).

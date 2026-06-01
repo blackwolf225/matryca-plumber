@@ -45,6 +45,10 @@ _BULLET_RE = re.compile(r"^(\s*)-\s+(.*)$")
 _ID_LINE_RE = re.compile(r"^\s*id::\s+([0-9a-f-]{36})\s*$", re.IGNORECASE)
 _DEAD_LINK_PROP = re.compile(r"^\s*dead-link::", re.IGNORECASE)
 _MISSING_ASSET_PROP = re.compile(r"^\s*missing-asset::", re.IGNORECASE)
+_HEAD_INCONCLUSIVE = frozenset({401, 403, 405, 501})
+_HEAD_TRY_GET_STATUSES = _HEAD_INCONCLUSIVE | {404}
+_MAX_VERIFY_ERRORS = 50
+_GET_BODY_READ_CAP_BYTES = 65_536
 
 LinkKind = Literal["url", "asset"]
 
@@ -131,9 +135,11 @@ class LinkRegistryEntry:
 @dataclass
 class LinkVerificationCycleResult:
     checked: int = 0
-    dead_urls: int = 0
-    missing_assets: int = 0
+    dead_urls: int = 0  # newly failing URL checks (excludes already-flagged rows)
+    missing_assets: int = 0  # newly failing asset checks (excludes already-flagged rows)
     flagged_blocks: int = 0
+    flagged_url_blocks: int = 0
+    flagged_asset_blocks: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -177,10 +183,27 @@ def save_link_registry(graph_root: Path, entries: dict[str, LinkRegistryEntry]) 
         _save_registry_unlocked(path, entries)
 
 
+def _persist_checked_registry_updates(
+    graph_root: Path,
+    updates: dict[str, LinkRegistryEntry],
+    checked_keys: set[str],
+) -> None:
+    """Merge verification results into the on-disk registry without clobbering concurrent merges."""
+    if not checked_keys:
+        return
+    path = link_registry_path(graph_root)
+    with cross_process_json_flock(path):
+        fresh = _load_registry_unlocked(path)
+        for key in checked_keys:
+            if key in updates:
+                fresh[key] = updates[key]
+        _save_registry_unlocked(path, fresh)
+
+
 def _resolve_asset_path(graph_root: Path, page_path: Path, asset_ref: str) -> Path:
     ref = asset_ref.strip()
     if ref.startswith("/"):
-        return Path(ref)
+        return graph_root / ".matryca_invalid_absolute_asset"
     if ref.startswith("assets/"):
         return graph_root / ref
     return (page_path.parent / ref).resolve()
@@ -198,6 +221,13 @@ def _block_has_property(
     return False
 
 
+def _page_relpath(graph_root: Path, page_path: Path) -> str | None:
+    try:
+        return page_path.relative_to(graph_root).as_posix()
+    except ValueError:
+        return None
+
+
 def extract_links_from_page(
     graph_root: Path,
     page_path: Path,
@@ -206,9 +236,8 @@ def extract_links_from_page(
     """Passive extract: URLs and asset paths anchored to block UUIDs."""
     if not content.strip():
         return []
-    try:
-        page_relpath = page_path.relative_to(graph_root).as_posix()
-    except ValueError:
+    page_relpath = _page_relpath(graph_root, page_path)
+    if page_relpath is None:
         return []
 
     protected = compute_page_protected_line_indices(content)
@@ -292,13 +321,26 @@ def merge_page_links_into_registry(
     page_path: Path,
     content: str,
 ) -> int:
-    """Upsert extracted links; reset strikes when target text still present."""
+    """Upsert extracted links for one page; drop registry rows removed from the page."""
     new_entries = extract_links_from_page(graph_root, page_path, content)
-    if not new_entries:
+    page_relpath = _page_relpath(graph_root, page_path)
+    if page_relpath is None:
         return 0
+
     path = link_registry_path(graph_root)
+    new_keys = {entry.registry_key() for entry in new_entries}
     with cross_process_json_flock(path):
         registry = _load_registry_unlocked(path)
+        stale = [
+            key
+            for key, entry in registry.items()
+            if entry.page_relpath == page_relpath and key not in new_keys
+        ]
+        for key in stale:
+            del registry[key]
+        if not new_entries:
+            _save_registry_unlocked(path, registry)
+            return 0
         for entry in new_entries:
             key = entry.registry_key()
             prior = registry.get(key)
@@ -320,10 +362,66 @@ async def _head_url(client: httpx.AsyncClient, url: str) -> int | None:
         return None
 
 
+async def _get_url(client: httpx.AsyncClient, url: str) -> int | None:
+    """Bounded GET (range/limit) for HEAD fallbacks without downloading large bodies."""
+    headers = {"Range": f"bytes=0-{_GET_BODY_READ_CAP_BYTES - 1}"}
+    try:
+        response = await client.get(url, follow_redirects=True, headers=headers)
+        try:
+            await response.aread()
+        finally:
+            await response.aclose()
+        return response.status_code
+    except httpx.HTTPError:
+        return None
+
+
+async def _verify_url_status(client: httpx.AsyncClient, url: str) -> int | None:
+    """HEAD first; fall back to GET when HEAD is inconclusive or fails."""
+    status = await _head_url(client, url)
+    if status is not None and status < 400:
+        return status
+    if status is None or status in _HEAD_TRY_GET_STATUSES:
+        get_status = await _get_url(client, url)
+        if get_status is not None:
+            return get_status
+    return status
+
+
+def _append_verify_error(result: LinkVerificationCycleResult, message: str) -> None:
+    if len(result.errors) < _MAX_VERIFY_ERRORS:
+        result.errors.append(message)
+
+
 def _asset_missing(graph_root: Path, page_relpath: str, asset_ref: str) -> bool:
     page_path = graph_root / page_relpath
     resolved = _resolve_asset_path(graph_root, page_path, asset_ref)
     return not resolved.is_file()
+
+
+def _url_check_failed(status: int | None) -> bool:
+    return status is None or status >= 400
+
+
+def _recover_flagged_entry(
+    graph_root: Path,
+    entry: LinkRegistryEntry,
+    *,
+    property_name: str,
+) -> None:
+    """Clear on-graph hygiene only when OCC write succeeds; then unflag registry."""
+    if not entry.flagged:
+        entry.strikes = 0
+        return
+    if clear_block_hygiene_property(
+        graph_root,
+        entry.page_relpath,
+        entry.block_uuid,
+        property_name,
+    ):
+        entry.strikes = 0
+        entry.flagged = False
+    # If clear fails, keep flagged + strikes so registry matches on-graph properties.
 
 
 async def verify_registry_batch(
@@ -332,39 +430,56 @@ async def verify_registry_batch(
     *,
     batch_size: int | None = None,
 ) -> LinkVerificationCycleResult:
-    """Verify up to ``batch_size`` unflagged entries; update strikes in registry."""
+    """Verify up to ``batch_size`` entries (unflagged first, then flagged for recovery)."""
     result = LinkVerificationCycleResult()
     if not entries:
         return result
 
-    batch = batch_size if batch_size is not None else link_verify_batch_size()
+    batch_n = batch_size if batch_size is not None else link_verify_batch_size()
     threshold = link_verify_strikes_threshold()
     timeout = link_verify_timeout_seconds()
-    pending = [e for e in entries.values() if not e.flagged][:batch]
+    unflagged = [e for e in entries.values() if not e.flagged]
+    flagged = [e for e in entries.values() if e.flagged]
+    pending = (unflagged + flagged)[:batch_n]
     if not pending:
         return result
 
+    checked_keys: set[str] = set()
     timeout_cfg = httpx.Timeout(timeout, connect=timeout)
     async with httpx.AsyncClient(timeout=timeout_cfg) as client:
         for entry in pending:
             result.checked += 1
+            checked_keys.add(entry.registry_key())
             entry.last_checked_at = datetime.now(tz=UTC).isoformat()
+            was_flagged = entry.flagged
             if entry.kind == "url":
-                status = await _head_url(client, entry.target)
+                status = await _verify_url_status(client, entry.target)
                 entry.last_status = status
-                if status is None or status >= 400:
-                    entry.strikes += 1
-                    result.dead_urls += 1
+                if status is None:
+                    _append_verify_error(result, f"url_unreachable:{entry.target}")
+                if _url_check_failed(status):
+                    if not was_flagged:
+                        entry.strikes += 1
+                        result.dead_urls += 1
                 else:
-                    entry.strikes = 0
+                    _recover_flagged_entry(
+                        graph_root,
+                        entry,
+                        property_name="dead-link",
+                    )
             else:
                 missing = _asset_missing(graph_root, entry.page_relpath, entry.target)
                 entry.last_status = 404 if missing else 200
                 if missing:
-                    entry.strikes += 1
-                    result.missing_assets += 1
+                    if not was_flagged:
+                        entry.strikes += 1
+                        result.missing_assets += 1
                 else:
-                    entry.strikes = 0
+                    _recover_flagged_entry(
+                        graph_root,
+                        entry,
+                        property_name="missing-asset",
+                    )
 
             if (
                 entry.strikes >= threshold
@@ -378,18 +493,24 @@ async def verify_registry_batch(
             ):
                 entry.flagged = True
                 result.flagged_blocks += 1
+                if entry.kind == "url":
+                    result.flagged_url_blocks += 1
+                else:
+                    result.flagged_asset_blocks += 1
 
-    save_link_registry(graph_root, entries)
+    _persist_checked_registry_updates(graph_root, entries, checked_keys)
     return result
 
 
-def flag_block_hygiene_property(
+def _mutate_block_hygiene_property(
     graph_root: Path,
     page_relpath: str,
     block_uuid: str,
     property_name: str,
+    *,
+    remove: bool,
 ) -> bool:
-    """Append ``dead-link:: true`` or ``missing-asset:: true`` under the block (OCC-safe)."""
+    """Add or remove ``dead-link::`` / ``missing-asset::`` under the block (OCC-safe)."""
     page_path = graph_root / page_relpath
     if not page_path.is_file():
         return False
@@ -412,9 +533,35 @@ def flag_block_hygiene_property(
         located = locate_block_by_uuid(stripped, block_uuid)
         if located is None:
             return False
-        bullet_idx, id_idx, block_end = located
+        bullet_idx, _id_idx, block_end = located
+
+        if remove:
+            changed = False
+            remove_at: list[int] = []
+            for i in range(bullet_idx + 1, min(block_end, len(stripped))):
+                if prop_pattern.match(stripped[i]):
+                    remove_at.append(i)
+            for i in reversed(remove_at):
+                del lines[i]
+                changed = True
+            if not changed:
+                return False
+            updated = "".join(
+                ln if ln.endswith("\n") else ln + "\n"
+                for ln in [ln.rstrip("\n") for ln in lines]
+            )
+            return bool(
+                atomic_write_bytes_if_unchanged(
+                    page_path,
+                    updated.encode("utf-8"),
+                    graph_root=graph_root,
+                    baseline_mtime=baseline_mtime,
+                    robot_commit_summary=f"cleared {property_name} on block",
+                ),
+            )
+
         if _block_has_property(stripped, bullet_idx, block_end, prop_pattern):
-            return False
+            return True
 
         insert_at = block_property_insert_index(stripped, bullet_idx, block_end)
         bullet_match = _BULLET_RE.match(stripped[bullet_idx].rstrip("\n"))
@@ -436,19 +583,89 @@ def flag_block_hygiene_property(
         )
 
 
+def flag_block_hygiene_property(
+    graph_root: Path,
+    page_relpath: str,
+    block_uuid: str,
+    property_name: str,
+) -> bool:
+    """Append ``dead-link:: true`` or ``missing-asset:: true`` under the block (OCC-safe)."""
+    return _mutate_block_hygiene_property(
+        graph_root,
+        page_relpath,
+        block_uuid,
+        property_name,
+        remove=False,
+    )
+
+
+def clear_block_hygiene_property(
+    graph_root: Path,
+    page_relpath: str,
+    block_uuid: str,
+    property_name: str,
+) -> bool:
+    """Remove hygiene property lines under the block when a link recovers."""
+    return _mutate_block_hygiene_property(
+        graph_root,
+        page_relpath,
+        block_uuid,
+        property_name,
+        remove=True,
+    )
+
+
+def _run_async_verify_batch(
+    graph_root: Path,
+    registry: dict[str, LinkRegistryEntry],
+) -> LinkVerificationCycleResult:
+    """Run async verify from sync code (daemon thread or nested event-loop safe)."""
+    coro = verify_registry_batch(graph_root, registry)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, coro)
+        return future.result()
+
+
 def run_link_verification_cycle(graph_root: Path) -> LinkVerificationCycleResult:
     """Sync entry: load registry, verify a batch, return metrics."""
     if not link_verify_enabled():
         return LinkVerificationCycleResult()
-    registry = load_link_registry(graph_root)
+    path = link_registry_path(graph_root)
+    with cross_process_json_flock(path):
+        registry = _load_registry_unlocked(path)
     if not registry:
         return LinkVerificationCycleResult()
-    return asyncio.run(verify_registry_batch(graph_root, registry))
+    return _run_async_verify_batch(graph_root, registry)
+
+
+def _purge_registry_entries_for_page(graph_root: Path, page_relpath: str) -> int:
+    """Drop registry rows for a page file that no longer exists."""
+    path = link_registry_path(graph_root)
+    with cross_process_json_flock(path):
+        registry = _load_registry_unlocked(path)
+        stale = [key for key, entry in registry.items() if entry.page_relpath == page_relpath]
+        if not stale:
+            return 0
+        for key in stale:
+            del registry[key]
+        _save_registry_unlocked(path, registry)
+    return len(stale)
 
 
 def register_page_links_from_path(graph_root: Path, page_path: Path) -> int:
     """Read page from disk and merge link entries into the registry."""
-    if not link_verify_enabled() or not page_path.is_file():
+    if not link_verify_enabled():
+        return 0
+    page_relpath = _page_relpath(graph_root, page_path)
+    if not page_path.is_file():
+        if page_relpath:
+            return _purge_registry_entries_for_page(graph_root, page_relpath)
         return 0
     try:
         content = page_path.read_text(encoding="utf-8", errors="replace")
@@ -461,6 +678,7 @@ __all__ = [
     "LINK_REGISTRY_FILENAME",
     "LinkRegistryEntry",
     "LinkVerificationCycleResult",
+    "clear_block_hygiene_property",
     "extract_links_from_page",
     "flag_block_hygiene_property",
     "link_verify_enabled",

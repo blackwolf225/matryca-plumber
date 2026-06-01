@@ -5,10 +5,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from loguru import logger
+
 from .config import dual_embedding_enabled, hybrid_weights
 from .embedding import EmbeddingClient
-from .math_util import cosine_similarity, hybrid_score
-from .store import BlockVectorStore, load_block_vector_store
+from .math_util import cosine_similarity
+from .store import (
+    BlockVectorRecord,
+    BlockVectorStore,
+    _semantic_search_max_candidates,
+    load_block_vector_store,
+)
+
+
+def _cap_records_for_scoring(
+    records: list[tuple[str, BlockVectorRecord]],
+    query: str,
+    cap: int,
+) -> list[tuple[str, BlockVectorRecord]]:
+    """Prefer lexical overlap with ``query``, then newest ``updated_at``, before embedding."""
+    if len(records) <= cap:
+        return records
+    tokens = [part.casefold() for part in query.split() if len(part) >= 2]
+
+    def rank_key(item: tuple[str, BlockVectorRecord]) -> tuple[int, str]:
+        _uuid, record = item
+        blob = f"{record.block_text} {record.applicability_text}".casefold()
+        lexical_hits = sum(1 for token in tokens if token in blob)
+        return (lexical_hits, record.updated_at or "")
+
+    return sorted(records, key=rank_key, reverse=True)[:cap]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +70,16 @@ def hybrid_block_search(
     if not records:
         return []
 
+    cap = _semantic_search_max_candidates()
+    if len(records) > cap:
+        logger.warning(
+            "Semantic index has {} blocks; scoring first {} "
+            "(MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES)",
+            len(records),
+            cap,
+        )
+        records = _cap_records_for_scoring(records, cleaned, cap)
+
     query_vec = embedding_client.embed_text(cleaned)
     weights = hybrid_weights()
     hits: list[BlockSearchHit] = []
@@ -51,13 +87,7 @@ def hybrid_block_search(
     for block_uuid, record in records:
         score_content = cosine_similarity(query_vec, record.vec_content)
         score_app = cosine_similarity(query_vec, record.vec_applicability)
-        final = hybrid_score(
-            query_vec,
-            record.vec_content,
-            record.vec_applicability,
-            weight_content=weights.content,
-            weight_applicability=weights.applicability,
-        )
+        final = (weights.content * score_content) + (weights.applicability * score_app)
         hits.append(
             BlockSearchHit(
                 block_uuid=block_uuid,

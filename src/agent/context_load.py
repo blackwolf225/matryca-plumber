@@ -37,7 +37,10 @@ async def load_agent_context(
         page_part, block_part = [p.strip() for p in raw.split("|", 1)]
         if not page_part or not block_part:
             return {"ok": False, "error": "Invalid `Page Title|block-uuid` query."}
-        subtree_md = read_subtree_markdown(root, raw)
+        try:
+            subtree_md = await asyncio.to_thread(read_subtree_markdown, root, raw)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         return {
             "ok": True,
             "mode": "subtree",

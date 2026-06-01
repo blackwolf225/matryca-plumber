@@ -501,10 +501,10 @@ async def dispatch_search(
         sem_limit = sem_limit_raw
 
         def _run_semantic() -> str:
-            from ..semantic.embedding import OpenAICompatibleEmbeddingClient
+            from ..semantic.embedding import get_openai_embedding_client
             from ..semantic.search import format_semantic_search_markdown
 
-            client = OpenAICompatibleEmbeddingClient()
+            client = get_openai_embedding_client()
             return format_semantic_search_markdown(
                 graph_path,
                 sem_query,

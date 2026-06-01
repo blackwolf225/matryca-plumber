@@ -33,7 +33,7 @@ flowchart TB
   subgraph verify [2. Verify — async batch]
     BATCH[Up to MATRYCA_LINK_VERIFY_BATCH entries]
     HEAD[httpx HEAD for URLs]
-    FS[os.path.exists for assets]
+    FS[Path.is_file for assets]
     BATCH --> HEAD
     BATCH --> FS
   end
@@ -132,6 +132,7 @@ Documented in [`.env.example`](../../.env.example) (Operator essentials).
 
 ## Operator notes
 
-- Network blips can increment `strikes`; the threshold reduces false positives.
+- Network blips can increment `strikes`; the threshold reduces false positives. Flagged entries are re-checked each cycle; recovery clears strikes, registry `flagged`, and on-graph hygiene properties.
+- HEAD may return 405/403; the verifier falls back to GET for inconclusive HEAD responses.
 - Journey Log reports link checks when [`agent-dx.md`](agent-dx.md) journey logging is enabled.
 - Disable entirely: `MATRYCA_LINK_VERIFY_ENABLED=false`.
