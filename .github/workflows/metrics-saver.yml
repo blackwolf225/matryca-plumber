@@ -106,6 +106,17 @@ jobs:
           # 6. Scrivi il file aggiornato su disco
           with open(history_file, 'w', encoding='utf-8') as f:
               json.dump(history, f, indent=2)
+
+          # 7. Genera Badge JSON per Shields.io (Totali 14 giorni nativi di GitHub)
+          v_count = views_data.get('count', 0) if views_data else 0
+          c_count = clones_data.get('count', 0) if clones_data else 0
+          
+          with open('metrics/views-badge.json', 'w') as f:
+              json.dump({"schemaVersion": 1, "label": "Views (14d)", "message": str(v_count), "color": "blue"}, f)
+          
+          with open('metrics/clones-badge.json', 'w') as f:
+              json.dump({"schemaVersion": 1, "label": "Clones (14d)", "message": str(c_count), "color": "success"}, f)
+
           
           print('✓ Database JSON delle metriche aggiornato con successo!')
           "
