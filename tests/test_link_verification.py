@@ -98,10 +98,13 @@ async def test_verify_registry_batch_url_dead(
     async def fake_head(_client: object, _url: str) -> int:
         return 404
 
-    with patch("src.graph.link_verification._verify_url_status", new=fake_head), patch(
-        "src.graph.link_verification.flag_block_hygiene_property",
-        return_value=True,
-    ) as flag_mock:
+    with (
+        patch("src.graph.link_verification._verify_url_status", new=fake_head),
+        patch(
+            "src.graph.link_verification.flag_block_hygiene_property",
+            return_value=True,
+        ) as flag_mock,
+    ):
         result = await verify_registry_batch(root, registry, batch_size=5)
 
     assert result.checked == 1
@@ -131,10 +134,13 @@ async def test_flagged_url_recovers_when_check_succeeds(
     async def fake_ok(_client: object, _url: str) -> int:
         return 200
 
-    with patch("src.graph.link_verification._verify_url_status", new=fake_ok), patch(
-        "src.graph.link_verification.clear_block_hygiene_property",
-        return_value=True,
-    ) as clear_mock:
+    with (
+        patch("src.graph.link_verification._verify_url_status", new=fake_ok),
+        patch(
+            "src.graph.link_verification.clear_block_hygiene_property",
+            return_value=True,
+        ) as clear_mock,
+    ):
         result = await verify_registry_batch(root, registry, batch_size=5)
 
     assert result.checked == 1
@@ -161,9 +167,12 @@ async def test_flagged_url_stays_flagged_when_clear_fails(
     async def fake_ok(_client: object, _url: str) -> int:
         return 200
 
-    with patch("src.graph.link_verification._verify_url_status", new=fake_ok), patch(
-        "src.graph.link_verification.clear_block_hygiene_property",
-        return_value=False,
+    with (
+        patch("src.graph.link_verification._verify_url_status", new=fake_ok),
+        patch(
+            "src.graph.link_verification.clear_block_hygiene_property",
+            return_value=False,
+        ),
     ):
         await verify_registry_batch(root, registry, batch_size=5)
 

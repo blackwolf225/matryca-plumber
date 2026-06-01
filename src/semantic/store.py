@@ -92,9 +92,7 @@ class BlockVectorStore:
 
     def to_json(self) -> dict[str, Any]:
         with self._lock:
-            payload = {
-                str(uuid): rec.to_json() for uuid, rec in sorted(self.blocks.items())
-            }
+            payload = {str(uuid): rec.to_json() for uuid, rec in sorted(self.blocks.items())}
         return {
             "version": self.version,
             "updated_at": self.updated_at,

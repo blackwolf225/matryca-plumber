@@ -547,8 +547,7 @@ def _mutate_block_hygiene_property(
             if not changed:
                 return False
             updated = "".join(
-                ln if ln.endswith("\n") else ln + "\n"
-                for ln in [ln.rstrip("\n") for ln in lines]
+                ln if ln.endswith("\n") else ln + "\n" for ln in [ln.rstrip("\n") for ln in lines]
             )
             return bool(
                 atomic_write_bytes_if_unchanged(
