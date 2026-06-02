@@ -37,7 +37,6 @@ jobs:
 
           if not token:
               print("❌ ERRORE: METRICS_TOKEN mancante!")
-              print("Devi creare un Personal Access Token e salvarlo in Settings -> Secrets and variables -> Actions come METRICS_TOKEN.")
               sys.exit(1)
 
           headers = {
@@ -52,20 +51,13 @@ jobs:
                       return json.loads(response.read().decode('utf-8'))
               except HTTPError as e:
                   print(f"❌ ERRORE HTTP {e.code} su {url}")
-                  if e.code in (401, 403, 404):
-                      print("-> IL TUO TOKEN NON HA I PERMESSI. Assicurati di aver spuntato la casella 'repo' quando hai generato il token, o di averlo salvato correttamente nei Secrets!")
                   sys.exit(1)
               except Exception as e:
-                  print(f"❌ Errore sconosciuto su {url}: {e}")
+                  print(f"❌ Errore: {e}")
                   sys.exit(1)
 
-          print("Recupero Views...")
           views_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/views")
-          
-          print("Recupero Clones...")
           clones_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/clones")
-          
-          print("Recupero Releases...")
           releases_data = fetch_api(f"https://api.github.com/repos/{repo}/releases")
 
           os.makedirs('metrics', exist_ok=True)
@@ -117,22 +109,27 @@ jobs:
           with open('metrics/clones-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Clones (14d)", "message": str(c_count), "color": "success"}, f)
 
-          print("✓ Salvataggio completato con successo!")
+          print("✓ Dati pronti per il branch dedicato.")
           EOF
-          
-          # Esegue lo script generato
           python update_metrics.py
 
-      - name: Commit & Push Changes
+      - name: Commit & Push Changes to Dedicated Branch
         run: |
+          # Crea un backup dei file generati fuori dall'albero Git temporaneamente
+          mkdir -p /tmp/metrics_backup
+          cp -r metrics/* /tmp/metrics_backup/
+          
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          git add metrics/
           
-          # Fa il commit solo se ci sono file effettivamente modificati
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(analytics): archive daily repository metrics and badges [skip ci]"
-            git push
-          else
-            echo "Nessuna nuova metrica da salvare oggi."
-          fi
+          # Cambia branch o crealo se non esiste (senza toccare main)
+          git fetch origin
+          git checkout metrics 2>/dev/null || git checkout -b metrics
+          
+          # Ripristina i file nella branca corretta
+          mkdir -p metrics
+          cp -r /tmp/metrics_backup/* metrics/
+          
+          # Invia le modifiche sul branch isolato 'metrics'
+          git add metrics/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(analytics): update daily repository metrics and badges" && git push origin metrics)
