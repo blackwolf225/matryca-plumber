@@ -22,22 +22,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Fetch and Merge Metrics
+      - name: Genera ed Esegui Script Python
         env:
           GITHUB_TOKEN: ${{ secrets.METRICS_TOKEN }}
           REPO_SLUG: ${{ github.repository }}
         run: |
-          cat << 'EOF' > update_metrics_raw.py
+          cat > update_metrics.py << 'EOF'
           import os, json, sys, datetime
           from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
 
-          token = os.environ.get('GITHUB_TOKEN')
-          repo = os.environ.get('REPO_SLUG')
+          token = os.environ.get('GITHUB_TOKEN', '')
+          repo = os.environ.get('REPO_SLUG', '')
 
           if not token:
-              print("ERRORE CRITICO: Il secret METRICS_TOKEN non è stato trovato o è vuoto.")
-              print("-> Vai su GitHub della tua repository: Settings -> Secrets and variables -> Actions")
-              print("-> Crea un 'New repository secret' chiamato METRICS_TOKEN e incollaci il tuo Personal Access Token.")
+              print("❌ ERRORE: METRICS_TOKEN mancante!")
+              print("Devi creare un Personal Access Token e salvarlo in Settings -> Secrets and variables -> Actions come METRICS_TOKEN.")
               sys.exit(1)
 
           headers = {
@@ -46,29 +46,38 @@ jobs:
           }
 
           def fetch_api(url):
+              req = Request(url, headers=headers)
               try:
-                  req = Request(url, headers=headers)
                   with urlopen(req) as response:
                       return json.loads(response.read().decode('utf-8'))
+              except HTTPError as e:
+                  print(f"❌ ERRORE HTTP {e.code} su {url}")
+                  if e.code in (401, 403, 404):
+                      print("-> IL TUO TOKEN NON HA I PERMESSI. Assicurati di aver spuntato la casella 'repo' quando hai generato il token, o di averlo salvato correttamente nei Secrets!")
+                  sys.exit(1)
               except Exception as e:
-                  print(f"Errore nel fetching di {url}: {e}")
-                  return None
+                  print(f"❌ Errore sconosciuto su {url}: {e}")
+                  sys.exit(1)
 
+          print("Recupero Views...")
           views_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/views")
+          
+          print("Recupero Clones...")
           clones_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/clones")
+          
+          print("Recupero Releases...")
           releases_data = fetch_api(f"https://api.github.com/repos/{repo}/releases")
 
           os.makedirs('metrics', exist_ok=True)
           history_file = 'metrics/history.json'
+          history = {'views': {}, 'clones': {}, 'releases': {}}
 
           if os.path.exists(history_file):
-              with open(history_file, 'r', encoding='utf-8') as f:
-                  try:
+              try:
+                  with open(history_file, 'r', encoding='utf-8') as f:
                       history = json.load(f)
-                  except Exception:
-                      history = {'views': {}, 'clones': {}, 'releases': {}}
-          else:
-              history = {'views': {}, 'clones': {}, 'releases': {}}
+              except Exception:
+                  pass
 
           for key in ['views', 'clones', 'releases']:
               if key not in history:
@@ -108,15 +117,22 @@ jobs:
           with open('metrics/clones-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Clones (14d)", "message": str(c_count), "color": "success"}, f)
 
-          print("✓ Database JSON delle metriche e badges aggiornati con successo!")
+          print("✓ Salvataggio completato con successo!")
           EOF
-
-          # Correzione Magica: Rimuove l'indentazione visiva del file YAML per far felice Python!
-          python -c "import textwrap; code=textwrap.dedent(open('update_metrics_raw.py').read()); exec(code)"
+          
+          # Esegue lo script generato
+          python update_metrics.py
 
       - name: Commit & Push Changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
           git add metrics/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(analytics): archive daily repository metrics and badges [skip ci]" && git push)
+          
+          # Fa il commit solo se ci sono file effettivamente modificati
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(analytics): archive daily repository metrics and badges [skip ci]"
+            git push
+          else
+            echo "Nessuna nuova metrica da salvare oggi."
+          fi
