@@ -2,8 +2,8 @@ name: Daily Metrics Saver
 
 on:
   schedule:
-    - cron: '0 3 * * *' # Gira in automatico ogni giorno alle 03:00 UTC (05:00 italiane)
-  workflow_dispatch: # Ti permette di avviarlo a mano cliccando un tasto su GitHub per testarlo subito
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,14 +27,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.METRICS_TOKEN }}
           REPO_SLUG: ${{ github.repository }}
         run: |
-          python - <<'EOF'
+          cat << 'EOF' > update_metrics.py
           import os, json, sys, datetime
           from urllib.request import Request, urlopen
 
           token = os.environ.get('GITHUB_TOKEN')
           repo = os.environ.get('REPO_SLUG')
+
           if not token:
-              print('Errore critico: secret METRICS_TOKEN non configurato (esposto come GITHUB_TOKEN nel job)!')
+              print("ERRORE CRITICO: Il secret METRICS_TOKEN non è stato trovato o è vuoto.")
+              print("-> Vai su GitHub della tua repository: Settings -> Secrets and variables -> Actions")
+              print("-> Crea un 'New repository secret' chiamato METRICS_TOKEN e incollaci il tuo Personal Access Token.")
               sys.exit(1)
 
           headers = {
@@ -46,17 +49,15 @@ jobs:
               try:
                   req = Request(url, headers=headers)
                   with urlopen(req) as response:
-                      return json.loads(response.read().decode())
-              except OSError as e:
-                  print(f'Errore nel fetching di {url}: {e}')
+                      return json.loads(response.read().decode('utf-8'))
+              except Exception as e:
+                  print(f"Errore nel fetching di {url}: {e}")
                   return None
 
-          # 1. Recupera i dati freschi da GitHub API (che includono sempre gli ultimi 14 giorni)
-          views_data = fetch_api(f'https://api.github.com/repos/{repo}/traffic/views')
-          clones_data = fetch_api(f'https://api.github.com/repos/{repo}/traffic/clones')
-          releases_data = fetch_api(f'https://api.github.com/repos/{repo}/releases')
+          views_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/views")
+          clones_data = fetch_api(f"https://api.github.com/repos/{repo}/traffic/clones")
+          releases_data = fetch_api(f"https://api.github.com/repos/{repo}/releases")
 
-          # 2. Prepara la cartella e il file storico
           os.makedirs('metrics', exist_ok=True)
           history_file = 'metrics/history.json'
 
@@ -64,61 +65,53 @@ jobs:
               with open(history_file, 'r', encoding='utf-8') as f:
                   try:
                       history = json.load(f)
-                  except json.JSONDecodeError:
+                  except Exception:
                       history = {'views': {}, 'clones': {}, 'releases': {}}
           else:
               history = {'views': {}, 'clones': {}, 'releases': {}}
 
-          if 'views' not in history: history['views'] = {}
-          if 'clones' not in history: history['clones'] = {}
-          if 'releases' not in history: history['releases'] = {}
+          for key in ['views', 'clones', 'releases']:
+              if key not in history:
+                  history[key] = {}
 
-          # 3. Unisci e storicizza i dati di Visualizzazione (Ultimi 14 giorni rilevati dall API)
-          v_days_added = []
-          if views_data and 'views' in views_data:
+          if isinstance(views_data, dict) and 'views' in views_data:
               for v in views_data['views']:
-                  day = v['timestamp'][:10]
-                  history['views'][day] = {'count': v['count'], 'uniques': v['uniques']}
-                  v_days_added.append(day)
-          print(f'-> [INFO] Recuperate {len(v_days_added)} giornate di traffico (Views): {v_days_added}')
+                  day = v.get('timestamp', '')[:10]
+                  if day:
+                      history['views'][day] = {'count': v.get('count', 0), 'uniques': v.get('uniques', 0)}
 
-          # 4. Unisci e storicizza i dati di Clonazione (Ultimi 14 giorni rilevati dall API)
-          c_days_added = []
-          if clones_data and 'clones' in clones_data:
+          if isinstance(clones_data, dict) and 'clones' in clones_data:
               for c in clones_data['clones']:
-                  day = c['timestamp'][:10]
-                  history['clones'][day] = {'count': c['count'], 'uniques': c['uniques']}
-                  c_days_added.append(day)
-          print(f'-> [INFO] Recuperate {len(c_days_added)} giornate di clonazione (Clones): {c_days_added}')
+                  day = c.get('timestamp', '')[:10]
+                  if day:
+                      history['clones'][day] = {'count': c.get('count', 0), 'uniques': c.get('uniques', 0)}
 
-          # 5. Salva uno snapshot cumulativo dei download delle release ad oggi
-          if releases_data:
+          if isinstance(releases_data, list):
               today = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
               history['releases'][today] = [
                   {
-                      'tag': r['tag_name'],
-                      'assets': [{a['name']: a['download_count']} for a in r.get('assets', [])]
+                      'tag': r.get('tag_name', ''),
+                      'assets': [{a.get('name', 'unknown'): a.get('download_count', 0)} for a in r.get('assets', [])]
                   }
-                  for r in releases_data
+                  for r in releases_data if isinstance(r, dict)
               ]
-              print(f'-> [INFO] Snapshot dei download per le release catturato per la data odierna: {today}')
 
-          # 6. Scrivi il file aggiornato su disco
           with open(history_file, 'w', encoding='utf-8') as f:
               json.dump(history, f, indent=2)
 
-          # 7. Genera Badge JSON per Shields.io (Totali 14 giorni nativi di GitHub)
-          v_count = views_data.get('count', 0) if views_data else 0
-          c_count = clones_data.get('count', 0) if clones_data else 0
-          
+          v_count = views_data.get('count', 0) if isinstance(views_data, dict) else 0
+          c_count = clones_data.get('count', 0) if isinstance(clones_data, dict) else 0
+
           with open('metrics/views-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Views (14d)", "message": str(v_count), "color": "blue"}, f)
-          
+
           with open('metrics/clones-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Clones (14d)", "message": str(c_count), "color": "success"}, f)
 
-          print('✓ Database JSON delle metriche e badges aggiornati con successo!')
+          print("✓ Database JSON delle metriche e badges aggiornati con successo!")
           EOF
+
+          python update_metrics.py
 
       - name: Commit & Push Changes
         run: |
