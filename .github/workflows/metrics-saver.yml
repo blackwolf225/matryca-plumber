@@ -27,7 +27,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.METRICS_TOKEN }}
           REPO_SLUG: ${{ github.repository }}
         run: |
-          python -c "
+          python - <<'EOF'
           import os, json, sys, datetime
           from urllib.request import Request, urlopen
 
@@ -111,19 +111,18 @@ jobs:
           v_count = views_data.get('count', 0) if views_data else 0
           c_count = clones_data.get('count', 0) if clones_data else 0
           
-          with open('metrics/views-badge.json', 'w') as f:
+          with open('metrics/views-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Views (14d)", "message": str(v_count), "color": "blue"}, f)
           
-          with open('metrics/clones-badge.json', 'w') as f:
+          with open('metrics/clones-badge.json', 'w', encoding='utf-8') as f:
               json.dump({"schemaVersion": 1, "label": "Clones (14d)", "message": str(c_count), "color": "success"}, f)
 
-          
-          print('✓ Database JSON delle metriche aggiornato con successo!')
-          "
+          print('✓ Database JSON delle metriche e badges aggiornati con successo!')
+          EOF
 
       - name: Commit & Push Changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
-          git add metrics/history.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(analytics): archive daily repository metrics [skip ci]" && git push)
+          git add metrics/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(analytics): archive daily repository metrics and badges [skip ci]" && git push)
