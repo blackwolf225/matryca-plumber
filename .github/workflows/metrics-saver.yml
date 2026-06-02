@@ -19,7 +19,7 @@ jobs:
 
       - name: Sincronizza storico esistente dal branch metrics
         run: |
-          git fetch origin metrics || true
+          git fetch origin metrics:refs/remotes/origin/metrics || echo "Nessun branch metrics remoto trovato"
           git checkout origin/metrics -- metrics/ 2>/dev/null || echo "Nessuno storico precedente trovato, creo una nuova cartella metrics"
 
       - name: Set up Python
@@ -77,7 +77,6 @@ jobs:
 
           history = {'views': {}, 'clones': {}, 'releases': {}}
 
-          # Se il file di questo trimestre esiste già, caricalo per non perdere i giorni passati
           if os.path.exists(history_file):
               try:
                   with open(history_file, 'r', encoding='utf-8') as f:
@@ -89,21 +88,18 @@ jobs:
               if key not in history:
                   history[key] = {}
 
-          # Unisci le visualizzazioni
           if isinstance(views_data, dict) and 'views' in views_data:
               for v in views_data['views']:
                   day = v.get('timestamp', '')[:10]
                   if day:
                       history['views'][day] = {'count': v.get('count', 0), 'uniques': v.get('uniques', 0)}
 
-          # Unisci le clonazioni
           if isinstance(clones_data, dict) and 'clones' in clones_data:
               for c in clones_data['clones']:
                   day = c.get('timestamp', '')[:10]
                   if day:
                       history['clones'][day] = {'count': c.get('count', 0), 'uniques': c.get('uniques', 0)}
 
-          # Unisci le release
           if isinstance(releases_data, list):
               today = now.strftime('%Y-%m-%d')
               history['releases'][today] = [
@@ -114,11 +110,9 @@ jobs:
                   for r in releases_data if isinstance(r, dict)
               ]
 
-          # Salva il file del trimestre corrente aggiornato
           with open(history_file, 'w', encoding='utf-8') as f:
               json.dump(history, f, indent=2)
 
-          # Aggiorna sempre i badge globali (così i link nel README restano statici)
           v_count = views_data.get('count', 0) if isinstance(views_data, dict) else 0
           c_count = clones_data.get('count', 0) if isinstance(clones_data, dict) else 0
 
@@ -134,22 +128,30 @@ jobs:
 
       - name: Commit & Push Changes to Dedicated Branch
         run: |
+          # Salva i file appena generati in una cartella temporanea fuori dall'albero Git
           mkdir -p /tmp/metrics_backup
           cp -r metrics/* /tmp/metrics_backup/
           
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
           
-          git fetch origin
-          git checkout metrics 2>/dev/null || git checkout -b metrics
+          # Sincronizza l'ultimo stato del branch remoto per evitare disallineamenti
+          git fetch origin metrics:refs/remotes/origin/metrics || true
           
+          # Crea un branch locale temporaneo agganciato ESATTAMENTE alla storia del metrics remoto
+          # Se il branch non esiste sul server, crea un branch orfano pulito
+          git checkout -b temp_metrics_branch origin/metrics 2>/dev/null || git checkout --orphan temp_metrics_branch
+          
+          # Pulisce la cartella metrics locale e ripristina i file aggiornati dal backup
+          rm -rf metrics
           mkdir -p metrics
           cp -r /tmp/metrics_backup/* metrics/
           
+          # Esegue l'aggiunta e il push forzando l'aggancio fast-forward sulla destinazione remota
           git add metrics/
           if ! git diff --staged --quiet; then
             git commit -m "chore(analytics): archive daily metrics [split quarterly] [skip ci]"
-            git push origin metrics
+            git push origin temp_metrics_branch:metrics
           else
             echo "Nessuna variazione nei dati rilevata rispetto all'ultimo check."
           fi
