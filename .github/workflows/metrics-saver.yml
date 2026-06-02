@@ -27,7 +27,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.METRICS_TOKEN }}
           REPO_SLUG: ${{ github.repository }}
         run: |
-          cat << 'EOF' > update_metrics.py
+          cat << 'EOF' > update_metrics_raw.py
           import os, json, sys, datetime
           from urllib.request import Request, urlopen
 
@@ -111,7 +111,8 @@ jobs:
           print("✓ Database JSON delle metriche e badges aggiornati con successo!")
           EOF
 
-          python update_metrics.py
+          # Correzione Magica: Rimuove l'indentazione visiva del file YAML per far felice Python!
+          python -c "import textwrap; code=textwrap.dedent(open('update_metrics_raw.py').read()); exec(code)"
 
       - name: Commit & Push Changes
         run: |
