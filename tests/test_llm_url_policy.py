@@ -34,3 +34,12 @@ def test_resolve_validated_llm_base_url_rejects_env_metadata(
     monkeypatch.delenv("MATRYCA_LM_BASE_URL", raising=False)
     with pytest.raises(UnsafeLlmProxyUrlError):
         resolve_validated_llm_base_url()
+
+
+def test_validate_llm_proxy_url_allows_configured_private_lan_host() -> None:
+    """OrbStack / LAN LM Studio: same host as configured base URL may be private."""
+    url = validate_llm_proxy_url(
+        "http://192.168.139.1:1234/v1",
+        configured_base_url="http://192.168.139.1:1234/v1",
+    )
+    assert url == "http://192.168.139.1:1234/v1"

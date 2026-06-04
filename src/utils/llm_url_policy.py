@@ -55,6 +55,7 @@ def _is_blocked_inference_ip(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
     *,
     hostname: str,
+    allow_configured_private: bool = False,
 ) -> bool:
     address = _normalize_inference_ip(address)
     if str(address) == "169.254.169.254":
@@ -69,15 +70,21 @@ def _is_blocked_inference_ip(
     ):
         return True
     if isinstance(address, ipaddress.IPv4Address) and address.is_private:
+        if allow_configured_private:
+            return False
         return normalize_lm_proxy_host(hostname) not in _LOCAL_LM_PROXY_HOSTS
     if isinstance(address, ipaddress.IPv6Address) and address.is_site_local:
+        if allow_configured_private:
+            return False
         return normalize_lm_proxy_host(hostname) not in _LOCAL_LM_PROXY_HOSTS
     return False
 
 
-def host_resolves_to_blocked_ip(hostname: str) -> bool:
+def host_resolves_to_blocked_ip(hostname: str, *, configured_host: str = "") -> bool:
     """Return whether ``hostname`` resolves to a blocked inference target."""
     normalized = normalize_lm_proxy_host(hostname)
+    configured_norm = normalize_lm_proxy_host(configured_host)
+    allow_configured_private = bool(configured_norm) and normalized == configured_norm
     if normalized in _BLOCKED_SSRF_HOSTS:
         return True
     try:
@@ -86,7 +93,11 @@ def host_resolves_to_blocked_ip(hostname: str) -> bool:
         literal = None
 
     if literal is not None:
-        return _is_blocked_inference_ip(literal, hostname=normalized)
+        return _is_blocked_inference_ip(
+            literal,
+            hostname=normalized,
+            allow_configured_private=allow_configured_private,
+        )
 
     try:
         for info in socket.getaddrinfo(normalized, None, type=socket.SOCK_STREAM):
@@ -94,7 +105,11 @@ def host_resolves_to_blocked_ip(hostname: str) -> bool:
             if not sockaddr:
                 continue
             resolved = ipaddress.ip_address(sockaddr[0])
-            if _is_blocked_inference_ip(resolved, hostname=normalized):
+            if _is_blocked_inference_ip(
+                resolved,
+                hostname=normalized,
+                allow_configured_private=allow_configured_private,
+            ):
                 return True
     except OSError:
         return True
@@ -132,7 +147,7 @@ def validate_llm_proxy_url(
     configured_host = configured_lm_proxy_host(configured_base_url) if configured_base_url else ""
     if not _is_safe_lm_proxy_host(hostname, configured_host=configured_host):
         _reject("base_url host is not allowed")
-    if host_resolves_to_blocked_ip(hostname):
+    if host_resolves_to_blocked_ip(hostname, configured_host=configured_host):
         _reject("base_url host is not allowed")
     return resolve_llm_base_url(override=base_url)
 
