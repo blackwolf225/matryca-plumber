@@ -1,0 +1,186 @@
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9)
+
+> **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
+> **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
+
+Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as this file).
+
+---
+
+## 0. Graph path (REQUIRED — no `--graph` flag)
+
+Matryca Plumber v1.9 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+
+**Set once per shell session (copy-paste):**
+```bash
+export LOGSEQ_GRAPH_PATH="/absolute/path/to/your/logseq/graph"
+```
+
+**One-shot (inline env for a single command):**
+```bash
+LOGSEQ_GRAPH_PATH="/absolute/path/to/your/logseq/graph" uvx matryca-plumber --help
+```
+
+If `LOGSEQ_GRAPH_PATH` is unset or invalid, graph commands return an error — fix the path before retrying.
+
+---
+
+## 1. Execution & Installation (PyPI / uvx)
+
+Matryca Plumber is on PyPI as **`matryca-plumber`**. Use **`uvx`** (uv tool runner); no permanent install required.
+
+**Entrypoint (console script):**
+```bash
+uvx matryca-plumber <subcommand> ...
+```
+
+**Discover commands:**
+```bash
+uvx matryca-plumber --help
+uvx matryca-plumber read --help
+```
+
+**Machine-readable JSON:** Global flag **`--json`** must appear **before** the subcommand:
+```bash
+uvx matryca-plumber --json read page "My Project"
+```
+
+---
+
+## 2. Core CLI (verified v1.9)
+
+Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
+Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
+
+### 2.1 Extract graph data as JSON (DO NOT grep `.md` files)
+
+Use **`read`** with a **positional** `target_type`, then an optional `query` string.
+
+| `target_type` | `query` | Use when |
+|---------------|---------|----------|
+| `page` | Logseq page title | Full spatial page context |
+| `subtree` | `Page Title\|block-uuid` or JSON | Token-efficient block extract |
+| `memory` | (omit) | L1 session memory files |
+| `dashboard` | (omit) | Vault / daemon overview |
+| `block_ast` | `Page Title\|block-uuid` | Single block AST excerpt |
+| `xray_page` | Page title | X-Ray aliases `[0]`…`[n]` for mutations |
+| `structural_hops` | hop query | Link/tag neighborhood report |
+
+**Command (canonical):**
+```bash
+export LOGSEQ_GRAPH_PATH="/absolute/path/to/your/logseq/graph"
+uvx matryca-plumber --json read page "My Project"
+```
+
+**Semantic macro (bundled context):**
+```bash
+uvx matryca-plumber context load "My Project"
+uvx matryca-plumber context load "My Project|aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+```
+
+**Search (examples):**
+```bash
+uvx matryca-plumber --json search bm25 "redis cache"
+uvx matryca-plumber --json search journal_tasks "7"
+```
+
+Always **parse JSON from stdout** when using `--json`. Never hand-parse raw `pages/*.md` or `journals/*.md`.
+
+### 2.2 MCP (FastMCP **stdio** — NOT HTTP port 8080)
+
+MCP is a **stdio** sidecar: the host (Cursor, Claude Desktop, etc.) spawns `matryca-plumber` and talks JSON-RPC over stdin/stdout. There is **no** `mcp --port` flag in v1.9.
+
+**Requirements:**
+1. `LOGSEQ_GRAPH_PATH` set to the vault root.
+2. `MATRYCA_MCP_ENABLED=true` (off by default for safety).
+
+**Host config pattern (Cursor / Claude Desktop):**
+```json
+{
+  "mcpServers": {
+    "matryca-logseq": {
+      "command": "uvx",
+      "args": ["matryca-plumber"],
+      "env": {
+        "LOGSEQ_GRAPH_PATH": "/absolute/path/to/your/logseq/graph",
+        "MATRYCA_MCP_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+
+With no CLI subcommand and MCP enabled, `uvx matryca-plumber` starts the **stdio** MCP server.  
+For interactive graph work without MCP, prefer the CLI in section 2.1.
+
+### 2.3 Diagnostics & audit (no `doctor` command in v1.9)
+
+There is **no** `doctor` subcommand. Use these instead:
+
+| Goal | Command |
+|------|---------|
+| Bootstrap / graph insights dashboard | `uvx matryca-plumber plumber audit` or `uvx matryca-plumber audit` |
+| Semantic cluster neighborhoods | `uvx matryca-plumber plumber cluster` or `uvx matryca-plumber cluster` |
+| Sovereign UI + pre-flight checks | `uvx matryca-plumber status` (opens UI on `http://127.0.0.1:8500`; does not start daemon alone) |
+| Block-reference lint | `uvx matryca-plumber lint block_refs` |
+| Daemon lifecycle | `uvx matryca-plumber plumber start` / `plumber stop` |
+
+**JSON audit output:**
+```bash
+export LOGSEQ_GRAPH_PATH="/absolute/path/to/your/logseq/graph"
+uvx matryca-plumber --json plumber audit
+```
+
+---
+
+## 3. Zero-shot examples (small LLMs — copy exactly)
+
+**A. Help + env check**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --help
+```
+
+**B. Read one page as JSON**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --json read page "My Project"
+```
+
+**C. Recent journal tasks (last 7 days) as JSON**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --json search journal_tasks "7"
+```
+
+**D. Run graph audit after user reports errors**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --json plumber audit
+```
+
+**E. Load bundled agent context (markdown stdout)**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber context load "My Project"
+```
+
+For **today's journal page** as `read page`, use the **exact Logseq page title** shown in the app (locale-dependent), not a file path like `journals/2026_06_05.md`.
+
+---
+
+## 4. Anti-patterns (DO NOT DO THIS)
+
+* **DO NOT** `grep`, `find`, or write Python to parse `pages/` / `journals/` — use `uvx matryca-plumber read` / `search` / `context load`.
+* **DO NOT** `git clone https://github.com/MarcoPorcellato/matryca-plumber` to "use" the tool — use **`uvx matryca-plumber`** from PyPI.
+* **DO NOT** `pip install matryca-plumber` unless the user explicitly asked for a global install.
+* **DO NOT** invent flags: no `--graph`, no `doctor`, no `mcp --port 8080` in v1.9.
+* **DO NOT** ask the user to install Python dependencies manually — **`uvx`** resolves the wheel.
+
+---
+
+## 5. Further reading (humans & agents)
+
+* Operator README: `README.md`
+* Agent DX spec: `docs/openspec/agent-dx.md`
+* Security (MCP gate, graph allowlist): `SECURITY.md`

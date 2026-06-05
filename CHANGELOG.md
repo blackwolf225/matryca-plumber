@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Agent onboarding (`llms.txt`)** — Imperative v1.9 guide for small LLMs: `LOGSEQ_GRAPH_PATH` (no `--graph`), verified `uvx matryca-plumber --json read …` / `context load` / `plumber audit`, FastMCP **stdio** (`MATRYCA_MCP_ENABLED`), anti-patterns; mirrored at `.well-known/llms.txt`; README agent hook updated.
+
 ## [1.9.1] - 2026-06-01
 
 ### Changed
