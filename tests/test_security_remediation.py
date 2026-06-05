@@ -23,6 +23,13 @@ def ui_auth_token(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_ui_token_for_tests()
 
 
+@pytest.fixture
+def graph_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    (tmp_path / "pages").mkdir()
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(tmp_path))
+    return tmp_path
+
+
 def test_require_loopback_client_rejects_remote_even_when_lan_allowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -39,7 +46,7 @@ def test_require_loopback_client_rejects_remote_even_when_lan_allowed(
     assert exc_info.value.status_code == 403
 
 
-def test_api_health_is_public() -> None:
+def test_api_health_is_public(graph_root: Path) -> None:
     with TestClient(app) as client:
         response = client.get("/api/health")
     assert response.status_code == 200

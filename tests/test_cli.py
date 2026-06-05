@@ -194,12 +194,14 @@ def test_main_invalid_json_payload_exits_one(
     assert err
 
 
-def test_subprocess_read_memory_routes() -> None:
+def test_subprocess_read_memory_routes(tmp_path: Path) -> None:
+    (tmp_path / "pages").mkdir(parents=True)
     proc = subprocess.run(
         [sys.executable, "-m", "src.cli", "read", "memory"],
         capture_output=True,
         text=True,
         check=False,
+        env={**os.environ, "LOGSEQ_GRAPH_PATH": str(tmp_path)},
     )
     assert proc.returncode == 0
     assert proc.stdout
@@ -263,12 +265,13 @@ def test_subprocess_xray_page_then_mutate_alias_across_invocations(tmp_path: Pat
     assert "status:: active" not in page_text
 
 
-def test_subprocess_missing_subcommand_exits_nonzero() -> None:
+def test_subprocess_missing_subcommand_exits_nonzero(tmp_path: Path) -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "src.cli"],
         capture_output=True,
         text=True,
         check=False,
+        env={**os.environ, "LOGSEQ_GRAPH_PATH": str(tmp_path)},
     )
     assert proc.returncode != 0
     assert "required" in proc.stderr.lower() or "usage" in proc.stderr.lower()

@@ -16,11 +16,11 @@ lint: ## Run ruff to check for linting errors
 typecheck: ## Run mypy for strict type checking
 	uv run mypy src/ tests/
 
-test: ## Run the pytest suite
-	uv run pytest -q
+test: ## Run the pytest suite (parallel via pytest-xdist)
+	uv run pytest -n auto -q
 
 test-fast: ## Fast local/release gate: no coverage, skip security soak hang
-	uv run pytest --no-cov --ignore=tests/test_security_remediation.py -q
+	uv run pytest -n auto --no-cov --ignore=tests/test_security_remediation.py -q
 
 test-fast-parallel: ## test-fast with pytest-xdist (-n auto); daemon tests may flake
 	uv run pytest -n auto --no-cov --ignore=tests/test_security_remediation.py -q

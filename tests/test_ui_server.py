@@ -27,7 +27,7 @@ def auth_headers() -> dict[str, str]:
     return {"X-Matryca-Token": "test-ui-token"}
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def graph_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "pages").mkdir()
     monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(tmp_path))
@@ -516,7 +516,10 @@ def test_get_lm_models_rejects_unsafe_base_url(
     assert "not allowed" in response.json()["detail"]
 
 
-def test_get_lm_models_rejects_non_http_scheme(auth_headers: dict[str, str]) -> None:
+def test_get_lm_models_rejects_non_http_scheme(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+) -> None:
     with TestClient(app) as client:
         response = client.get(
             "/api/lm-models",

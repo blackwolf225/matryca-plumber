@@ -43,6 +43,8 @@ def test_plumber_entry_status_opens_ui_without_starting_daemon(
     ui_calls: list[bool] = []
     start_calls: list[bool] = []
 
+    monkeypatch.setattr("src.cli.try_prepare_matryca_runtime_from_env", lambda: None)
+
     def _run_ui_server() -> None:
         ui_calls.append(True)
 

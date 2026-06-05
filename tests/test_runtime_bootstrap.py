@@ -130,6 +130,7 @@ def test_try_prepare_from_env_without_graph(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("LOGSEQ_GRAPH_PATH", raising=False)
+    monkeypatch.setattr("src.agent.plumber_config.reload_plumber_dotenv", lambda **_kw: None)
     ops = tmp_path / "only-logs" / "ops.log"
     monkeypatch.setenv("MATRYCA_PLUMBER_LOG_PATH", str(ops))
     try_prepare_matryca_runtime_from_env()
