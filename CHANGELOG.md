@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Documentation (v1.9.2)** — Aligned README, ARCHITECTURE, PROJECT_DIARY, CONTRIBUTING, SECURITY, SYSTEM_PROMPT, and OpenSpec index with `llms.txt` agent onboarding; added [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md); test count badges updated to 610+.
-
 ## [1.9.2] - 2026-06-05
 
 ### Added
@@ -19,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Documentation (v1.9.2)** — Aligned README, ARCHITECTURE, PROJECT_DIARY, CONTRIBUTING, SECURITY, SYSTEM_PROMPT, and OpenSpec index with `llms.txt` agent onboarding; added [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md); RELEASE_PROCESS/BRANDING cross-links; test count badges updated to 610+.
 - **Dependabot lockfile sync** — `.github/workflows/dependabot-uv-fix.yml` runs `uv lock` on Dependabot PRs and pushes `uv.lock` fixes so CI stays green.
 - **README** — Restructured agent/web-scraper entry to prefer PyPI `uvx matryca-plumber` over `git clone`.
 - **Dependencies** — Routine bumps: `openai`, `rich`, `packaging`, `mypy`, `pytest-cov` (Dependabot).
