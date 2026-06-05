@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.9.0 (Structural graph hygiene + agent DX)  
+**Version:** 1.9.2 (Structural graph hygiene + agent DX + agent onboarding)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -22,11 +22,13 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 
 **FastMCP is auxiliary.** The product’s center of gravity is `matryca plumber start` plus the Sovereign UI. MCP attaches the identical read/write path when an external host spawns `matryca-plumber` without CLI-shaped arguments.
 
-**Quality bar:** **550+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
+**Quality bar:** **610+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
 **v1.9 focus:** **Structural graph hygiene** without new LLM cognitive modules — zero-LLM link rot detection, OCC-safe `dead-link::` / `missing-asset::` flags, agent-native CLI (`--json`, `context load`, `read subtree`), and Journey Log visibility in today's journal. See [Structural link verification (v1.9)](#structural-link-verification-v19) and [Agent-centric DX (v1.9)](#agent-centric-dx-v19).
+
+**v1.9.2 focus:** **Agent-zero-friction distribution** — canonical [`llms.txt`](../llms.txt) / [`.well-known/llms.txt`](../.well-known/llms.txt) for external LLM hosts, PyPI `uvx` execution contract, lockfile security refresh (`aiohttp` ≥3.14.0), and Dependabot `uv.lock` auto-sync in CI. See [Agent onboarding (v1.9.2)](#agent-onboarding-v192) and [Release engineering](#release-engineering).
 
 ---
 
@@ -515,6 +517,38 @@ flowchart TB
 
 ---
 
+## Agent onboarding (v1.9.2)
+
+**Goal:** Give autonomous agents a **single, versioned instruction surface** that matches the shipped PyPI wheel — without requiring a git checkout.
+
+| Artifact | Role |
+|----------|------|
+| [`llms.txt`](../llms.txt) | Repo-root agent guide; linked from README agent callout |
+| [`.well-known/llms.txt`](../.well-known/llms.txt) | Canonical path for tools that resolve `.well-known/llms.txt` |
+| [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md) | Maintainer contract: discovery paths, anti-patterns, sync checklist |
+
+**Execution rules encoded in `llms.txt`:**
+
+1. Set **`LOGSEQ_GRAPH_PATH`** (no `--graph` flag).
+2. Run **`uvx matryca-plumber`** — never `git clone` + editable install unless the user explicitly develops from source.
+3. Prefer **`--json`** for structured stdout; CLI applies `redact_secrets_in_text` before emission.
+4. Use **`read` / `search` / `context load`** (or MCP on the same `graph_dispatch` plane) — never scrape `pages/*.md` by hand.
+
+When CLI surface changes, update both `llms.txt` files in the same PR and ship a patch release so `uvx` consumers receive accurate commands.
+
+---
+
+## Release engineering
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | Tag push `v*` | Build frontend + wheel, GitHub Release notes from `CHANGELOG.md`, PyPI publish |
+| [`.github/workflows/dependabot-uv-fix.yml`](../.github/workflows/dependabot-uv-fix.yml) | Dependabot PR open/sync | Runs `uv lock` on the PR branch and commits lockfile fixes so CI stays green |
+
+Release notes are extracted with [`scripts/extract_changelog.py`](../scripts/extract_changelog.py) — do not rely on GitHub auto-generated commit summaries. See [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
+
+---
+
 ## Distribution and entry points
 
 ### Zero-install and global install
@@ -601,6 +635,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/ingest.md`](openspec/ingest.md) — atomic `ingest_document` pipeline
 - [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
 - [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)
+- [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md) — `llms.txt` / PyPI `uvx` agent contract (v1.9.2)
+- [`../llms.txt`](../llms.txt) — agent execution guide (mirrored under `.well-known/`)
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy
 - [`../README.md`](../README.md) — operator quick start
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — `make check`, dev setup

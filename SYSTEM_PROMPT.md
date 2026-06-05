@@ -32,10 +32,10 @@ This is non-negotiable for both MCP agents and the Plumber daemon. Patience beat
 **Authorship protocol:** Pages created by Matryca Plumber (seed pages, auto-split children, backlink contexts) are automatically stamped at the top of the file:
 
 ```text
-made-by:: matryca plumber v1.9.0
+made-by:: matryca plumber v<installed-version>
 ```
 
-The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py`). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
+The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py` — e.g. `v1.9.2` on PyPI). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
 
 **Token economy:** Call the smallest MCP tool with the narrowest discriminator. Read once, plan once, mutate surgically. Never dump whole vaults into context.
 
@@ -63,7 +63,7 @@ Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**.
 
 - **Atomic unit:** the bullet (`- `), not the page paragraph.
 - **Hierarchy:** indentation = parent/child semantics.
-- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v1.9.0`.
+- **Page properties (frontmatter):** `key:: value` lines at the **absolute top of the file (line 0 region)** — **without** a leading bullet dash. Blank line before the first outliner bullet. Examples: `tags::`, `alias::`, `made-by:: matryca plumber v<installed-version>`.
 - **Block properties:** `key:: value` **immediately after the parent bullet text**, indented **exactly +2 spaces** relative to the bullet, **before** continuation lines or child bullets. Examples: `id::`, `source::`, `matryca-plumber:: true`.
 - **Multiline blocks (Shift+Enter):** continuation body lines inside one logical bullet must be padded to **`bullet_indent + 2 spaces`**. Only the first line has `- `. Never insert child bullets or orphan properties between continuation lines — this breaks Datalog indexing.
 - **Targetability:** durable anchors need `id:: <uuid>` on disk.
@@ -458,7 +458,7 @@ If new information **contradicts** existing blocks, you **must not** silently ov
 
 ## Agent-native CLI (same contract as MCP)
 
-When the host runs **`matryca`** instead of MCP tools:
+When the host runs **`uvx matryca-plumber`** or **`matryca`** instead of MCP tools (prefer PyPI `uvx` — see [`llms.txt`](llms.txt)):
 
 | Pattern | Example |
 |---------|---------|
@@ -466,7 +466,7 @@ When the host runs **`matryca`** instead of MCP tools:
 | Context macro | `matryca context load "My Project"` or `… load "Page\|uuid"` |
 | Subtree read | `matryca read subtree "Page\|uuid"` |
 
-Spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Secrets are redacted in JSON output.
+Spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Distribution guide for hosts without MCP: [`llms.txt`](llms.txt) / [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md). Secrets are redacted in JSON output.
 
 **Plumber hygiene properties (daemon, read-only for agents):** Blocks may carry `dead-link:: true` or `missing-asset:: true` after background verification ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)). Do not remove these flags unless the operator fixed the URL or restored the asset.
 

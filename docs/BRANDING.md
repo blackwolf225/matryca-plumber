@@ -17,6 +17,7 @@ Use this guide in README, UI copy, operator docs, and release notes.
 2. **“Matryca” alone** is reserved for the company (**Matryca.ai**), graph page titles configured in wiki YAML (e.g. `Matryca Dashboard`), or block headings intentionally stamped in the vault (e.g. `### Matryca Backlink Context`).
 3. **Attribution** — Where helpful (README intro, pre-flight modal, CONTRIBUTING), include: *Developed by Marco Porcellato · [Matryca.ai](https://matryca.ai)*.
 4. **Technical identifiers** — Keep unchanged: `matryca-plumber`, `matryca plumber`, `MATRYCA_*`, `X-Matryca-Token`, `matryca-plumber::`, `MatrycaWikiConfig`, `MatrycaMCPServer`.
+5. **AI agents** — Direct autonomous hosts to [`llms.txt`](../llms.txt) / PyPI `uvx matryca-plumber`; do not instruct them to `git clone` this repo unless they are contributing code.
 
 ## Examples
 

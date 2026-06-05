@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Documentation (v1.9.2)** — Aligned README, ARCHITECTURE, PROJECT_DIARY, CONTRIBUTING, SECURITY, SYSTEM_PROMPT, and OpenSpec index with `llms.txt` agent onboarding; added [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md); test count badges updated to 610+.
+
+## [1.9.2] - 2026-06-05
+
 ### Added
 
-- **Agent onboarding (`llms.txt`)** — Imperative v1.9 guide for small LLMs: `LOGSEQ_GRAPH_PATH` (no `--graph`), verified `uvx matryca-plumber --json read …` / `context load` / `plumber audit`, FastMCP **stdio** (`MATRYCA_MCP_ENABLED`), anti-patterns; mirrored at `.well-known/llms.txt`; README agent hook updated.
+- **Agent onboarding (`llms.txt`)** — `.well-known/llms.txt` standard for autonomous agents (Cursor, Claude Code, Windsurf, Hermes): zero-shot `uvx matryca-plumber` examples, `LOGSEQ_GRAPH_PATH` (no `--graph`), verified `--json read` / `context load` / `plumber audit`, FastMCP stdio (`MATRYCA_MCP_ENABLED`), and anti-patterns to avoid local CLI hallucinations; root `llms.txt` mirror; README agent hook updated.
+
+### Changed
+
+- **Dependabot lockfile sync** — `.github/workflows/dependabot-uv-fix.yml` runs `uv lock` on Dependabot PRs and pushes `uv.lock` fixes so CI stays green.
+- **README** — Restructured agent/web-scraper entry to prefer PyPI `uvx matryca-plumber` over `git clone`.
+- **Dependencies** — Routine bumps: `openai`, `rich`, `packaging`, `mypy`, `pytest-cov` (Dependabot).
+
+### Security
+
+- **Transitive `aiohttp`** — `uv.lock` pins `aiohttp` ≥3.14.0 to remediate upstream CVEs pulled via the dependency tree (Dependabot #5, #6).
+- **CLI stdout / CodeQL** — Cleared clear-text-logging false positives: transport layer documents intentional `sys.stdout` use; machine output stays secret-sanitized via `redact_secrets_in_text` and targeted suppressions (`safe_str` helper).
 
 ## [1.9.1] - 2026-06-01
 

@@ -1,4 +1,4 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.9)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.2)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
@@ -9,7 +9,7 @@ Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as thi
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.9 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.9.2 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +47,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.9)
+## 2. Core CLI (verified v1.9.2)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -88,7 +88,7 @@ Always **parse JSON from stdout** when using `--json`. Never hand-parse raw `pag
 
 ### 2.2 MCP (FastMCP **stdio** — NOT HTTP port 8080)
 
-MCP is a **stdio** sidecar: the host (Cursor, Claude Desktop, etc.) spawns `matryca-plumber` and talks JSON-RPC over stdin/stdout. There is **no** `mcp --port` flag in v1.9.
+MCP is a **stdio** sidecar: the host (Cursor, Claude Desktop, etc.) spawns `matryca-plumber` and talks JSON-RPC over stdin/stdout. There is **no** `mcp --port` flag in the v1.9 line.
 
 **Requirements:**
 1. `LOGSEQ_GRAPH_PATH` set to the vault root.
@@ -113,7 +113,7 @@ MCP is a **stdio** sidecar: the host (Cursor, Claude Desktop, etc.) spawns `matr
 With no CLI subcommand and MCP enabled, `uvx matryca-plumber` starts the **stdio** MCP server.  
 For interactive graph work without MCP, prefer the CLI in section 2.1.
 
-### 2.3 Diagnostics & audit (no `doctor` command in v1.9)
+### 2.3 Diagnostics & audit (no `doctor` command)
 
 There is **no** `doctor` subcommand. Use these instead:
 
@@ -174,7 +174,7 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 * **DO NOT** `grep`, `find`, or write Python to parse `pages/` / `journals/` — use `uvx matryca-plumber read` / `search` / `context load`.
 * **DO NOT** `git clone https://github.com/MarcoPorcellato/matryca-plumber` to "use" the tool — use **`uvx matryca-plumber`** from PyPI.
 * **DO NOT** `pip install matryca-plumber` unless the user explicitly asked for a global install.
-* **DO NOT** invent flags: no `--graph`, no `doctor`, no `mcp --port 8080` in v1.9.
+* **DO NOT** invent flags: no `--graph`, no `doctor`, no `mcp --port 8080`.
 * **DO NOT** ask the user to install Python dependencies manually — **`uvx`** resolves the wheel.
 
 ---
@@ -182,5 +182,6 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 ## 5. Further reading (humans & agents)
 
 * Operator README: `README.md`
-* Agent DX spec: `docs/openspec/agent-dx.md`
-* Security (MCP gate, graph allowlist): `SECURITY.md`
+* Agent onboarding spec: `docs/openspec/agent-onboarding.md`
+* Agent DX spec (CLI JSON, Journey Log): `docs/openspec/agent-dx.md`
+* Security (MCP gate, graph allowlist, CLI redaction): `SECURITY.md`

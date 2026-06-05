@@ -31,8 +31,11 @@ Matryca Plumber ships several **defense-in-depth** controls you should configure
 | Graph path allowlist | `MATRYCA_ALLOWED_GRAPH_ROOTS` | (optional) | Settings UI cannot point `LOGSEQ_GRAPH_PATH` outside home, repo, temp, or declared roots. |
 | UI rate limits | `MATRYCA_UI_RATE_LIMIT_*` | 120 / 30 | Separate budgets for authenticated vs probing traffic on `/api/*`. |
 | Log redaction | `MATRYCA_PLUMBER_LOG_REDACT_SECRETS` (alias `MATRYCA_LOG_REDACT_SECRETS`) | `true` | Masks Bearer tokens, `sk-*` keys, and JWT-shaped material in ops logs. |
+| CLI stdout redaction | _(always on for `--json` / machine output)_ | — | `redact_secrets_in_text` masks API keys and credential-shaped properties before writing to `sys.stdout`; CodeQL suppressions document stdout as the intentional CLI channel. |
 | MCP error sanitization | `MATRYCA_DEBUG` | `false` | When off, MCP tools do not return raw OS paths in error strings. |
 | CPU sandbox | `MATRYCA_CPU_SANDBOX` / `MATRYCA_PLUMBER_NICE_LEVEL` | `true` / `19` | Low-priority scheduling and optional affinity (`[edge]` extra for `psutil`). |
+
+**Dependency updates:** Transitive security fixes land via `uv.lock` (for example `aiohttp` ≥3.14.0 in v1.9.2). Dependabot PRs may trigger [`.github/workflows/dependabot-uv-fix.yml`](.github/workflows/dependabot-uv-fix.yml) to regenerate the lockfile on the PR branch.
 
 **Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host (Cursor/Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`.
 

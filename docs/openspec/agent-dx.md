@@ -5,6 +5,8 @@
 
 v1.8 delivered Ironclad AST parity and OCC. v1.9 improves **headless agent ergonomics**: machine-readable CLI output, semantic macros, token-efficient reads, and **visible daemon activity** in today's journal.
 
+**v1.9.2** adds the distribution layer: [`llms.txt`](../../llms.txt) / [`.well-known/llms.txt`](../../.well-known/llms.txt) and [`agent-onboarding.md`](agent-onboarding.md) — verified `uvx` commands and anti-patterns for external hosts.
+
 ---
 
 ## Surface map
@@ -154,6 +156,7 @@ Global: **`--json`** on any subcommand.
 
 ## Related reading
 
+- [`agent-onboarding.md`](agent-onboarding.md) — `llms.txt`, PyPI `uvx`, maintainer sync checklist
 - [`link-verification.md`](link-verification.md) — dead-link / missing-asset pipeline (feeds Journey Log metrics)
 - [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) — agent tool reference (updated for `subtree`)
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — v1.9 structural hygiene section

@@ -110,3 +110,4 @@ This follows *create on first meaningful write* for stateful JSON so checkpoints
 - [`llm-performance.md`](llm-performance.md) — v1.8 KV-cache layout, memory teardown, cooperative harvest.
 - [`link-verification.md`](link-verification.md) — v1.9 link registry and hygiene properties.
 - [`agent-dx.md`](agent-dx.md) — v1.9 CLI JSON, context macro, Journey Log.
+- [`agent-onboarding.md`](agent-onboarding.md) — v1.9.2 `llms.txt` / PyPI `uvx` agent contract.

@@ -1,12 +1,35 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.0**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.2**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-05] v1.9.2 — Agent-zero-friction & security patch
+
+### Context
+
+Patch release after the v1.9 feature line shipped: external agents increasingly consume Matryca via **`uvx matryca-plumber`**, but README-only guidance was insufficient. Enterprise operators also needed a public signal that transitive **`aiohttp`** CVEs were remediated in the lockfile.
+
+### Milestones shipped
+
+1. **`llms.txt` + `.well-known/llms.txt`** — Imperative agent guide: `LOGSEQ_GRAPH_PATH`, verified CLI/MCP commands, PyPI/`uvx` anti-patterns (no `git clone` hallucinations).
+2. **OpenSpec** — [`docs/openspec/agent-onboarding.md`](openspec/agent-onboarding.md); README agent hook and documentation map updated.
+3. **Security** — `uv.lock` pins `aiohttp` ≥3.14.0; CLI stdout/CodeQL clear-text logging documented and suppressed where stdout is the intentional channel.
+4. **CI** — [`.github/workflows/dependabot-uv-fix.yml`](../.github/workflows/dependabot-uv-fix.yml) auto-syncs `uv.lock` on Dependabot PRs.
+
+### Documentation
+
+Aligned **README**, **ARCHITECTURE**, **CONTRIBUTING**, **SECURITY**, **SYSTEM_PROMPT** (dynamic `made-by::` examples), and **openspec** index with v1.9.2.
+
+### Architectural outcome
+
+Distribution surface for agents is now **first-class** alongside daemon/MCP: the PyPI wheel, `llms.txt`, and OpenSpec stay in sync per patch release.
 
 ---
 

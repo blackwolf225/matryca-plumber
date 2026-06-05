@@ -17,7 +17,7 @@ This project exists so humans and **autonomous local systems** can collaborate o
 | **Operator control plane** | `src/cli/**` (incl. `ui_server.py`, `ui_auth.py`), `frontend/` | **Zero-Trust** local API (`X-Matryca-Token`), cockpit UX |
 | **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path. Standalone tools: **`store_fact`** (identity), **`ingest_document`** (atomic external Markdown — see [`docs/openspec/ingest.md`](docs/openspec/ingest.md)). |
 
-Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9).
+Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`llms.txt`](llms.txt) (agent execution guide).
 
 **Configuration:** [`.env.example`](.env.example) is the operator reference, split into **Operator essentials** (day-one / Settings drawer) and **Advanced / high impact** (mutating lint, MCP, security). Each key documents **Default (code)** and **Template** when they differ. Agents must keep `.env.example` in sync when changing env vars — see [`.cursor/rules/07-env-example.mdc`](.cursor/rules/07-env-example.mdc). `MATRYCA_LM_INSTRUCTOR_*` and `MATRYCA_LLM_PROMPT_CACHE_MODE` are legacy or reserved (not read by runtime). CI: `tests/test_env_example_coverage.py`.
 
@@ -200,11 +200,21 @@ That means, in order:
 
 1. **Ruff** — auto-fix and format the tree, then lint clean
 2. **Mypy** — strict type-check on `src/` and `tests/`
-3. **Pytest** — full suite (**550+** targets on `main`; slow tests excluded unless you run `make perf`)
+3. **Pytest** — full suite (**610+** targets on `main`; slow tests excluded unless you run `make perf`)
 
 GitHub Actions on pushes and pull requests to **`main`** runs the same gate (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make check`. **Any failing test blocks merge.**
 
 Never commit secrets (no `.env`, tokens, or private graph paths in git).
+
+### Agent-facing documentation (`llms.txt`)
+
+When you add, rename, or remove **CLI subcommands or flags** that external agents rely on:
+
+1. Verify commands with `LOGSEQ_GRAPH_PATH` set and `uvx matryca-plumber …`.
+2. Update **[`llms.txt`](llms.txt)** and **[`.well-known/llms.txt`](.well-known/llms.txt)** in the **same PR** (byte-identical).
+3. Cross-check [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) and [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
+
+Patch releases should ship after agent-surface changes so PyPI `uvx` consumers receive accurate instructions.
 
 **Background OS service:** `matryca service install` must target a **stable** binary (for example after `uv tool install matryca-plumber`). Do not install the daemon from ephemeral `uvx` — see [README.md](README.md) (section **Background OS service (`matryca service`)**).
 

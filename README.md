@@ -7,7 +7,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/pypi/pyversions/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 
-[![Tests](https://img.shields.io/badge/tests-550%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-610%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L135)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/mypy-strict-2b6cb0)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/CONTRIBUTING.md)
@@ -23,11 +23,11 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified v1.9 CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, no `--graph`).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.2** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **v1.9 — Structural graph hygiene + agent DX.** Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **Current: v1.9.2** — Agent-zero-friction (`llms.txt` / `.well-known/llms.txt`), dependency security refresh, Dependabot `uv.lock` CI sync. **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -128,6 +128,7 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Atomic document ingestion**: **`ingest_document`** parses external Markdown via an OS temp file (never under `pages/`), stamps fresh `id::` UUIDs, and appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, with optional `LOG` / `GLOSSARY` ledgers ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
 - **Structural link verification (v1.9)**: Passive harvest of URLs and `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks; OCC-safe **`dead-link::`** / **`missing-asset::`** block properties ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)).
 - **Agent-centric DX (v1.9)**: Global CLI **`--json`**, **`matryca context load`**, **`read subtree`**, and **Journey Log** (`## 🤖 Matryca Activity` on today's journal) ([`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md)).
+- **Agent onboarding (v1.9.2)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
 
 ---
 
@@ -183,6 +184,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 🖥️ **Edge computing profile (v1.8):** KV-cache-aligned prompts (`PagePromptSession`), bounded RAM (BM25 postings-lite, semantic cache LRU, post-bootstrap teardown), and cooperative bootstrap I/O — tuned for **16 GB laptops** and vaults up to **~10,000** pages. See [docs/v1.8-OPTIMIZATION-PLAN.md](docs/v1.8-OPTIMIZATION-PLAN.md).
 * 🔗 **Structural hygiene (v1.9):** Background link rot and missing-asset detection without LLM tokens; visible duty-cycle summaries in your daily journal.
 * 🤖 **Agent-native CLI (v1.9):** `matryca --json …` for machine-readable stdout; `matryca context load` and `read subtree` to shrink context windows.
+* 📋 **Agent onboarding (v1.9.2):** [`llms.txt`](llms.txt) — canonical `uvx` commands for Cursor, Claude Code, and other hosts; no `git clone` required.
 
 ---
 
@@ -257,7 +259,7 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (550+ passing, Mypy strict)
+# Run tests (610+ passing, Mypy strict)
 make check
 
 # Optional: slow memory / harvest soak tests
@@ -274,7 +276,7 @@ make perf
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
-| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX). |
+| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.2 agent onboarding). |
 | [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) | LLM prompt layout, memory, and I/O contracts. |
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
@@ -283,6 +285,8 @@ make perf
 | [`docs/openspec/ingest.md`](docs/openspec/ingest.md) | `ingest_document` atomic ingestion pipeline. |
 | [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) | v1.9 URL/asset hygiene and sidecar registry. |
 | [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) | v1.9 CLI JSON, context macro, Journey Log. |
+| [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) | Agent execution guide (PyPI `uvx`, verified commands). |
+| [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) | `llms.txt` contract, anti-patterns, maintainer checklist. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |
