@@ -1,0 +1,41 @@
+name: Dependabot uv.lock Auto-Fixer
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write # Necessario per permettere all'Action di fare il push
+
+jobs:
+  fix-uv-lock:
+    runs-on: ubuntu-latest
+    # Fa partire l'azione SOLO se l'autore della PR è Dependabot
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Checkout della Pull Request
+        uses: actions/checkout@v4
+        with:
+          # Assicuriamoci di essere sul branch di Dependabot e non su main
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Installa uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Rigenera il file uv.lock
+        run: uv lock
+
+      - name: Commit e Push delle correzioni
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          
+          # Controlla se ci sono effettivamente dei cambiamenti da salvare
+          if ! git diff --staged --quiet; then
+            git commit -m "build(deps): auto-sync uv.lock for dependabot"
+            git push
+          else
+            echo "Il file uv.lock era già aggiornato. Nessuna azione necessaria."
+          fi
