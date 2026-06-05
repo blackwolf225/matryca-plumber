@@ -232,21 +232,21 @@ def _wrap_cli_json(command: str, result: str | dict[str, Any]) -> dict[str, Any]
 def _emit_result(result: str | dict[str, Any], *, as_json: bool = False, command: str = "") -> None:
     if as_json:
         safe_result = _wrap_cli_json(command, result)
-        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
-        # codeql[py/clear-text-logging-sensitive-data]
-        sys.stdout.write(json.dumps(safe_result, ensure_ascii=False, indent=2))
+        # stdout is the CLI output channel; payload sanitized
+        safe_str = json.dumps(safe_result, ensure_ascii=False, indent=2)
+        sys.stdout.write(safe_str)  # codeql[py/clear-text-logging-sensitive-data]
         sys.stdout.write("\n")
         return
     if isinstance(result, dict):
         safe_result = _sanitize_for_output(result)
-        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
-        # codeql[py/clear-text-logging-sensitive-data]
-        sys.stdout.write(json.dumps(safe_result, ensure_ascii=False, indent=2))
+        # stdout is the CLI output channel; payload sanitized
+        safe_str = json.dumps(safe_result, ensure_ascii=False, indent=2)
+        sys.stdout.write(safe_str)  # codeql[py/clear-text-logging-sensitive-data]
         sys.stdout.write("\n")
     else:
-        # stdout is the CLI output channel; payload sanitized via redact_secrets_in_text
-        # codeql[py/clear-text-logging-sensitive-data]
-        sys.stdout.write(_redact_text_if_sensitive(result))
+        # stdout is the CLI output channel; payload sanitized
+        safe_str = _redact_text_if_sensitive(result)
+        sys.stdout.write(safe_str)  # codeql[py/clear-text-logging-sensitive-data]
         if not result.endswith("\n"):
             sys.stdout.write("\n")
 
