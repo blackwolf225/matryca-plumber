@@ -27,6 +27,10 @@ Operators reported **journal clutter**: each daemon duty cycle appended `## 🤖
 
 Journey Log remains a **view** over daemon activity (Markdown-only system of record). The journal shows **one foldable block per day** for operators; MCP `append_journal` stays append-only for explicit agent notes.
 
+### Documentation
+
+README, ARCHITECTURE, OpenSpec [`agent-dx.md`](openspec/agent-dx.md) §4, `llms.txt`, and release notes aligned for **v1.9.4 — The "Clean Journal" Update**.
+
 ---
 
 ## [2026-06-05] v1.9.3 — Live Telemetry (Sovereign UI)
