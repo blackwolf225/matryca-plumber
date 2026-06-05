@@ -10,6 +10,7 @@ from src.graph.journal_task_scan import (
     format_journal_task_review_markdown,
     journal_file_path,
     scan_journal_tasks,
+    upsert_matryca_activity_block,
 )
 
 
@@ -81,3 +82,54 @@ def test_append_journal_section_dry_run(tmp_path: Path) -> None:
     )
     assert out["ok"] is True
     assert out["dry_run"] is True
+
+
+def test_upsert_matryca_activity_creates_single_bullet(tmp_path: Path) -> None:
+    day = date(2026, 6, 5)
+    line = "- 🤖 Matryca Activity — indexed 1 page(s); 1 duty cycle(s)"
+    out = upsert_matryca_activity_block(tmp_path, line, as_of=day, dry_run=False)
+    assert out["ok"] is True
+    text = journal_file_path(tmp_path, day).read_text(encoding="utf-8")
+    assert text.strip() == line
+    assert text.count("🤖 Matryca Activity") == 1
+
+
+def test_upsert_matryca_activity_replaces_existing_bullet(tmp_path: Path) -> None:
+    day = date(2026, 6, 5)
+    path = journal_file_path(tmp_path, day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("- daily note\n- 🤖 Matryca Activity — indexed 1 page(s)\n", encoding="utf-8")
+    updated = "- 🤖 Matryca Activity — indexed 3 page(s); 2 duty cycle(s)"
+    upsert_matryca_activity_block(tmp_path, updated, as_of=day, dry_run=False)
+    text = path.read_text(encoding="utf-8")
+    assert "- daily note" in text
+    assert "indexed 3 page(s)" in text
+    assert "indexed 1 page(s)" not in text
+    assert text.count("🤖 Matryca Activity") == 1
+
+
+def test_upsert_matryca_activity_strips_legacy_sections(tmp_path: Path) -> None:
+    day = date(2026, 6, 5)
+    path = journal_file_path(tmp_path, day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "- morning note",
+                "",
+                "## 🤖 Matryca Activity",
+                "- indexed 1 page(s); checked 4 link(s).",
+                "## 🤖 Matryca Activity",
+                "- indexed 1 page(s); checked 4 link(s).",
+                "",
+            ],
+        ),
+        encoding="utf-8",
+    )
+    line = "- 🤖 Matryca Activity — indexed 2 page(s); checked 8 link(s); 2 duty cycle(s)"
+    upsert_matryca_activity_block(tmp_path, line, as_of=day, dry_run=False)
+    text = path.read_text(encoding="utf-8")
+    assert "## 🤖 Matryca Activity" not in text
+    assert "- morning note" in text
+    assert "indexed 2 page(s)" in text
+    assert text.count("🤖 Matryca Activity") == 1

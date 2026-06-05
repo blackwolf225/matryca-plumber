@@ -134,5 +134,5 @@ Documented in [`.env.example`](../../.env.example) (Operator essentials).
 
 - Network blips can increment `strikes`; the threshold reduces false positives. Flagged entries are re-checked each cycle; recovery clears strikes, registry `flagged`, and on-graph hygiene properties.
 - HEAD may return 405/403; the verifier falls back to GET for inconclusive HEAD responses.
-- Journey Log reports link checks when [`agent-dx.md`](agent-dx.md) journey logging is enabled.
+- When [`agent-dx.md`](agent-dx.md) journey logging is enabled (`MATRYCA_JOURNEY_LOG_ENABLED=true`), link-check totals roll into the single `- 🤖 Matryca Activity` bullet in today's journal (cumulative `links_checked` / flagged counts via `DaemonState.journey_day`).
 - Disable entirely: `MATRYCA_LINK_VERIFY_ENABLED=false`.

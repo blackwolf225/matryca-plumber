@@ -11,7 +11,7 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 | [`live-telemetry-ui.md`](live-telemetry-ui.md) | v1.9.3 Sovereign UI: 5s polling, daemon heartbeat, API token overlay, `daemon_pid` auto-unfreeze. |
 | [`agent-onboarding.md`](agent-onboarding.md) | v1.9.2 `llms.txt` / `.well-known/llms.txt`, PyPI `uvx` contract, agent anti-patterns. |
 | [`link-verification.md`](link-verification.md) | v1.9 zero-LLM URL/asset hygiene, `.matryca_link_registry.json`, `dead-link::` / `missing-asset::`. |
-| [`agent-dx.md`](agent-dx.md) | v1.9 CLI `--json`, `context load`, `read subtree`, Journey Log on today's journal. |
+| [`agent-dx.md`](agent-dx.md) | v1.9 CLI `--json`, `context load`, `read subtree`, Journey Log (single cumulative bullet per day). |
 | [`dual-embedding.md`](dual-embedding.md) | Phase 3 dual vectors (content + applicability) and `search_graph` / `method=semantic`. |
 | [`ingest.md`](ingest.md) | **`ingest_document`** MCP tool — atomic external Markdown → ingest page + `LOG` / `GLOSSARY` (OS temp parse, OCC writes). |
 | [`identity-config.md`](identity-config.md) | In-graph **Telos** / **AI Constraints** and **`store_fact`**. |

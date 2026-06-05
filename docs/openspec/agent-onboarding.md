@@ -2,7 +2,7 @@
 
 **Milestone:** v1.9.2 — Agent-zero-friction distribution  
 **Artifacts:** [`llms.txt`](../../llms.txt) (repo root), [`.well-known/llms.txt`](../../.well-known/llms.txt) (canonical URL path)  
-**Companion spec:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log)
+**Companion spec:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log — cumulative daily journal bullet)
 
 External LLM hosts (Cursor, Claude Code, Windsurf, Hermes, custom agents) must reach Matryca Plumber through a **versioned PyPI wheel**, not a cloned dev tree. The `llms.txt` files encode that contract: imperative commands, verified flags, and explicit anti-patterns.
 

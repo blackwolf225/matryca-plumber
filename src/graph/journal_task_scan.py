@@ -12,6 +12,8 @@ from .markdown_blocks import atomic_write_bytes
 from .page_write_lock import page_rmw_lock
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
+_LEGACY_ACTIVITY_HEADING = "## 🤖 Matryca Activity"
+_MATRYCA_ACTIVITY_MARKER = "🤖 Matryca Activity"
 # Logseq markers (uppercase) after bullet
 _MARKER_LINE = re.compile(
     r"^(\s*)[-*+]\s+(TODO|LATER|WAITING)\s+(.*)$",
@@ -207,6 +209,118 @@ def format_journal_task_review_markdown(report: JournalTaskScanReport) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _strip_legacy_matryca_activity_sections(text: str) -> str:
+    """Remove legacy ``## 🤖 Matryca Activity`` sections and their immediate child bullets."""
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        legacy_heading = (
+            stripped == _LEGACY_ACTIVITY_HEADING
+            or stripped.lstrip("- ").strip() == _LEGACY_ACTIVITY_HEADING
+        )
+        if legacy_heading:
+            i += 1
+            while i < len(lines):
+                child = lines[i]
+                if not child.strip():
+                    i += 1
+                    continue
+                if child.strip().startswith("## "):
+                    break
+                if _bullet_indent(child) is not None:
+                    i += 1
+                    continue
+                break
+            continue
+        out.append(lines[i])
+        i += 1
+    return "".join(out).rstrip("\n")
+
+
+def _find_top_level_activity_line(lines: list[str]) -> int | None:
+    for idx, line in enumerate(lines):
+        if _MATRYCA_ACTIVITY_MARKER not in line:
+            continue
+        ind = _bullet_indent(line)
+        if ind == 0:
+            return idx
+    return None
+
+
+def upsert_matryca_activity_block(
+    graph_root: str | Path,
+    activity_line: str,
+    *,
+    as_of: date | None = None,
+    dry_run: bool = True,
+) -> dict[str, object]:
+    """Replace or append the single top-level Matryca Activity bullet for today."""
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    day = as_of or date.today()
+    path = journal_file_path(root, day)
+    rel = path.relative_to(root).as_posix() if path.is_relative_to(root) else path.name
+    try:
+        root_resolved = root.resolve()
+        path.resolve().relative_to(root_resolved)
+    except ValueError:
+        return {
+            "ok": False,
+            "code": "path_forbidden",
+            "hint": "Journal path would escape graph root.",
+            "dry_run": dry_run,
+            "relative_path": rel,
+        }
+
+    bullet = activity_line.strip()
+    if not bullet.startswith("- "):
+        bullet = f"- {bullet}"
+
+    with page_rmw_lock(path):
+        prev = ""
+        if path.is_file():
+            prev = path.read_text(encoding="utf-8", errors="replace")
+        cleaned = _strip_legacy_matryca_activity_sections(prev)
+        lines = cleaned.splitlines() if cleaned else []
+        idx = _find_top_level_activity_line(lines)
+        if idx is not None:
+            lines[idx] = bullet
+        else:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.append(bullet)
+        new_text = "\n".join(lines).rstrip("\n") + "\n"
+
+        if dry_run:
+            return {
+                "ok": True,
+                "code": "dry_run_ok",
+                "hint": "Re-run with dry_run=false to upsert the activity bullet on disk.",
+                "dry_run": True,
+                "relative_path": rel,
+                "bytes_before": len(prev.encode("utf-8")),
+                "bytes_after": len(new_text.encode("utf-8")),
+                "preview_tail": new_text[-400:],
+            }
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        if path.is_file():
+            shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+        atomic_write_bytes(path, new_text.encode("utf-8"), graph_root=root)
+
+        return {
+            "ok": True,
+            "code": "applied",
+            "hint": f"Journal activity bullet updated at `{rel}`.",
+            "dry_run": False,
+            "relative_path": rel,
+            "bytes_before": len(prev.encode("utf-8")),
+            "bytes_after": path.stat().st_size,
+        }
+
+
 def append_journal_markdown_section(
     graph_root: str | Path,
     markdown_body: str,
@@ -279,4 +393,5 @@ __all__ = [
     "iter_journal_paths",
     "journal_file_path",
     "scan_journal_tasks",
+    "upsert_matryca_activity_block",
 ]

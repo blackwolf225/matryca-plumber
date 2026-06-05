@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-06-05
+
+### Changed
+
+- **Journey Log** — Daemon duty cycles now upsert a **single cumulative** `- 🤖 Matryca Activity` bullet in today's journal (incrementing daily totals) instead of appending a new `##` section every cycle; idle cycles with no activity skip the write; legacy duplicate sections on today's file are removed on first upsert (`src/agent/journey_log.py`, `src/graph/journal_task_scan.py`).
+- **Documentation** — README, ARCHITECTURE, PROJECT_DIARY, OpenSpec [`agent-dx.md`](docs/openspec/agent-dx.md) §4, and `llms.txt` aligned with the consolidated Journey Log contract.
+
 ## [1.9.3] - 2026-06-05
 
 ### Added

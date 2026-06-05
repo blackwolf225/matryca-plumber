@@ -27,7 +27,7 @@ flowchart LR
 
   subgraph graph [Logseq OG graph]
     PAGES["pages/ · journals/"]
-    JOURNAL["journals/YYYY_MM_DD.md\n## 🤖 Matryca Activity"]
+    JOURNAL["journals/YYYY_MM_DD.md\n- 🤖 Matryca Activity (single bullet)"]
   end
 
   H --> CLI
@@ -100,18 +100,41 @@ Distinct from **`block_ast`**: `block_ast` is the raw on-disk splice for one `id
 
 ## 4. Journey Log (visual auditing)
 
-After each maintenance **duty cycle**, the daemon may append a short summary to **today's journal** (`journals/YYYY_MM_DD.md`):
+After each maintenance **duty cycle** with activity, the daemon **upserts one cumulative bullet** in **today's journal** (`journals/YYYY_MM_DD.md`). Counts increment on the same line instead of appending a new section per cycle:
 
 ```markdown
-## 🤖 Matryca Activity
-- indexed 1 page(s); checked 12 link(s); flagged 2 block(s) (dead links / missing assets).
+- 🤖 Matryca Activity — indexed 12 page(s); checked 340 link(s); flagged 2 block(s); fast-tracked 5 file(s); 47 duty cycle(s)
 ```
 
 | Variable | Default |
 |----------|---------|
 | `MATRYCA_JOURNEY_LOG_ENABLED` | `true` |
 
-**Write path:** `append_journal_markdown_section` (OCC-safe append, same as MCP `mutate_graph` / `append_journal`).  
+### Design (v1.9+ consolidated)
+
+| Concern | Behavior |
+|---------|----------|
+| **Logseq surface** | One top-level bullet (`- 🤖 Matryca Activity — …`); no `##` markdown heading per cycle |
+| **Source of truth** | `DaemonState.journey_day` (`JourneyDayLedger` in `.matryca_daemon_state.json`) — resets at calendar day change |
+| **Write trigger** | Cycle has activity: indexing, fast-track, link checks, or hygiene flags (`JourneyCycleStats.has_journal_activity`) |
+| **Idle cycles** | No journal write when the cycle produced zero metrics (avoids poll spam) |
+| **Legacy migration** | Existing `## 🤖 Matryca Activity` blocks on **today's** file are stripped on first upsert |
+| **Agent MCP** | `mutate append_journal` stays append-only for explicit agent-authored notes |
+
+**Modules:** `src/agent/journey_log.py` (`upsert_journey_log`, `JourneyDayLedger`), `src/graph/journal_task_scan.py` (`upsert_matryca_activity_block`), hook `MaintenanceDaemon._finalize_link_and_journey_pass`.
+
+**Cumulative fields** (summed per day, shown inline in the bullet):
+
+| Ledger field | Meaning |
+|--------------|---------|
+| `llm_files_processed` | LLM indexing turns completed |
+| `links_checked` | URLs/assets verified (link-verification sidecar) |
+| `dead_links_flagged` + `missing_assets_flagged` | Blocks stamped with hygiene properties |
+| `fast_track_files` | Files processed without LLM this cycle |
+| `cycles` | Duty cycles that contributed to the ledger |
+
+**Write path:** `upsert_matryca_activity_block` under `page_rmw_lock` + atomic replace (same OCC stack as property edits). After a successful write, the daemon records today's journal in file state so `list_pending_files` does not re-queue it.
+
 **Inspiration:** [LogseqBrain](https://github.com/jame581/LogseqBrain) journal auditing — implemented with Matryca's lock + AST stack to avoid data loss.
 
 ```mermaid
@@ -124,8 +147,8 @@ sequenceDiagram
   D->>D: run_cycle (LLM + fast-track)
   D->>LV: run_link_verification_cycle
   LV-->>D: checked / flagged counts
-  D->>JL: JourneyCycleStats
-  JL->>J: append ## 🤖 Matryca Activity
+  D->>JL: accumulate JourneyDayLedger
+  JL->>J: upsert single Matryca Activity bullet
 ```
 
 ---
@@ -151,7 +174,7 @@ Global: **`--json`** on any subcommand.
 
 - [x] No auxiliary databases — stdout/Journal are views; Markdown remains source of truth
 - [x] Block-shaped thinking — subtree and flags anchor on `id::`
-- [x] Strict OCC — journal append + hygiene properties use `page_rmw_lock` + mtime gates
+- [x] Strict OCC — journal upsert + hygiene properties use `page_rmw_lock` + mtime gates
 - [x] AST parity — journal sections and properties respect Logseq indentation rules
 
 ---

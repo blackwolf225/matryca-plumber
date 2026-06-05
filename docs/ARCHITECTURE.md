@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.9.3 (Live Sovereign UI telemetry + structural hygiene + agent DX)  
+**Version:** 1.9.4 (Journey Log consolidation + live telemetry + structural hygiene + agent DX)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -95,7 +95,7 @@ Spec: [`docs/openspec/link-verification.md`](openspec/link-verification.md).
 | JSON CLI | `src/cli/__init__.py` | Global `--json` stdout envelope |
 | Context macro | `src/agent/context_load.py` | `matryca context load` |
 | Subtree reads | `src/agent/graph_tool_helpers.py` | `read_subtree_markdown` + MCP `target_type=subtree` |
-| Journey Log | `src/agent/journey_log.py` | Append `## 🤖 Matryca Activity` to today's journal |
+| Journey Log | `src/agent/journey_log.py` | Upsert one cumulative `- 🤖 Matryca Activity` bullet in today's journal |
 
 Spec: [`docs/openspec/agent-dx.md`](openspec/agent-dx.md).
 
@@ -526,7 +526,13 @@ flowchart TB
   GD --> AST
 ```
 
-**Journey Log** closes the operator feedback loop: after each cycle, optional append to `journals/YYYY_MM_DD.md` summarizes indexing, link checks, and flags — inspired by LogseqBrain-style journal auditing, backed by Matryca OCC.
+**Journey Log** closes the operator feedback loop: after each active duty cycle, the daemon upserts **one** top-level bullet in `journals/YYYY_MM_DD.md`:
+
+```markdown
+- 🤖 Matryca Activity — indexed 12 page(s); checked 340 link(s); flagged 2 block(s); 47 duty cycle(s)
+```
+
+Daily totals live in `DaemonState.journey_day` (`JourneyDayLedger`); the journal line is rewritten in place under `page_rmw_lock`. Idle cycles with no metrics skip the write. Legacy per-cycle `## 🤖 Matryca Activity` sections on today's file are removed on first upsert. Inspired by LogseqBrain-style journal auditing; spec in [`openspec/agent-dx.md`](openspec/agent-dx.md) §4.
 
 ---
 
@@ -604,7 +610,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/agent/ingestion.py` | `ingest_document` / `process_ingestion` |
 | `src/agent/memory_tools.py` | `store_fact` |
 | `src/graph/link_verification.py` | Link rot registry, async verify, hygiene properties |
-| `src/agent/journey_log.py` | Duty-cycle journal summaries |
+| `src/agent/journey_log.py` | Journey Log ledger + upsert of cumulative daily activity bullet |
 | `src/agent/context_load.py` | `context load` semantic macro |
 | `src/semantic/` | Dual block embeddings + hybrid semantic search |
 | `src/agent/mcp_telemetry.py` | Loguru bridge, `id(ctx)` session map |

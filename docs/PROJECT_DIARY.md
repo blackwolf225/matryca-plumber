@@ -1,12 +1,31 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.3**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.4**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-05] v1.9.4 — Journey Log consolidation (daily journal hygiene)
+
+### Context
+
+Operators reported **journal clutter**: each daemon duty cycle appended `## 🤖 Matryca Activity` plus a child bullet (two Logseq blocks per cycle), including idle polls — easily **50–200+ lines** per day in `journals/YYYY_MM_DD.md`.
+
+### Milestones shipped
+
+1. **`JourneyDayLedger`** — Cumulative daily metrics in `DaemonState.journey_day` (`.matryca_daemon_state.json`); auto-reset on calendar day change.
+2. **Single-bullet upsert** — `upsert_matryca_activity_block` replaces one top-level `- 🤖 Matryca Activity — …` line; legacy `##` sections on today's file stripped on first write.
+3. **Idle skip** — Cycles with no indexing, fast-track, link checks, or flags do not touch the journal.
+4. **OpenSpec / operator docs** — [`docs/openspec/agent-dx.md`](openspec/agent-dx.md) §4 expanded; README and ARCHITECTURE aligned.
+
+### Architectural outcome
+
+Journey Log remains a **view** over daemon activity (Markdown-only system of record). The journal shows **one foldable block per day** for operators; MCP `append_journal` stays append-only for explicit agent notes.
 
 ---
 

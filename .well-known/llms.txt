@@ -183,5 +183,5 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 
 * Operator README: `README.md`
 * Agent onboarding spec: `docs/openspec/agent-onboarding.md`
-* Agent DX spec (CLI JSON, Journey Log): `docs/openspec/agent-dx.md`
+* Agent DX spec (CLI JSON, Journey Log — one cumulative `- 🤖 Matryca Activity` bullet per day in the daemon journal): `docs/openspec/agent-dx.md`
 * Security (MCP gate, graph allowlist, CLI redaction): `SECURITY.md`

@@ -100,7 +100,12 @@ from .cooperative_yield import (
     bootstrap_pill_checkpoint_every,
     telemetry_heartbeat_seconds,
 )
-from .journey_log import JourneyCycleStats, append_journey_log, journey_log_enabled
+from .journey_log import (
+    JourneyCycleStats,
+    JourneyDayLedger,
+    journey_log_enabled,
+    upsert_journey_log,
+)
 from .llm_client import (
     InstructorLLMClient as _BaseInstructorLLMClient,
 )
@@ -364,6 +369,7 @@ class DaemonState:
     hygiene_corrections: int = 0
     page_summaries_created: int = 0
     bootstrap_recent: dict[str, BootstrapRecentEntry] = field(default_factory=dict)
+    journey_day: JourneyDayLedger = field(default_factory=JourneyDayLedger)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -398,6 +404,7 @@ class DaemonState:
                 }
                 for path, rec in self.bootstrap_recent.items()
             },
+            "journey_day": self.journey_day.to_json(),
             "files": {
                 path: {
                     "mtime": rec.mtime,
@@ -470,6 +477,7 @@ class DaemonState:
             hygiene_corrections=int(payload.get("hygiene_corrections", 0)),
             page_summaries_created=int(payload.get("page_summaries_created", 0)),
             bootstrap_recent=_bootstrap_recent_from_json(payload.get("bootstrap_recent")),
+            journey_day=JourneyDayLedger.from_json(payload.get("journey_day")),
         )
 
 
@@ -2768,11 +2776,19 @@ class MaintenanceDaemon:
             except OSError as exc:
                 logger.warning("Link verification cycle skipped: {}", exc)
         journey_state_updated = False
-        if journey_log_enabled():
+        if journey_log_enabled() and stats.has_journal_activity():
+            today = date.today()
+            state.journey_day.reset_if_new_day(today)
+            state.journey_day.accumulate(stats)
+            journey_state_updated = True
             with contextlib.suppress(OSError):
-                result = append_journey_log(str(self.graph_root), stats)
+                result = upsert_journey_log(
+                    str(self.graph_root),
+                    state.journey_day,
+                    as_of=today,
+                )
                 if result.get("ok") and result.get("code") == "applied":
-                    journey_state_updated = self._settle_journey_journal_in_state(state)
+                    self._settle_journey_journal_in_state(state)
         if journey_state_updated:
             save_daemon_state(self.graph_root, state)
 
