@@ -23,11 +23,11 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.2** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.3** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **Current: v1.9.2** — Agent-zero-friction (`llms.txt` / `.well-known/llms.txt`), dependency security refresh, Dependabot `uv.lock` CI sync. **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **Current: v1.9.3** — **Live Telemetry** for the Sovereign UI (5s progress, pills, and token counters; thread-safe daemon heartbeat; auto-unfreeze when a background PID is detected). **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -137,7 +137,7 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 Matryca Plumber is 100% headless, but it ships with a **Sovereign UI Cockpit** (`matryca plumber status` or `uvx … matryca-plumber status`). 
 It's a local React dashboard running on `http://127.0.0.1:8500` that provides:
 - **Pre-flight checklist** (modal on each UI open): operator guidance plus automated readiness checks before **Start Engine** is enabled.
-- **Live Graph Telemetry**: See exactly what the AI is indexing in real-time.
+- **Live Graph Telemetry (v1.9.3)**: Progress bar, Phase 1/2 pills, and token counters refresh about every **5 seconds** while the engine runs — including during long LLM turns ([`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md)).
 - **Dynamic Impact**: Mathematically separates *Organic Human Mind* (your notes) from *Agent Cognition* (AI enhancements).
 - **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Set `MATRYCA_UI_TOKEN` on shared hosts (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`); session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
 - **Trust & Safety Drawer**: Visually toggle what the AI is allowed to edit (Safe Mode, Augmented Mode, Surgeon Mode).
@@ -158,7 +158,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 
    **Matryca Plumber** (by Marco Porcellato · Matryca.ai) is built for **offline, CPU-only** use on a typical **16 GB RAM** machine — no cloud subscription or discrete GPU required. The **recommended and tested** model is **Gemma 4-E4b Instruct** — set the exact id `gemma-4-e4b-it` in Settings, then **Refresh models**. For CPU inference, prefer **GGUF** weights at **`Q4_K_M`** or **`Q5_K_M`**. We are actively testing additional open models to improve CPU-only, 16 GB setups; Gemma 4-E4b Instruct is our current default. Avoid large **MoE** models (e.g. Llama 4 Scout): full weights still require 60GB+ RAM.
 
-4. **First-run expectations** — **Phase 1** catalogs the entire graph (can take a long time on large vaults; v1.8 yields to the OS periodically during harvest). **Phase 2** processes roughly one LLM-heavy page per poll interval by default. After Phase 1, the daemon releases heavy in-memory indexes to keep RAM stable for long runs.
+4. **First-run expectations** — **Phase 1** catalogs the entire graph (can take a long time on large vaults; v1.8 yields to the OS periodically during harvest; the UI shows catalog pills about every **5 pages**). **Phase 2** processes roughly one LLM-heavy page per poll interval by default, with live token totals and progress in the cockpit. After Phase 1, the daemon releases heavy in-memory indexes to keep RAM stable for long runs. If you started the daemon from a terminal before opening the UI, the dashboard still polls state when it sees a live **`daemon_pid`** — click **Start Engine** for the full live console (logs + graph analytics).
 
 **Live checks** (re-run anytime with **Re-run checks**):
 
@@ -185,6 +185,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 🔗 **Structural hygiene (v1.9):** Background link rot and missing-asset detection without LLM tokens; visible duty-cycle summaries in your daily journal.
 * 🤖 **Agent-native CLI (v1.9):** `matryca --json …` for machine-readable stdout; `matryca context load` and `read subtree` to shrink context windows.
 * 📋 **Agent onboarding (v1.9.2):** [`llms.txt`](llms.txt) — canonical `uvx` commands for Cursor, Claude Code, and other hosts; no `git clone` required.
+* ⚡ **Live telemetry (v1.9.3):** 5s Sovereign UI updates, thread-safe daemon heartbeat, API token overlay from ops log — [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md).
 
 ---
 
@@ -276,7 +277,7 @@ make perf
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
-| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.2 agent onboarding). |
+| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.2 agent onboarding, v1.9.3 live telemetry). |
 | [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) | LLM prompt layout, memory, and I/O contracts. |
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |

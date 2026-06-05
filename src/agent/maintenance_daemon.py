@@ -95,7 +95,11 @@ from ..utils.logging_config import configure_loguru
 from ..utils.runtime_bootstrap import prepare_matryca_runtime
 from ..utils.token_logger import OperationType, TokenLogger
 from .control_room_progress import refresh_phase2_cognitive_totals
-from .cooperative_yield import bootstrap_checkpoint_every
+from .cooperative_yield import (
+    bootstrap_checkpoint_every,
+    bootstrap_pill_checkpoint_every,
+    telemetry_heartbeat_seconds,
+)
 from .journey_log import JourneyCycleStats, append_journey_log, journey_log_enabled
 from .llm_client import (
     InstructorLLMClient as _BaseInstructorLLMClient,
@@ -1882,6 +1886,10 @@ class MaintenanceDaemon:
         self._inflight_writes = threading.Condition()
         self._active_write_count = 0
         self._state_persist_failed = False
+        self._telemetry_lock = threading.Lock()
+        self._telemetry_dirty = False
+        self._last_heartbeat_monotonic = 0.0
+        self._vault_refresh_counter = 0
         self.bootstrap_complete = False
         self.bootstrap_failed = False
         self._ensure_shared_token_logger()
@@ -2115,9 +2123,11 @@ class MaintenanceDaemon:
             if harvest_status is not None:
                 upsert_bootstrap_recent(checkpoint, key, harvest_status)
             record_bootstrap_harvest_impact(checkpoint, harvest_status)
-            if scanned % bootstrap_checkpoint_every() == 0:
+            self._mark_telemetry_dirty()
+            pill_interval = bootstrap_pill_checkpoint_every()
+            if scanned % pill_interval == 0 or scanned % bootstrap_checkpoint_every() == 0:
                 checkpoint.status = "running"
-                save_daemon_state(self.graph_root, checkpoint)
+                self._persist_daemon_state(checkpoint, mark_running=True)
 
         def _persist_bootstrap_progress(
             scanned: int,
@@ -2129,8 +2139,7 @@ class MaintenanceDaemon:
             checkpoint.bootstrap_scanned = scanned
             checkpoint.bootstrap_total = total
             checkpoint.status = "running"
-            self._sync_live_telemetry(checkpoint, mark_running=True)
-            save_daemon_state(self.graph_root, checkpoint)
+            self._persist_daemon_state(checkpoint, mark_running=True)
 
         max_attempts = 3
         backoff_s = 1.0
@@ -2197,16 +2206,21 @@ class MaintenanceDaemon:
 
         self.bootstrap_complete = True
         self._persist_bootstrap_complete(checkpoint)
+        checkpoint.status = "running"
+        self._persist_daemon_state(checkpoint, mark_running=True)
         try:
             load_or_compute_semantic_clusters(self.graph_root)
         except Exception as exc:  # noqa: BLE001 - deferral must not block daemon
             logger.warning("Semantic cluster precompute after bootstrap skipped: {}", exc)
+        self._maybe_heartbeat_checkpoint(checkpoint, force=True)
         try:
             release_phase1_memory(self.graph_root)
             log_snapshot(label="post_bootstrap_teardown")
         except Exception as exc:  # noqa: BLE001 - teardown must not block Phase 2
             logger.warning("Post-bootstrap memory release skipped: {}", exc)
+        self._maybe_heartbeat_checkpoint(checkpoint, force=True)
         self._run_phase2_graph_insights()
+        self._maybe_heartbeat_checkpoint(checkpoint, force=True)
 
     def _run_phase2_graph_insights(self) -> None:
         """Run graph insights after Phase 1 completes (Phase 2 entry)."""
@@ -2336,15 +2350,29 @@ class MaintenanceDaemon:
         if mark_running and state.status != "stopped":
             state.status = "running"
 
-    def _save_cycle_checkpoint(self, state: DaemonState, *, path: Path | None = None) -> None:
-        """Persist daemon state after one file settles in the cycle flywheel.
+    def _mark_telemetry_dirty(self) -> None:
+        with self._telemetry_lock:
+            self._telemetry_dirty = True
 
-        Uses :func:`save_daemon_state` (POSIX ``os.replace``) so concurrent FastAPI
-        readers never observe a truncated checkpoint mid-write.
-        """
-        self._sync_live_telemetry(state)
+    def _snapshot_state_locked(self, state: DaemonState) -> DaemonState:
+        """Return an immutable copy of ``state``; caller must hold ``_telemetry_lock``."""
+        return DaemonState.from_json(state.to_json())
+
+    def _persist_daemon_state(
+        self,
+        state: DaemonState,
+        *,
+        path: Path | None = None,
+        mark_running: bool = False,
+    ) -> None:
+        """Persist under ``_telemetry_lock`` using an immutable JSON snapshot (thread-safe)."""
         try:
-            save_daemon_state(self.graph_root, state)
+            with self._telemetry_lock:
+                self._sync_live_telemetry(state, mark_running=mark_running)
+                snapshot = self._snapshot_state_locked(state)
+                self._last_heartbeat_monotonic = time.monotonic()
+                self._telemetry_dirty = False
+            save_daemon_state(self.graph_root, snapshot)
             self._state_persist_failed = False
         except Exception as save_exc:  # noqa: BLE001 - log and continue cycle
             self._state_persist_failed = True
@@ -2354,6 +2382,68 @@ class MaintenanceDaemon:
                 message=f"Checkpoint save failed: {save_exc}",
                 malformed_refs=[],
             )
+
+    def _maybe_heartbeat_checkpoint(
+        self,
+        state: DaemonState,
+        *,
+        force: bool = False,
+    ) -> None:
+        """Flush telemetry when dirty or when the heartbeat interval has elapsed."""
+        interval = telemetry_heartbeat_seconds()
+        now = time.monotonic()
+        with self._telemetry_lock:
+            if (
+                not force
+                and not self._telemetry_dirty
+                and now - self._last_heartbeat_monotonic < interval
+            ):
+                return
+            self._sync_live_telemetry(state, mark_running=state.status != "stopped")
+            snapshot = self._snapshot_state_locked(state)
+            self._last_heartbeat_monotonic = now
+            self._telemetry_dirty = False
+        try:
+            save_daemon_state(self.graph_root, snapshot)
+            self._state_persist_failed = False
+        except Exception as save_exc:  # noqa: BLE001 - heartbeat must not abort work
+            self._state_persist_failed = True
+            self.token_logger.log_structural_lint_warning(
+                target_file=self.graph_root,
+                message=f"Telemetry heartbeat save failed: {save_exc}",
+                malformed_refs=[],
+            )
+
+    @contextlib.contextmanager
+    def _telemetry_heartbeat_scope(self, state: DaemonState) -> Any:
+        """Periodic checkpoint during blocking work (e.g. long ``index_page`` calls)."""
+        stop = threading.Event()
+
+        def _heartbeat_loop() -> None:
+            while not stop.wait(timeout=telemetry_heartbeat_seconds()):
+                if self._stop_requested or self._shutdown_event.is_set():
+                    break
+                self._maybe_heartbeat_checkpoint(state, force=True)
+
+        thread = threading.Thread(
+            target=_heartbeat_loop,
+            name="plumber-telemetry-heartbeat",
+            daemon=True,
+        )
+        thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            thread.join(timeout=1.0)
+
+    def _save_cycle_checkpoint(self, state: DaemonState, *, path: Path | None = None) -> None:
+        """Persist daemon state after one file settles in the cycle flywheel.
+
+        Uses :func:`save_daemon_state` (POSIX ``os.replace``) so concurrent FastAPI
+        readers never observe a truncated checkpoint mid-write.
+        """
+        self._persist_daemon_state(state, path=path)
 
     def _try_fast_track_cycle_file(self, path: Path, state: DaemonState) -> bool:
         """Settle a pending page without LLM tokens (quarantine, cache, empty)."""
@@ -2487,15 +2577,16 @@ class MaintenanceDaemon:
                     page_path=path,
                     alias_index=alias_index,
                 )
-            result, usage = self.llm_client.index_page(
-                title,
-                content,
-                page_path=path,
-                graph_root=self.graph_root,
-                alias_index=alias_index,
-                enable_semantic_routing=enable_semantic_routing,
-                prompt_session=prompt_session,
-            )
+            with self._telemetry_heartbeat_scope(state):
+                result, usage = self.llm_client.index_page(
+                    title,
+                    content,
+                    page_path=path,
+                    graph_root=self.graph_root,
+                    alias_index=alias_index,
+                    enable_semantic_routing=enable_semantic_routing,
+                    prompt_session=prompt_session,
+                )
             llm_called_from_usage = (
                 int(usage.get("prompt_tokens", 0) or 0)
                 + int(usage.get("completion_tokens", 0) or 0)
@@ -2590,7 +2681,19 @@ class MaintenanceDaemon:
         llm_called = llm_called_from_usage or llm_called_from_logger
         if llm_called and self.bootstrap_complete and not write_aborted:
             state.phase2_llm_turns += 1
-        self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
+        if self.bootstrap_complete and not write_aborted:
+            rec = state.files.get(key)
+            if rec is not None and rec.status == "processed":
+                vault_total = state.phase2_cognitive_total
+                if vault_total > 0:
+                    state.phase2_cognitive_done = min(
+                        vault_total,
+                        state.phase2_cognitive_done + 1,
+                    )
+                else:
+                    state.phase2_cognitive_done += 1
+        self._mark_telemetry_dirty()
+        self._save_cycle_checkpoint(state, path=path)
         return llm_called
 
     def _quarantine_structural_lint(
@@ -2695,12 +2798,13 @@ class MaintenanceDaemon:
         state.status = "running"
         state.last_scan_at = datetime.now(tz=UTC).isoformat()
         if self.bootstrap_complete:
-            try:
-                refresh_phase2_cognitive_totals(self.graph_root, state)
-            except OSError as exc:
-                logger.warning("Phase 2 progress totals skipped at cycle start: {}", exc)
-        self._sync_live_telemetry(state, mark_running=True)
-        save_daemon_state(self.graph_root, state)
+            self._vault_refresh_counter += 1
+            if state.phase2_cognitive_total <= 0 or self._vault_refresh_counter % 10 == 1:
+                try:
+                    refresh_phase2_cognitive_totals(self.graph_root, state)
+                except OSError as exc:
+                    logger.warning("Phase 2 progress totals skipped at cycle start: {}", exc)
+        self._persist_daemon_state(state, mark_running=True)
         try:
             pending = list_pending_files(
                 self.graph_root,
@@ -2811,13 +2915,12 @@ class MaintenanceDaemon:
         self._prune_stale_catalog_entries()
         heal_daemon_state_ledger(self.graph_root, state)
         state.phase2_cluster_file_in_flight = False
-        if self.bootstrap_complete:
+        if self.bootstrap_complete and self._vault_refresh_counter % 10 == 0:
             with contextlib.suppress(OSError):
                 refresh_phase2_cognitive_totals(self.graph_root, state)
-        self._sync_live_telemetry(state)
         if not self._stop_requested:
             state.status = "idle"
-        save_daemon_state(self.graph_root, state)
+        self._persist_daemon_state(state)
         maybe_release_after_cycle(
             llm_turns=llm_turns_this_cycle,
             graph_root=self.graph_root,
@@ -2872,10 +2975,14 @@ class MaintenanceDaemon:
                 if self._stop_requested:
                     break
                 deadline = time.monotonic() + self.poll_seconds
+                heartbeat_s = telemetry_heartbeat_seconds()
                 while not self._stop_requested and time.monotonic() < deadline:
                     remaining = deadline - time.monotonic()
-                    if self._cycle_wake.wait(timeout=remaining):
+                    wait_s = min(remaining, heartbeat_s)
+                    if self._cycle_wake.wait(timeout=wait_s):
                         self._cycle_wake.clear()
+                    else:
+                        self._maybe_heartbeat_checkpoint(state, force=True)
                     if self._shutdown_event.is_set():
                         break
                 if self._shutdown_event.is_set():

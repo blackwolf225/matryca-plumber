@@ -1,12 +1,35 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.2**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.3**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-05] v1.9.3 — Live Telemetry (Sovereign UI)
+
+### Context
+
+Operators reported a **frozen** control room during long LLM indexing: progress bar, Phase 1/2 pills, and token counters appeared to refresh only on **Stop Engine**. Root cause was a **pull** stack with **coarse daemon checkpoints** and API/UI gaps — not missing WebSockets.
+
+### Milestones shipped
+
+1. **Daemon heartbeat** — `MATRYCA_TELEMETRY_HEARTBEAT_SECONDS` (default 5): cooperative `save_daemon_state` during `index_page` (sidecar thread), idle inter-cycle sleep, and post-bootstrap work. Persistence uses **`threading.Lock`** + **`DaemonState.from_json(to_json())`** snapshots to avoid heartbeat vs main-thread races.
+2. **API token overlay** — `GET /api/state` merges session totals from `matryca_plumber_ops.log` (parity with `tui_dashboard.py`) so counters move during inference without per-token checkpoint writes.
+3. **Frontend** — `POLL_CYCLE_MS = 5000`; **`daemon_pid`** on state payload; background state poll when frozen but PID live; auto-unfreeze on `running` / `idle` / live PID.
+4. **Phase 1 pills** — `MATRYCA_BOOTSTRAP_PILL_CHECKPOINT_EVERY` (default 5) flushes `bootstrap_recent` independently of the full catalog checkpoint interval.
+
+### Documentation
+
+OpenSpec [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md); README, ARCHITECTURE, CONTRIBUTING, `llms.txt`, and release notes aligned for **v1.9.3 — The "Live Telemetry" Update**.
+
+### Architectural outcome
+
+Telemetry remains **checkpoint + REST pull** (Karpathy/simplicity). Perceived real-time UX is achieved by **more frequent, thread-safe writes** and **smarter readers** — not a second transport.
 
 ---
 

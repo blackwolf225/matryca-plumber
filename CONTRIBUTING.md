@@ -17,7 +17,7 @@ This project exists so humans and **autonomous local systems** can collaborate o
 | **Operator control plane** | `src/cli/**` (incl. `ui_server.py`, `ui_auth.py`), `frontend/` | **Zero-Trust** local API (`X-Matryca-Token`), cockpit UX |
 | **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path. Standalone tools: **`store_fact`** (identity), **`ingest_document`** (atomic external Markdown — see [`docs/openspec/ingest.md`](docs/openspec/ingest.md)). |
 
-Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`llms.txt`](llms.txt) (agent execution guide).
+Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (v1.9.3 Sovereign UI), [`llms.txt`](llms.txt) (agent execution guide).
 
 **Configuration:** [`.env.example`](.env.example) is the operator reference, split into **Operator essentials** (day-one / Settings drawer) and **Advanced / high impact** (mutating lint, MCP, security). Each key documents **Default (code)** and **Template** when they differ. Agents must keep `.env.example` in sync when changing env vars — see [`.cursor/rules/07-env-example.mdc`](.cursor/rules/07-env-example.mdc). `MATRYCA_LM_INSTRUCTOR_*` and `MATRYCA_LLM_PROMPT_CACHE_MODE` are legacy or reserved (not read by runtime). CI: `tests/test_env_example_coverage.py`.
 
@@ -155,7 +155,7 @@ After `make install`, validate changes the way operators run the **Agentic OS** 
    uv run matryca plumber status
    ```
 
-   Browse to **`http://127.0.0.1:8500`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`, loopback-only), and watch **1 Hz** telemetry while the daemon works.
+   Browse to **`http://127.0.0.1:8500`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`, loopback-only), and watch **live telemetry** (~**5s** refresh on progress, pills, and token counters while the engine runs). If the daemon was started from a terminal first, the UI still polls `/api/state` when it reports a live **`daemon_pid`**; click **Start Engine** for logs and graph analytics.
 
 Ensure your repo **`.env`** includes the Ironclad security block from **`.env.example`** (at minimum `MATRYCA_MCP_ENABLED=true` if you use MCP hosts). See [`SECURITY.md`](SECURITY.md) for the full matrix.
 
@@ -176,8 +176,15 @@ Ensure your repo **`.env`** includes the Ironclad security block from **`.env.ex
 | `make lint` | Ruff lint only |
 | `make typecheck` | `mypy src/ tests/` (strict) |
 | `make test` | `pytest -q` |
+| `make test-fast` | Faster gate: no coverage, skips slow security soak (see `Makefile`) |
 | `make perf` | `pytest -m slow` — memory / harvest soak (optional, not in default CI) |
 | **`make check`** | **`format` → `lint` → `typecheck` → `test`** (full local gate) |
+
+**Focused loops (UI / daemon telemetry):** while iterating on Sovereign UI or checkpoint code, run a subset instead of the full suite:
+
+```bash
+uv run pytest tests/test_ui_server.py tests/test_maintenance_daemon.py tests/test_control_room_progress.py -q --no-cov
+```
 | `make clean` | Remove `.venv`, caches |
 
 ### Frontend (Sovereign UI)

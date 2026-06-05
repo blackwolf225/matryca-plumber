@@ -263,6 +263,7 @@ export function normalizeDaemonState(raw: DaemonStateResponse): DaemonStateRespo
       'page_summaries_created',
       'pageSummariesCreated',
     ),
+    daemon_pid: readNumber(source, 'daemon_pid', 'daemonPid') || undefined,
     graph_analytics: graphAnalytics,
   }
 }
@@ -299,6 +300,7 @@ export interface DaemonStateResponse {
   hygiene_corrections?: number
   page_summaries_created?: number
   bootstrap_recent?: Record<string, BootstrapRecentEntry>
+  daemon_pid?: number | null
   graph_analytics?: GraphAnalytics
 }
 

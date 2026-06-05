@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.3] - 2026-06-05
+
+### Added
+
+- **Live telemetry (Sovereign UI)** — Cooperative **5-second** checkpoint heartbeat during long LLM work and idle duty-cycle waits; Phase 1 control-room pills flush every `MATRYCA_BOOTSTRAP_PILL_CHECKPOINT_EVERY` pages (default **5**); `GET /api/state` exposes **`daemon_pid`** for background daemon discovery.
+- **Env** — `MATRYCA_TELEMETRY_HEARTBEAT_SECONDS`, `MATRYCA_BOOTSTRAP_PILL_CHECKPOINT_EVERY` (documented in [`.env.example`](.env.example)).
+- **OpenSpec** — [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (pull-based UI telemetry contract).
+
+### Changed
+
+- **Real-time UI** — Frontend polls `/api/state` on a **5s** cycle; token counters merge live ops-log totals on the API (same policy as the TUI) so counters move during inference, not only on engine stop.
+- **Auto-unfreeze** — Sovereign UI detects a live Plumber PID (`daemon_pid` or `running`/`idle` status) and resumes state polling even when started from `matryca plumber start` in another terminal; full logs/analytics still require **Start Engine**.
+
+### Fixed
+
+- **Thread-safe daemon checkpoints** — Telemetry persistence uses `threading.Lock` plus immutable `DaemonState` JSON snapshots so heartbeat threads never race the main LLM loop during `index_page()`.
+- **Stuck progress bar & pills** — Progress, bootstrap pills, and Phase 2 file pills reach disk on heartbeat and per-file checkpoints instead of appearing only after **Stop Engine**.
+
 ## [1.9.2] - 2026-06-05
 
 ### Added

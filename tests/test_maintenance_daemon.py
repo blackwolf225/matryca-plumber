@@ -1777,3 +1777,77 @@ def test_completion_messages_preserves_cluster_history_without_compression() -> 
     assert messages[1]["content"].startswith("[CLUSTER FOCUS:")
     assert messages[-1]["content"] == "current page"
     assert len(client._execution_history) == 2
+
+
+def test_maybe_heartbeat_checkpoint_writes_immutable_snapshot(graph_root: Path) -> None:
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    state = DaemonState(
+        status="running",
+        bootstrap_scanned=7,
+        bootstrap_total=100,
+        session_prompt_tokens=3,
+        session_completion_tokens=1,
+    )
+    daemon._mark_telemetry_dirty()
+    daemon._maybe_heartbeat_checkpoint(state, force=True)
+
+    loaded = load_daemon_state(graph_root)
+    assert loaded.bootstrap_scanned == 7
+    assert loaded.bootstrap_total == 100
+    assert loaded.status == "running"
+
+
+def test_bootstrap_recent_flushed_on_pill_interval(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.graph.bootstrap_harvest import HarvestMetrics
+
+    sample = graph_root / "pages" / "Sample.md"
+    sample.parent.mkdir(parents=True, exist_ok=True)
+    sample.write_text("- sample\n", encoding="utf-8")
+
+    flushed_recent: list[dict[str, object]] = []
+
+    def _fake_harvest(*_args: object, **kwargs: object) -> HarvestMetrics:
+        on_page = kwargs.get("on_page_cataloged")
+        if callable(on_page):
+            on_page(5, 10, sample, "regex")
+            flushed_recent.append(dict(load_daemon_state(graph_root).bootstrap_recent))
+        return HarvestMetrics()
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_bootstrap_harvest",
+        _fake_harvest,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.is_bootstrap_catalog_complete",
+        lambda _root: False,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.bootstrap_checkpoint_every",
+        lambda: 50,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.bootstrap_pill_checkpoint_every",
+        lambda: 5,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.load_or_compute_semantic_clusters",
+        lambda *_a, **_k: {},
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_graph_insights_engine",
+        lambda *_a, **_k: None,
+    )
+    master_index = graph_root / "pages" / "Matryca Master Index.md"
+    master_index.write_text("# index\n", encoding="utf-8")
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    daemon.run_bootstrap_pipeline()
+
+    assert flushed_recent
+    assert any(
+        "pages/Sample.md" in recent or any("Sample" in key for key in recent)
+        for recent in flushed_recent
+    )

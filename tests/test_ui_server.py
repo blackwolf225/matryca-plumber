@@ -142,7 +142,46 @@ def test_get_state_reports_idle_when_live_plumber_pid(
         response = client.get("/api/state", headers=auth_headers)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "idle"
+    payload = response.json()
+    assert payload["status"] == "idle"
+    assert payload["daemon_pid"] == 9001
+
+
+def test_get_state_merges_session_tokens_from_ops_log(
+    graph_root: Path,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_daemon_state(
+        graph_root,
+        DaemonState(
+            status="running",
+            session_prompt_tokens=10,
+            session_completion_tokens=5,
+        ),
+    )
+    log_path = graph_root / "matryca_plumber_ops.log"
+    log_path.write_text(
+        json.dumps(
+            {
+                "timestamp": "2026-06-05T12:00:00+00:00",
+                "operation": "index_page",
+                "prompt_tokens": 100,
+                "completion_tokens": 40,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.cli.ui_server.resolve_plumber_log_path", lambda: log_path)
+
+    with TestClient(app) as client:
+        response = client.get("/api/state", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session_prompt_tokens"] >= 100
+    assert payload["session_completion_tokens"] >= 40
 
 
 def test_get_state_includes_phase2_progress_fields(

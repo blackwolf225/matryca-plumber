@@ -12,7 +12,7 @@ import { normalizeDaemonState, normalizeGraphAnalytics } from '../types/daemon'
 import { MATRYCA_API_BASE, matrycaFetchJson } from '../utils/matrycaApiAuth'
 
 /** Base interval between telemetry poll cycles (distributed requests within each cycle). */
-const POLL_CYCLE_MS = 4000
+const POLL_CYCLE_MS = 5000
 /** Delay between sequential API calls inside one cycle to avoid request bursts. */
 const POLL_STAGGER_MS = 1200
 /** Fetch graph analytics every N cycles (~16s at 4s/cycle). */
@@ -97,10 +97,12 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
       setState(nextState)
       setConnectionError(null)
 
+      const daemonAlive =
+        nextState.daemon_pid != null && nextState.daemon_pid > 0
       if (
         frozenRef.current
         && !telemetryLiveRef.current
-        && (nextState.status === 'running' || nextState.status === 'idle')
+        && (nextState.status === 'running' || nextState.status === 'idle' || daemonAlive)
       ) {
         telemetryLiveRef.current = true
         frozenRef.current = false
@@ -250,6 +252,23 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
       clearCycleTimer()
     }
   }, [clearCycleTimer, frozen, pollFull, startTelemetryLoop])
+
+  /** While UI is frozen, still poll checkpoint state when a live daemon PID is reported. */
+  useEffect(() => {
+    if (!frozen) {
+      return
+    }
+    const pid = state?.daemon_pid
+    if (pid == null || pid <= 0) {
+      return
+    }
+    const intervalId = window.setInterval(() => {
+      void pollState()
+    }, cycleMs)
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [cycleMs, frozen, pollState, state?.daemon_pid])
 
   const refreshConfig = useCallback(async () => {
     try {

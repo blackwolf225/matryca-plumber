@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.9.2 (Structural graph hygiene + agent DX + agent onboarding)  
+**Version:** 1.9.3 (Live Sovereign UI telemetry + structural hygiene + agent DX)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -29,6 +29,8 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 **v1.9 focus:** **Structural graph hygiene** without new LLM cognitive modules — zero-LLM link rot detection, OCC-safe `dead-link::` / `missing-asset::` flags, agent-native CLI (`--json`, `context load`, `read subtree`), and Journey Log visibility in today's journal. See [Structural link verification (v1.9)](#structural-link-verification-v19) and [Agent-centric DX (v1.9)](#agent-centric-dx-v19).
 
 **v1.9.2 focus:** **Agent-zero-friction distribution** — canonical [`llms.txt`](../llms.txt) / [`.well-known/llms.txt`](../.well-known/llms.txt) for external LLM hosts, PyPI `uvx` execution contract, lockfile security refresh (`aiohttp` ≥3.14.0), and Dependabot `uv.lock` auto-sync in CI. See [Agent onboarding (v1.9.2)](#agent-onboarding-v192) and [Release engineering](#release-engineering).
+
+**v1.9.3 focus:** **Live telemetry** for the Sovereign UI — 5s HTTP polling, daemon heartbeat checkpoints under `threading.Lock` + immutable JSON snapshots, API merge of ops-log token totals, `daemon_pid` auto-unfreeze. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md).
 
 ---
 
@@ -104,7 +106,7 @@ Spec: [`docs/openspec/agent-dx.md`](openspec/agent-dx.md).
 A **monolithic** Uvicorn process serves:
 
 - **REST API** — `/api/state`, `/api/logs`, `/api/config`, daemon control, LM model discovery (SSRF-hardened)
-- **Static SPA** — `frontend/dist/` built from Vite; polls on a **4s distributed cycle** via `usePlumberPolling` (`/api/state` every cycle, `/api/logs` staggered, `/api/graph-analytics` ~every 16s)
+- **Static SPA** — `frontend/dist/` built from Vite; polls on a **5s distributed cycle** via `usePlumberPolling` (`/api/state` every cycle — including a background **5s** poll when `daemon_pid` is live but logs are frozen; `/api/logs` staggered; `/api/graph-analytics` ~every 20s)
 - **Zero-Trust auth** — `X-Matryca-Token` on protected routes (`ui_auth.py`)
 
 The UI never becomes a second source of truth: it reads daemon checkpoints and live graph scans; configuration writes go to the repo **`.env`** atomically and are picked up by `reload_plumber_dotenv()` on the next daemon sync cycle.
@@ -147,7 +149,7 @@ graph TD
   subgraph ui["Sovereign UI"]
     REACT["React SPA\nfrontend/dist"]
     API["FastAPI ui_server.py\n:8500 loopback"]
-    REACT <-->|"4s cycle · X-Matryca-Token"| API
+    REACT <-->|"5s cycle · X-Matryca-Token"| API
   end
 
   subgraph mcp["MCP sidecar optional"]
@@ -372,6 +374,17 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 ---
 
 ## Sovereign UI and telemetry (condensed)
+
+**Live control room (v1.9.3):**
+
+| Layer | Contract |
+|-------|----------|
+| Daemon | `MATRYCA_TELEMETRY_HEARTBEAT_SECONDS` (default 5) — `_telemetry_heartbeat_scope` during `index_page`, idle sleep between cycles |
+| Checkpoint | `save_daemon_state` after immutable snapshot under `_telemetry_lock` |
+| API | `GET /api/state` — `max(checkpoint, ops_log)` token totals + `daemon_pid` |
+| UI | `POLL_CYCLE_MS = 5000`; auto-unfreeze on PID / `running` / `idle` |
+
+Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md).
 
 **Dynamic Human vs Agent metrics** (`graph_analytics.py`):
 
@@ -636,6 +649,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
 - [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)
 - [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md) — `llms.txt` / PyPI `uvx` agent contract (v1.9.2)
+- [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md) — Sovereign UI live telemetry (v1.9.3)
 - [`../llms.txt`](../llms.txt) — agent execution guide (mirrored under `.well-known/`)
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy
 - [`../README.md`](../README.md) — operator quick start

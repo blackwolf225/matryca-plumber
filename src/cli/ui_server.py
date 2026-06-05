@@ -156,6 +156,7 @@ class DaemonStateResponse(BaseModel):
     progress_done: int = 0
     progress_total: int = 0
     progress_percent: float = 0.0
+    daemon_pid: int | None = None
 
     @classmethod
     def from_daemon_state(cls, state: DaemonState) -> DaemonStateResponse:
@@ -735,13 +736,29 @@ async def get_graph_analytics(_: None = Depends(_require_ui_token)) -> GraphAnal
     return await asyncio.to_thread(_graph_analytics_for_graph, graph_root)
 
 
+def _session_token_totals_for_api(state: DaemonState) -> tuple[int, int]:
+    """Merge checkpoint counters with live JSONL totals (same policy as the TUI)."""
+    token_logger = TokenLogger(log_path=resolve_plumber_log_path())
+    log_prompt, log_completion = token_logger.session_token_totals_from_log()
+    return (
+        max(state.session_prompt_tokens, log_prompt),
+        max(state.session_completion_tokens, log_completion),
+    )
+
+
 def _build_daemon_state_response(graph_root: Path) -> DaemonStateResponse:
     state = load_daemon_state(graph_root)
+    session_prompt_tokens, session_completion_tokens = _session_token_totals_for_api(state)
+    pid = read_pid_file(graph_root)
+    daemon_pid = pid if pid is not None and is_plumber_process(pid) else None
     response = DaemonStateResponse.from_daemon_state(state)
     progress = resolve_control_room_progress(state)
     return response.model_copy(
         update={
             "status": _daemon_status_for_api(graph_root, state),
+            "session_prompt_tokens": session_prompt_tokens,
+            "session_completion_tokens": session_completion_tokens,
+            "daemon_pid": daemon_pid,
             **progress.to_api_fields(),
         }
     )

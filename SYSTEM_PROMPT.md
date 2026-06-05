@@ -35,7 +35,7 @@ This is non-negotiable for both MCP agents and the Plumber daemon. Patience beat
 made-by:: matryca plumber v<installed-version>
 ```
 
-The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py` — e.g. `v1.9.2` on PyPI). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
+The version resolves from installed package metadata (`get_plumber_version()` in `page_properties.py` — e.g. `v1.9.3` on PyPI). Do **not** remove or duplicate this line — it is the on-disk provenance anchor for telemetry and audit. When you create pages via MCP, prefer letting Plumber modules stamp authorship; for manual new pages you may omit `made-by::` unless you intentionally mark agent output.
 
 **Token economy:** Call the smallest MCP tool with the narrowest discriminator. Read once, plan once, mutate surgically. Never dump whole vaults into context.
 

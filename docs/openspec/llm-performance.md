@@ -116,7 +116,7 @@ Full TRIZ framing, failure anatomy, and verification: **[`resilience-llm-json-tr
 
 Non-LLM bootstrap paths (regex catalog hits) may sleep `MATRYCA_BOOTSTRAP_IO_BATCH_PAUSE_MS` (default 2 ms) between files to spare slow disks.
 
-Daemon checkpoint frequency during Phase 1 is controlled by `MATRYCA_BOOTSTRAP_CHECKPOINT_EVERY` (default 50), not a hard-coded interval.
+Daemon checkpoint frequency during Phase 1 is controlled by `MATRYCA_BOOTSTRAP_CHECKPOINT_EVERY` (default 50), not a hard-coded interval. Phase 1 pill history uses `MATRYCA_BOOTSTRAP_PILL_CHECKPOINT_EVERY` (default 5). Sovereign UI live telemetry uses `MATRYCA_TELEMETRY_HEARTBEAT_SECONDS` (default 5) — see [`live-telemetry-ui.md`](live-telemetry-ui.md).
 
 ---
 

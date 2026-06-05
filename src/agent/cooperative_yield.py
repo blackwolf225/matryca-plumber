@@ -57,10 +57,38 @@ def bootstrap_checkpoint_every() -> int:
         return 50
 
 
+def bootstrap_pill_checkpoint_every() -> int:
+    """How often Phase 1 pill history (``bootstrap_recent``) is flushed to disk."""
+    raw = os.environ.get("MATRYCA_BOOTSTRAP_PILL_CHECKPOINT_EVERY", "").strip()
+    if not raw:
+        return 5
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 5
+
+
+_TELEMETRY_HEARTBEAT_ENV = "MATRYCA_TELEMETRY_HEARTBEAT_SECONDS"
+_DEFAULT_TELEMETRY_HEARTBEAT_SECONDS = 5.0
+
+
+def telemetry_heartbeat_seconds() -> float:
+    """Minimum interval between cooperative daemon telemetry checkpoints."""
+    raw = os.environ.get(_TELEMETRY_HEARTBEAT_ENV, "").strip()
+    if not raw:
+        return _DEFAULT_TELEMETRY_HEARTBEAT_SECONDS
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return _DEFAULT_TELEMETRY_HEARTBEAT_SECONDS
+
+
 __all__ = [
     "bootstrap_checkpoint_every",
+    "bootstrap_pill_checkpoint_every",
     "bootstrap_yield_every",
     "io_batch_pause_seconds",
+    "telemetry_heartbeat_seconds",
     "yield_host",
     "yield_sleep_seconds",
 ]
