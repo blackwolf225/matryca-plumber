@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.9.4 (Journey Log consolidation + live telemetry + structural hygiene + agent DX)  
+**Version:** 1.9.5 (LLM OS agent contract + bootstrap_status + Journey Log + live telemetry + agent DX)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -22,7 +22,35 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 
 **FastMCP is auxiliary.** The product’s center of gravity is `matryca plumber start` plus the Sovereign UI. MCP attaches the identical read/write path when an external host spawns `matryca-plumber` without CLI-shaped arguments.
 
-**Quality bar:** **610+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
+```mermaid
+flowchart TB
+  subgraph clients [Operator and agent surfaces]
+    Human[Human operator Logseq desktop]
+    UI[Sovereign UI React plus FastAPI]
+    Daemon[MaintenanceDaemon background]
+    MCP[MCP host Claude Cursor etc]
+    CLI[matryca CLI uvx matryca-plumber]
+  end
+
+  subgraph plane [Shared headless mutation plane]
+    Dispatch[graph_dispatch.py]
+    Parser[logseq-matryca-parser]
+    Locks[OCC plus page_rmw_lock]
+  end
+
+  Vault[(LOGSEQ_GRAPH_PATH\npages journals cache ledgers)]
+
+  Human <-->|"co-edit md"| Vault
+  UI -->|"start stop config telemetry"| Daemon
+  Daemon --> Dispatch
+  MCP --> Dispatch
+  CLI --> Dispatch
+  Dispatch --> Parser
+  Dispatch --> Locks
+  Locks --> Vault
+```
+
+**Quality bar:** **637+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
@@ -33,6 +61,8 @@ Matryca Plumber evolved from an MCP-first bridge into a **three-surface runtime*
 **v1.9.3 focus:** **Live telemetry** for the Sovereign UI — 5s HTTP polling, daemon heartbeat checkpoints under `threading.Lock` + immutable JSON snapshots, API merge of ops-log token totals, `daemon_pid` auto-unfreeze. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md).
 
 **v1.9.4 focus:** **Journey Log consolidation** — one cumulative `- 🤖 Matryca Activity` bullet per calendar day (`DaemonState.journey_day` ledger + `upsert_matryca_activity_block`); idle cycles skip journal writes; legacy `##` sections stripped on first upsert. Spec: [`openspec/agent-dx.md`](openspec/agent-dx.md) §4.
+
+**v1.9.5 focus:** **LLM OS agent contract** — two-tier Gardener vs Cognitive Agent discipline, Master Index **Soft Gate** (Human-in-the-Loop), `read_graph_data` / `bootstrap_status` Phase 1 semaphore, Safe-Sync read/write rules. Spec: [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md); cognitive law in [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) § "LLM OS".
 
 ---
 
@@ -69,6 +99,25 @@ Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 | MCP surface | `src/agent/mcp_server.py` | `ingest_document(source_name, raw_text)` |
 
 Destination: daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`. Parse scratch files **must not** live under `pages/` (avoids `file_watcher` + AST churn). Spec: [`docs/openspec/ingest.md`](openspec/ingest.md).
+
+```mermaid
+sequenceDiagram
+  participant Agent as MCP ingest_document
+  participant Temp as OS temp .md
+  participant Parser as logseq-matryca-parser
+  participant Gate as OCC plus page_rmw_lock
+  participant Ingest as Ingest/YYYY-MM-DD page
+  participant Log as LOG and GLOSSARY pages
+
+  Agent->>Temp: write raw_text never under pages/
+  Agent->>Parser: parse stamp fresh id UUIDs
+  Parser-->>Agent: outline tree
+  Agent->>Gate: append wrapped section
+  Gate->>Ingest: atomic write
+  Agent->>Gate: append ledger lines
+  Gate->>Log: atomic write
+  Note over Agent,Log: Secret scan rejects credentials in payload
+```
 
 #### Dual embedding (optional MCP semantic search)
 
@@ -121,55 +170,105 @@ The UI never becomes a second source of truth: it reads daemon checkpoints and l
 
 **Routing fix (`plumber_entry.py`):** the `matryca-plumber` console script inspects `sys.argv`. Known CLI commands (`plumber`, `read`, `search`, shorthand `start`/`status`/…) route to `cli.main` **without** importing FastMCP. Bare invocations (typical MCP host stdio spawn) fall through to `main.main()`. This disentangles **operator CLI stdout** from **MCP JSON-RPC on stdio** — a class of integration bugs that plagued single-entrypoint packages.
 
+```mermaid
+flowchart TD
+  Entry[matryca-plumber console script plumber_entry.py]
+  Entry --> HasArgs{known CLI subcommand\nin sys.argv?}
+
+  HasArgs -->|yes| CLI[cli.main\nhuman stdout text or --json]
+  HasArgs -->|no| McpEnabled{MATRYCA_MCP_ENABLED true?}
+
+  McpEnabled -->|yes| MCP[main.main FastMCP stdio\nJSON-RPC tool plane]
+  McpEnabled -->|no| Help[print help exit]
+
+  CLI --> Dispatch[graph_dispatch.py]
+  MCP --> Dispatch
+```
+
 ---
 
 ## System topology
 
 ```mermaid
-graph TD
-  subgraph graph["Logseq OG graph on disk"]
-    MD["pages/ · journals/ · templates/\nPure Markdown outliner trees"]
-    LEDGER[".matryca_daemon_state.json\n.matryca_xray_state.json"]
+flowchart TB
+  subgraph vault [Logseq OG vault LOGSEQ_GRAPH_PATH]
+    Pages["pages/ journals/ templates/"]
+    Cache[".matryca_semantic_cache/\nmaster_catalog.json clusters"]
+    Ledgers[".matryca_daemon_state.json\n.matryca_xray_state.json\n.matryca_link_registry.json"]
+    L1["matryca-l1/ session rules\noutside wiki index"]
   end
 
-  subgraph daemon["Matryca Plumber daemon"]
-    MD_POLL["MaintenanceDaemon\npoll · OCC · cognitive lint"]
-    GD["graph_dispatch.py\nappend_child_to_node"]
-    LOCK["page_rmw_lock\nfcntl.flock + thread registry"]
-    MD_POLL --> GD
-    GD --> LOCK
-    LOCK --> MD
+  subgraph inference [Local inference CPU only]
+    LM[LM Studio or Ollama]
+    Client[InstructorLLMClient structured JSON]
+    LM <--> Client
   end
 
-  subgraph llm["Local inference"]
-    LM["LM Studio / Ollama\nOpenAI-compatible API"]
-    INST["InstructorLLMClient\nJSON_SCHEMA → MD_JSON"]
-    MD_POLL --> INST
-    INST --> LM
+  subgraph engine [MaintenanceDaemon]
+    P1[Phase 1 bootstrap harvest]
+    P2[Phase 2 cognitive lint poll]
+    P1 -->|"bootstrap_complete"| P2
+    P1 --> Client
+    P2 --> Client
   end
 
-  subgraph ui["Sovereign UI"]
-    REACT["React SPA\nfrontend/dist"]
-    API["FastAPI ui_server.py\n:8500 loopback"]
-    REACT <-->|"5s cycle · X-Matryca-Token"| API
+  subgraph dispatch [graph_dispatch shared by all surfaces]
+    GD[read search mutate refactor lint]
+    Lock[page_rmw_lock plus OCC mtime]
+    GD --> Lock
   end
 
-  subgraph mcp["MCP sidecar optional"]
-    HOST["Claude Desktop / MCP host"]
-    FMCP["FastMCP stdio\nmain.py"]
-    HOST <-->|"stdio tools"| FMCP
+  subgraph surfaces [External surfaces]
+    UI[Sovereign UI :8500]
+    MCP[FastMCP stdio optional]
+    CLI[matryca CLI --json]
   end
 
-  MD <-->|"UTF-8 read/write\nOCC mtime guard"| daemon
-  API -->|"read checkpoint · start/stop"| daemon
-  FMCP --> GD
-  FMCP --> LOCK
-  API -->|"POST /api/config\natomic .env"| ENV["Repo .env"]
-  ENV -.->|"reload_plumber_dotenv"| daemon
-  LM -.->|"telemetry"| API
+  Pages <-->|"UTF-8 atomic writes"| Lock
+  Cache -.->|"catalog read not L2 scrape"| GD
+  L1 -.->|"read_graph_data memory"| GD
+  engine --> GD
+  UI -->|"checkpoint start stop .env"| engine
+  MCP --> GD
+  CLI --> GD
+  Client -.->|"token telemetry"| UI
 ```
 
 **Invariant:** one **system of record** — `LOGSEQ_GRAPH_PATH`. No auxiliary database, no Logseq Electron dependency, no split-brain HTTP API for background work.
+
+### Daemon lifecycle: Phase 1 → Phase 2
+
+The maintenance daemon enforces **strict phase separation**. Phase 2 cognitive lint and cluster scheduling stay disabled until bootstrap harvest completes and `bootstrap_complete` is persisted.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Boot: prepare_matryca_runtime
+  Boot --> Phase1: run_bootstrap_pipeline
+
+  state Phase1 {
+    [*] --> HarvestPage
+    HarvestPage --> HarvestPage: per page mmap or LLM summary
+    HarvestPage --> WriteCatalog: upsert master_catalog.json
+    WriteCatalog --> CompileIndex: write Matryca Master Index.md
+  }
+
+  Phase1 --> Teardown: release_phase1_memory
+  Teardown --> Phase2: bootstrap_complete true
+
+  state Phase2 {
+    [*] --> DutyCycle
+    DutyCycle --> FastTrack: mtime changed pages
+    DutyCycle --> CognitiveLint: LLM modules env gated
+    DutyCycle --> LinkVerify: dead-link missing-asset batch
+    DutyCycle --> JourneyLog: upsert daily activity bullet
+    FastTrack --> DutyCycle
+    CognitiveLint --> DutyCycle
+    LinkVerify --> DutyCycle
+    JourneyLog --> DutyCycle
+  }
+
+  Phase2 --> [*]
+```
 
 ---
 
@@ -197,6 +296,42 @@ Disk mutators that perform line surgery (`property_line_edit`, `tag_unify`, `rep
 | **Authorship** | `made-by:: matryca plumber v{version}` in frontmatter | `stamp_plumber_authored_page()` |
 
 Third-party tools that treat pages as flat CommonMark routinely corrupt Logseq indexes; Plumber’s write paths preserve the outliner contract end-to-end.
+
+### Safe-Sync data paths (v1.9.5)
+
+Tier-2 agents and operators share one contract: **read Markdown through Plumber tools**, **write through atomic mutators**, **never touch Logseq’s internal app database**.
+
+```mermaid
+flowchart LR
+  subgraph readPlane [READ plane]
+    R1[read_graph_data]
+    R2[search_graph bm25 semantic]
+    R3[context load CLI macro]
+    MD[(pages/ journals/ md)]
+    R1 --> MD
+    R2 --> MD
+    R3 --> MD
+  end
+
+  subgraph writePlane [WRITE plane Logseq OG]
+    W1[mutate_graph refactor_blocks]
+    W2[ingest_document OS temp parse]
+    W3[store_fact identity page]
+    Gate[OCC snapshot verify atomic_write]
+    W1 --> Gate
+    W2 --> Gate
+    W3 --> Gate
+    Gate --> MD
+  end
+
+  Forbidden["Logseq app SQLite/KV\nNEVER read or write"]
+  MD -.->|"not via Plumber"| Forbidden
+
+  subgraph cachePlane [Daemon cache not agent scrape target]
+    Cat[master_catalog.json]
+    Cat -.->|"Tier-2 reads compiled\nMaster Index page instead"| R1
+  end
+```
 
 ---
 
@@ -511,21 +646,50 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
+  subgraph hosts [External LLM hosts]
+    Cursor[Cursor Claude Desktop scripts]
+  end
+
+  subgraph entry [Distribution surfaces]
+    LLMS[llms.txt plus SYSTEM_PROMPT.md]
+    UVX[uvx matryca-plumber PyPI wheel]
+  end
+
   subgraph cli [matryca CLI]
-    JSON["--json envelope"]
-    CTX["context load"]
-    RST["read subtree"]
+    JSON["--json stdout"]
+    CTX[context load]
+    RST[read subtree]
+    BootCLI[read bootstrap_status]
+  end
+
+  subgraph mcp [MCP seven tools]
+    Read[read_graph_data]
+    Search[search_graph]
+    Mutate[mutate_graph plus ingest store_fact]
   end
 
   subgraph shared [Shared headless plane]
     GD[graph_dispatch.py]
-    AST[logseq-matryca-parser + ast_cache]
+    AST[logseq-matryca-parser plus ast_cache]
+    Redact[redact_secrets_in_text]
   end
 
+  Vault[(LOGSEQ_GRAPH_PATH)]
+
+  Cursor --> LLMS
+  Cursor --> UVX
+  UVX --> cli
+  UVX --> mcp
   JSON --> GD
   CTX --> GD
   RST --> GD
+  BootCLI --> GD
+  Read --> GD
+  Search --> GD
+  Mutate --> GD
   GD --> AST
+  GD --> Redact
+  AST --> Vault
 ```
 
 **Journey Log** closes the operator feedback loop: after each active duty cycle, the daemon upserts **one** top-level bullet in `journals/YYYY_MM_DD.md`:
@@ -556,6 +720,81 @@ Daily totals live in `DaemonState.journey_day` (`JourneyDayLedger`); the journal
 4. Use **`read` / `search` / `context load`** (or MCP on the same `graph_dispatch` plane) — never scrape `pages/*.md` by hand.
 
 When CLI surface changes, update both `llms.txt` files in the same PR and ship a patch release so `uvx` consumers receive accurate commands.
+
+---
+
+## LLM OS agent contract (v1.9.5)
+
+**Goal:** Give Tier-2 MCP/CLI agents a **deterministic Phase 1 gate** and explicit two-tier boundaries — without scraping raw files or impersonating the Gardener daemon.
+
+| Component | Module / artifact | Role |
+|-----------|-------------------|------|
+| Cognitive law | [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) § "LLM OS" | Soft Gate, Safe-Sync, tool sequence |
+| Distribution pointer | [`llms.txt`](../llms.txt) §6 | PyPI hosts → full contract |
+| Maintainer spec | [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md) | Single source + v2.0 SQLite migration trigger |
+| Phase 1 semaphore | `src/graph/bootstrap_status.py` | `read_graph_data` / `bootstrap_status` and CLI `read bootstrap_status` |
+| L1 overlay | `matryca-l1/llm-os-rules.md` | Operator session rules (loaded via `read_graph_data` / `memory`) |
+
+**Tier-2 session open (encoded in prompts):** `memory` → `bootstrap_status` → `Matryca Master Index` (page) → narrow reads. If `soft_gate_active`, pause and offer Local Daemon / Blind Search / Cloud Indexing; wait for explicit authorization before blind `bm25`.
+
+```mermaid
+flowchart TB
+  subgraph tier1 [Tier 1 Gardener daemon only]
+    D[MaintenanceDaemon Phase 1]
+    D --> SemanticBlock["### Matryca Semantic Index per page"]
+    D --> Catalog[master_catalog.json]
+    D --> IndexPage["pages/Matryca Master Index.md"]
+    Catalog --> IndexPage
+  end
+
+  subgraph tier2 [Tier 2 Cognitive Agent MCP or CLI]
+    L1[read_graph_data memory]
+    Status[read_graph_data bootstrap_status]
+    IndexRead["read_graph_data page Matryca Master Index"]
+    Gate{soft_gate_active?}
+    Narrow[narrow page subtree xray_page]
+    SearchRefine[search_graph bm25 refine only]
+    L1 --> Status --> IndexRead --> Gate
+    Gate -->|false green| Narrow
+    Gate -->|true| Pause[Pause present 3 options]
+    Pause --> OptA[Option A Local Daemon recommended]
+    Pause --> OptB[Option B Blind Search authorized]
+    Pause --> OptC[Option C Cloud Indexing authorized]
+    OptB --> SearchRefine
+    Narrow --> SearchRefine
+  end
+
+  IndexPage --> IndexRead
+  Status -.->|"reads .matryca_daemon_state.json\nvia bootstrap_status.py"| Catalog
+
+  tier1 -.->|"NEVER impersonate"| tier2
+```
+
+### `bootstrap_status` semaphore
+
+`src/graph/bootstrap_status.py` merges daemon checkpoint fields with `is_bootstrap_catalog_complete()` so Tier-2 agents do not infer Phase 1 state from index existence alone.
+
+```mermaid
+sequenceDiagram
+  participant Agent as Tier-2 MCP or CLI agent
+  participant GD as graph_dispatch
+  participant BS as bootstrap_status.py
+  participant State as .matryca_daemon_state.json
+  participant Disk as Master Index page
+
+  Agent->>GD: read_graph_data bootstrap_status
+  GD->>BS: collect_bootstrap_status
+  BS->>State: load_daemon_state
+  BS->>Disk: master_index present catalog stale?
+  BS-->>Agent: JSON soft_gate_active bootstrap_complete progress
+
+  alt soft_gate_active
+    Agent-->>Agent: Soft Gate pause offer A B C
+  else green gate
+    Agent->>GD: read_graph_data page Matryca Master Index
+    Agent->>GD: narrow reads then optional bm25 refine
+  end
+```
 
 ---
 
@@ -657,6 +896,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
 - [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)
 - [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md) — `llms.txt` / PyPI `uvx` agent contract (v1.9.2)
+- [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md) — two-tier LLM OS, Soft Gate, `bootstrap_status` (v1.9.5)
 - [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md) — Sovereign UI live telemetry (v1.9.3)
 - [`../llms.txt`](../llms.txt) — agent execution guide (mirrored under `.well-known/`)
 - [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) — agent OCC and persist-first `id::` policy

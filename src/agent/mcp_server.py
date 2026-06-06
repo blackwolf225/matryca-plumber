@@ -93,6 +93,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         or JSON ``{"seeds":"A, B", "max_depth": 3, "max_per_level": 40}``. BFS over wikilinks,
         shared tags, and light ``type::`` / ``domain::`` rings (no vectors).
 
+        **``target_type=bootstrap_status``** — ``query`` ignored. Phase 1 semaphore JSON
+        (``bootstrap_complete``, progress, ``soft_gate_active``). Call before the Master Index
+        Soft Gate.
+
         **``target_type=dashboard``** — ``query`` ignored. Matryca dashboard Markdown:
         page counts, ``id::`` tally, block-ref health under ``pages/``.
 
@@ -101,6 +105,14 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         the graph root. Use ``[n]`` in ``target`` / ``target_uuid`` on later mutations.
 
         **Requires:** ``LOGSEQ_GRAPH_PATH`` for every target except ``memory`` (still recommended).
+
+        TIER-2 SOFT GATE: Before first wiki read/search, call ``target_type=bootstrap_status``
+        then ``target_type=page`` ``query="Matryca Master Index"``. If missing or Phase 1
+        incomplete, pause and present 3 fallback options to the operator for authorization:
+        (A) Local Daemon — recommended, run ``matryca plumber start``;
+        (B) Blind Search — proceed without index, less precise;
+        (C) Cloud Indexing — agent scans vault now, high token cost.
+        Wait for explicit user choice before B or C. Do not guess page titles.
         """
         wiki_config = ctx.request_context.lifespan_context.wiki_config
         if target_type == "dashboard":
@@ -140,6 +152,11 @@ def register_mcp_tools(mcp: FastMCP) -> None:
 
         **``method=resolve_entity``** — ``query`` = page title or ``alias::`` name. Resolves
         collisions, lists existing aliases, and reports whether a new entity page is safe to create.
+
+        PREREQUISITE: Check ``bootstrap_status`` and scan ``[[Matryca Master Index]]`` via
+        ``read_graph_data(page)`` first. If index unavailable, pause and present fallback options
+        (Local Daemon, Blind Search, Cloud Indexing) to the operator for authorization before
+        blind ``bm25`` discovery.
         """
         if method == "bm25":
             await mcp_tool_info(

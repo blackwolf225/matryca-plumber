@@ -7,7 +7,7 @@ v1.8 delivered Ironclad AST parity and OCC. v1.9 improves **headless agent ergon
 
 **v1.9.2** adds the distribution layer: [`llms.txt`](../../llms.txt) / [`.well-known/llms.txt`](../../.well-known/llms.txt) and [`agent-onboarding.md`](agent-onboarding.md) — verified `uvx` commands and anti-patterns for external hosts.
 
-**v1.9.3** adds live Sovereign UI telemetry — see [`live-telemetry-ui.md`](live-telemetry-ui.md) (5s polling, daemon heartbeat, `daemon_pid` auto-unfreeze). **v1.9.4** consolidates Journey Log into one cumulative daily journal bullet (§4 below).
+**v1.9.3** adds live Sovereign UI telemetry — see [`live-telemetry-ui.md`](live-telemetry-ui.md) (5s polling, daemon heartbeat, `daemon_pid` auto-unfreeze). **v1.9.4** consolidates Journey Log into one cumulative daily journal bullet (§4 below). **v1.9.5** adds the LLM OS contract and `read bootstrap_status` — see [`llm-os-instructions.md`](llm-os-instructions.md).
 
 ---
 
@@ -74,6 +74,16 @@ matryca --json context load "Architecture/Plumber|aaaaaaaa-aaaa-aaaa-aaaa-aaaaaa
 ```
 
 MCP equivalent: compose `read_graph_data` (`page` or `subtree`) — no separate MCP tool (keeps seven-tool surface stable).
+
+### Phase 1 `bootstrap_status` (v1.9.5)
+
+Check daemon Phase 1 / Master Index gate state before blind vault search:
+
+```bash
+matryca --json read bootstrap_status
+```
+
+MCP: `{ "target_type": "bootstrap_status", "query": "" }`. Returns `soft_gate_active`, `bootstrap_complete`, harvest progress, and catalog health. When `soft_gate_active` is true, follow the Soft Gate in [`llm-os-instructions.md`](llm-os-instructions.md) — do not scrape `.matryca_daemon_state.json` by hand.
 
 ---
 

@@ -1,12 +1,35 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.4**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.5**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-05] v1.9.5 — LLM OS agent contract (Soft Gate + bootstrap_status)
+
+### Context
+
+External MCP agents (Cursor, Claude Desktop, custom hosts) needed a **deterministic Phase 1 gate** beyond inferring bootstrap completion from `[[Matryca Master Index]]` existence alone. Hard-blocking agents when the index was missing created bad UX; operators needed a **Human-in-the-Loop** path (Local Daemon / Blind Search / Cloud Indexing).
+
+### Milestones shipped
+
+1. **`bootstrap_status` read target** — `src/graph/bootstrap_status.py`; MCP `read_graph_data` and CLI `matryca --json read bootstrap_status` expose `soft_gate_active`, harvest progress, and catalog health.
+2. **LLM OS prompts** — `SYSTEM_PROMPT.md` § "LLM OS", `llms.txt` §6, MCP docstrings for Soft Gate prerequisites.
+3. **OpenSpec** — [`docs/openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md) with v2.0 SQLite Shadow DB migration trigger for maintainers.
+4. **L1 seed** — `matryca-l1/llm-os-rules.md` on provision.
+
+### Architectural outcome
+
+Tier-1 Gardener (daemon Phase 1) and Tier-2 Cognitive Agents (MCP/CLI) are **explicitly decoupled** in agent-facing docs. Tier-2 agents prefer catalog-first navigation; when Phase 1 is incomplete they pause and ask — they do not silently `grep pages/` or impersonate harvest.
+
+### Documentation
+
+README, ARCHITECTURE, OpenSpec index, `agent-dx.md`, `agent-onboarding.md`, and release notes aligned for **v1.9.5 — The "LLM OS" Update**.
 
 ---
 

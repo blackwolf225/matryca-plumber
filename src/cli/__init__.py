@@ -48,6 +48,7 @@ READ_TARGETS: tuple[ReadGraphTarget, ...] = (
     "structural_hops",
     "dashboard",
     "xray_page",
+    "bootstrap_status",
 )
 SEARCH_METHODS: tuple[SearchGraphMethod, ...] = (
     "bm25",

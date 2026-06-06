@@ -25,6 +25,7 @@ ReadGraphTarget = Literal[
     "structural_hops",
     "dashboard",
     "xray_page",
+    "bootstrap_status",
 ]
 SearchGraphMethod = Literal[
     "bm25",

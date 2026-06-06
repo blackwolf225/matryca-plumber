@@ -1,6 +1,6 @@
-# Agent onboarding (`llms.txt`) — v1.9.2
+# Agent onboarding (`llms.txt`) — v1.9.5
 
-**Milestone:** v1.9.2 — Agent-zero-friction distribution  
+**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status`  
 **Artifacts:** [`llms.txt`](../../llms.txt) (repo root), [`.well-known/llms.txt`](../../.well-known/llms.txt) (canonical URL path)  
 **Companion spec:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log — cumulative daily journal bullet)
 
@@ -60,19 +60,34 @@ Host pattern (Cursor / Claude Desktop):
 
 ---
 
+## LLM OS contract (Tier-2 agents)
+
+Section 6 of `llms.txt` points to the full cognitive law in [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) § "LLM OS":
+
+- Two-tier Gardener vs Cognitive Agent awareness
+- Master Index **Soft Gate** (Local Daemon / Blind Search / Cloud Indexing)
+- `read_graph_data` / `bootstrap_status` semaphore before blind search
+
+Spec: [`llm-os-instructions.md`](llm-os-instructions.md).
+
+---
+
 ## Maintainer checklist
 
 When adding or renaming CLI subcommands:
 
 1. Run the command locally with `LOGSEQ_GRAPH_PATH` set.
 2. Update **`llms.txt`** and **`.well-known/llms.txt`** in the same PR.
-3. Cross-check [`agent-dx.md`](agent-dx.md) and [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) if MCP discriminators change.
+3. Cross-check [`agent-dx.md`](agent-dx.md), [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md), and [`llm-os-instructions.md`](llm-os-instructions.md) if MCP discriminators or agent contracts change.
 4. Ship a **patch release** so `uvx` consumers pick up accurate instructions on PyPI.
+
+When Shadow DB SQLite + FTS5 ships (v2.0), follow the migration trigger in [`llm-os-instructions.md`](llm-os-instructions.md).
 
 ---
 
 ## Related reading
 
+- [`llm-os-instructions.md`](llm-os-instructions.md) — two-tier architecture, Soft Gate, `bootstrap_status`
 - [`agent-dx.md`](agent-dx.md) — JSON envelope, `context load`, `read subtree`, Journey Log
 - [`l1-l2-routing.md`](l1-l2-routing.md) — L1 memory vs L2 graph for agents
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — three-surface runtime and distribution

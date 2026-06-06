@@ -23,11 +23,11 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.4** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.5** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **Current: v1.9.4** — **Journey Log hygiene** — one cumulative `- 🤖 Matryca Activity` bullet per day in your journal (no per-cycle spam). **v1.9.3** — Live Telemetry for the Sovereign UI (5s progress, pills, token counters; daemon heartbeat; auto-unfreeze). **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **Current: v1.9.5** — **LLM OS** — two-tier Gardener vs Cognitive Agent contract, Master Index **Soft Gate**, and `read bootstrap_status` Phase 1 semaphore for MCP/CLI agents. **v1.9.4** — Journey Log hygiene (one cumulative journal bullet per day). **v1.9.3** — Live Telemetry for the Sovereign UI. **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -128,7 +128,8 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Atomic document ingestion**: **`ingest_document`** parses external Markdown via an OS temp file (never under `pages/`), stamps fresh `id::` UUIDs, and appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, with optional `LOG` / `GLOSSARY` ledgers ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
 - **Structural link verification (v1.9)**: Passive harvest of URLs and `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks; OCC-safe **`dead-link::`** / **`missing-asset::`** block properties ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)).
 - **Agent-centric DX (v1.9)**: Global CLI **`--json`**, **`matryca context load`**, **`read subtree`**, and **Journey Log** — one cumulative `- 🤖 Matryca Activity` bullet in today's journal (daily totals, updated in place) ([`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md)).
-- **Agent onboarding (v1.9.2)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
+- **Agent onboarding (v1.9.2+)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
+- **LLM OS contract (v1.9.5)**: Tier-2 agents check `bootstrap_status` and `[[Matryca Master Index]]` before blind vault search; Soft Gate offers Local Daemon / Blind Search / Cloud Indexing ([`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md), [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) § "LLM OS").
 
 ---
 
@@ -185,6 +186,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 🔗 **Structural hygiene (v1.9):** Background link rot and missing-asset detection without LLM tokens; a single **Journey Log** bullet in today's journal with cumulative indexing, link-check, and flag totals (no per-cycle journal spam).
 * 🤖 **Agent-native CLI (v1.9):** `matryca --json …` for machine-readable stdout; `matryca context load` and `read subtree` to shrink context windows.
 * 📋 **Agent onboarding (v1.9.2):** [`llms.txt`](llms.txt) — canonical `uvx` commands for Cursor, Claude Code, and other hosts; no `git clone` required.
+* 🧠 **LLM OS (v1.9.5):** Two-tier agent discipline, `bootstrap_status` semaphore, Master Index Soft Gate — [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 * ⚡ **Live telemetry (v1.9.3):** 5s Sovereign UI updates, thread-safe daemon heartbeat, API token overlay from ops log — [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md).
 
 ---
@@ -273,11 +275,11 @@ make perf
 
 | Document | Description |
 |----------|-------------|
-| [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, `made-by::` authorship, OCC rules. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9 hygiene + v1.8 edge performance. |
+| [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
-| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.2 agent onboarding, v1.9.3 live telemetry). |
+| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.5 LLM OS, live telemetry). |
 | [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) | LLM prompt layout, memory, and I/O contracts. |
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
@@ -288,6 +290,7 @@ make perf
 | [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) | v1.9 CLI JSON, context macro, Journey Log. |
 | [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) | Agent execution guide (PyPI `uvx`, verified commands). |
 | [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) | `llms.txt` contract, anti-patterns, maintainer checklist. |
+| [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md) | Two-tier LLM OS, Soft Gate, `bootstrap_status`, Safe-Sync. |
 | [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) | Maintainer log, phase history, crushed bottlenecks. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, `uv` commands, `make check` standards. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and `.env` hardening controls. |

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.5] - 2026-06-05
+
+### Added
+
+- **LLM OS agent contract** — `SYSTEM_PROMPT.md` § "LLM OS" documents two-tier Gardener vs Cognitive Agent architecture, Master Index **Soft Gate** (Local Daemon / Blind Search / Cloud Indexing), and Safe-Sync rules; `llms.txt` §6 points external hosts to the full contract.
+- **`read_graph_data` / `bootstrap_status`** — Phase 1 semaphore for MCP and CLI (`matryca --json read bootstrap_status`) exposing `bootstrap_complete`, `soft_gate_active`, harvest progress, and catalog health (`src/graph/bootstrap_status.py`).
+- **OpenSpec** — [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md) (maintainer single-source spec + v2.0 SQLite migration trigger).
+- **L1 starter** — `matryca-l1/llm-os-rules.md` seeded on L1 provision alongside `session-rules.md`.
+- **Release notes** — [`docs/releases/v1.9.5-GITHUB.md`](docs/releases/v1.9.5-GITHUB.md) (GitHub Release copy-paste).
+
+### Changed
+
+- **MCP docstrings** — `read_graph_data` and `search_graph` include Soft Gate prerequisite text for Tier-2 agents.
+- **Documentation** — README, ARCHITECTURE, PROJECT_DIARY, OpenSpec index, `agent-dx.md`, and `agent-onboarding.md` aligned with the LLM OS contract and `bootstrap_status` read target; `llms.txt` / `.well-known/llms.txt` bumped to v1.9.5.
+- **ARCHITECTURE diagrams** — Expanded Mermaid coverage: three-surface runtime, Phase 1→2 state machine, Safe-Sync read/write paths, LLM OS Soft Gate + `bootstrap_status` sequence, `plumber_entry` routing, atomic `ingest_document` pipeline, and richer agent/MCP/CLI dispatch map.
+
 ## [1.9.4] - 2026-06-05
 
 ### Changed

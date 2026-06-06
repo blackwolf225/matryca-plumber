@@ -91,6 +91,14 @@ _L1_STARTER = """# Session rules (L1)
 - Never store credentials here; reference secret locations only.
 """
 
+_L1_LLM_OS_RULES = """# LLM OS rules (operator overlay)
+
+- Tier-2 agents: check `bootstrap_status` and read [[Matryca Master Index]] first.
+- If Phase 1 is incomplete, offer Local Daemon / Blind Search / Cloud Indexing.
+- Secrets stay out of L2; pointers only here.
+- Full contract: Matryca Plumber `SYSTEM_PROMPT.md` on PyPI / repo.
+"""
+
 
 def resolve_matryca_l1_directory(
     *,
@@ -148,6 +156,9 @@ def ensure_matryca_l1_dir(
         starter = target / "session-rules.md"
         if not starter.is_file():
             starter.write_text(_L1_STARTER, encoding="utf-8")
+    llm_os_rules = target / "llm-os-rules.md"
+    if not llm_os_rules.is_file():
+        llm_os_rules.write_text(_L1_LLM_OS_RULES, encoding="utf-8")
     return target
 
 

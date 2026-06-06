@@ -35,6 +35,7 @@ def test_ensure_matryca_l1_creates_sibling_directory(tmp_path: Path) -> None:
     assert l1.is_dir()
     assert (l1 / "README.md").is_file()
     assert (l1 / "session-rules.md").is_file()
+    assert (l1 / "llm-os-rules.md").is_file()
     paths = collect_l1_markdown_paths(logseq_graph_path=str(graph))
     assert (l1 / "session-rules.md") in paths
 

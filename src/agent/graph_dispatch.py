@@ -19,6 +19,7 @@ from ..graph.advanced_query_block import (
     wrap_logseq_advanced_query,
 )
 from ..graph.block_ref_lint import lint_block_refs_in_graph
+from ..graph.bootstrap_status import format_bootstrap_status_markdown
 from ..graph.dashboard import build_dashboard_markdown
 from ..graph.flashcards import append_logseq_flashcards_under_block
 from ..graph.journal_task_scan import (
@@ -429,6 +430,11 @@ async def dispatch_read(
             )
 
         return cap_llm_payload_chars(await asyncio.to_thread(_hops))
+
+    if target_type == "bootstrap_status":
+        status_md = await asyncio.to_thread(format_bootstrap_status_markdown, graph_path)
+        logger.bind(graph=graph_path).info("read_graph_data(bootstrap_status) completed")
+        return cap_llm_payload_chars(status_md)
 
     dashboard_md: str = await asyncio.to_thread(
         build_dashboard_markdown,
