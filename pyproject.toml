@@ -9,6 +9,12 @@ description = "Enterprise-grade, local-first autonomous background AI daemon and
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "logseq-matryca-parser>=1.1.1,<2.0.0",
     "pydantic>=2.0.0,<3.0.0",

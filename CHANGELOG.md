@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **GitHub traffic badges** — README Shields.io endpoints now read badge JSON from the `metrics` branch (`raw.githubusercontent.com/.../metrics/metrics/...`); `metrics-saver` publishes a metrics-only orphan branch via `METRICS_TOKEN` instead of bloating the branch with the full repo tree.
+- **README badges** — Python badge reads `requires-python` from `pyproject.toml` (PyPI `pyversions` showed `missing` without Trove classifiers); coverage anchor and test-count badge aligned with current suite (`630+`, `cov-fail-under=70` at `pyproject.toml` L138).
+
+### Changed
+
+- **PyPI metadata** — Added Python 3.12/3.13 Trove classifiers so `pypi/pyversions` works after the next PyPI publish.
+
+### Added
+
+- **README** — Live GitHub star history chart at the bottom via [star-history.com](https://www.star-history.com) SVG API (`<picture>` with light/dark theme).
 
 ## [1.9.5] - 2026-06-05
 
