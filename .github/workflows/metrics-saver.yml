@@ -20,7 +20,9 @@ jobs:
       - name: Sincronizza storico esistente dal branch metrics
         run: |
           git fetch origin metrics:refs/remotes/origin/metrics || echo "Nessun branch metrics remoto trovato"
-          git checkout origin/metrics -- metrics/ 2>/dev/null || echo "Nessuno storico precedente trovato, creo una nuova cartella metrics"
+          git checkout origin/metrics -- metrics/ 2>/dev/null || mkdir -p metrics
+          mkdir -p /tmp/metrics_before
+          cp -r metrics/. /tmp/metrics_before/ 2>/dev/null || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -127,31 +129,28 @@ jobs:
           python update_metrics.py
 
       - name: Commit & Push Changes to Dedicated Branch
+        env:
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          REPO_SLUG: ${{ github.repository }}
         run: |
-          # Salva i file appena generati in una cartella temporanea fuori dall'albero Git
-          mkdir -p /tmp/metrics_backup
-          cp -r metrics/* /tmp/metrics_backup/
-          
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action Bot"
-          
-          # Sincronizza l'ultimo stato del branch remoto per evitare disallineamenti
-          git fetch origin metrics:refs/remotes/origin/metrics || true
-          
-          # Crea un branch locale temporaneo agganciato ESATTAMENTE alla storia del metrics remoto
-          # Se il branch non esiste sul server, crea un branch orfano pulito
-          git checkout -b temp_metrics_branch origin/metrics 2>/dev/null || git checkout --orphan temp_metrics_branch
-          
-          # Pulisce la cartella metrics locale e ripristina i file aggiornati dal backup
-          rm -rf metrics
-          mkdir -p metrics
-          cp -r /tmp/metrics_backup/* metrics/
-          
-          # Esegue l'aggiunta e il push forzando l'aggancio fast-forward sulla destinazione remota
-          git add metrics/
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(analytics): archive daily metrics [split quarterly] [skip ci]"
-            git push origin temp_metrics_branch:metrics
-          else
-            echo "Nessuna variazione nei dati rilevata rispetto all'ultimo check."
+          if [ -z "$METRICS_TOKEN" ]; then
+            echo "❌ ERRORE: METRICS_TOKEN mancante!"
+            exit 1
           fi
+
+          if diff -qr metrics /tmp/metrics_before >/dev/null 2>&1; then
+            echo "Nessuna variazione nei dati rilevata rispetto all'ultimo check."
+            exit 0
+          fi
+
+          mkdir -p /tmp/metrics_publish/metrics
+          cp -r metrics/. /tmp/metrics_publish/metrics/
+
+          cd /tmp/metrics_publish
+          git init -b metrics
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action Bot"
+          git remote add origin "https://x-access-token:${METRICS_TOKEN}@github.com/${REPO_SLUG}.git"
+          git add metrics/
+          git commit -m "chore(analytics): archive daily metrics [split quarterly] [skip ci]"
+          git push origin metrics --force

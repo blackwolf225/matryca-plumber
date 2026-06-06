@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub traffic badges** — README Shields.io endpoints now read badge JSON from the `metrics` branch (`raw.githubusercontent.com/.../metrics/metrics/...`); `metrics-saver` publishes a metrics-only orphan branch via `METRICS_TOKEN` instead of bloating the branch with the full repo tree.
+
 ## [1.9.5] - 2026-06-05
 
 ### Added
