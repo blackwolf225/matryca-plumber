@@ -9,7 +9,10 @@ import pytest
 from src.agent.graph_dispatch import dispatch_read
 from src.agent.maintenance_daemon import save_daemon_state, state_path
 from src.config import MatrycaWikiConfig
-from src.graph.bootstrap_status import collect_bootstrap_status, format_bootstrap_status_markdown
+from src.graph.bootstrap_status import (
+    collect_bootstrap_status,
+    format_bootstrap_status_markdown,
+)
 from src.graph.master_catalog import (
     CatalogEntry,
     MasterCatalog,
