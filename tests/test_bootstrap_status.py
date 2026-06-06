@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from src.agent.graph_dispatch import dispatch_read
 from src.agent.maintenance_daemon import save_daemon_state, state_path
 from src.config import MatrycaWikiConfig
@@ -100,5 +101,7 @@ def test_state_path_written(tmp_path: Path) -> None:
     (tmp_path / "pages").mkdir()
     from src.agent.maintenance_daemon import DaemonState
 
-    save_daemon_state(tmp_path, DaemonState(bootstrap_failed=True, bootstrap_failed_reason="test"))
+    save_daemon_state(
+        tmp_path, DaemonState(bootstrap_failed=True, bootstrap_failed_reason="test")
+    )
     assert state_path(tmp_path).is_file()
