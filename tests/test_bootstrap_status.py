@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from src.agent.graph_dispatch import dispatch_read
 from src.agent.maintenance_daemon import save_daemon_state, state_path
 from src.config import MatrycaWikiConfig
@@ -50,19 +51,25 @@ def test_collect_bootstrap_status_phase1_in_progress(tmp_path: Path) -> None:
     assert snap.bootstrap_total == 10
 
 
-def test_collect_bootstrap_status_green_when_catalog_complete(tmp_path: Path) -> None:
+def test_collect_bootstrap_status_green_when_catalog_complete(
+    tmp_path: Path,
+) -> None:
     pages = tmp_path / "pages"
     pages.mkdir(parents=True)
     page_path = pages / "Alpha.md"
     page_path.write_text(
-        "- # Alpha\n- ### Matryca Semantic Index\n- summary:: Alpha page summary\n",
+        "- # Alpha\n"
+        "- ### Matryca Semantic Index\n"
+        "- summary:: Alpha page summary\n",
         encoding="utf-8",
     )
     mtime = int(page_path.stat().st_mtime_ns // 1_000_000_000)
     catalog = MasterCatalog(graph_root=tmp_path)
     catalog.upsert(
         "Alpha",
-        CatalogEntry(summary="Alpha page summary", domain="risorsa", last_mtime=mtime),
+        CatalogEntry(
+            summary="Alpha page summary", domain="risorsa", last_mtime=mtime
+        ),
     )
     catalog.save()
     write_master_index_page(tmp_path, catalog)
@@ -98,5 +105,8 @@ def test_state_path_written(tmp_path: Path) -> None:
     (tmp_path / "pages").mkdir()
     from src.agent.maintenance_daemon import DaemonState
 
-    save_daemon_state(tmp_path, DaemonState(bootstrap_failed=True, bootstrap_failed_reason="test"))
+    save_daemon_state(
+        tmp_path,
+        DaemonState(bootstrap_failed=True, bootstrap_failed_reason="test"),
+    )
     assert state_path(tmp_path).is_file()
