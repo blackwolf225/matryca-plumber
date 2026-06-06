@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **README** — Panoramic Mermaid architecture diagram in the intro (three-surface runtime, shared `graph_dispatch` plane, vault, local LLM); links to [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **README** — Live GitHub star history chart at the bottom via [star-history.com](https://www.star-history.com) SVG API (`<picture>` with light/dark theme).
 
 ## [1.9.5] - 2026-06-05

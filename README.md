@@ -41,6 +41,49 @@ Matryca Plumber is a **100% headless, sandboxed** **standalone daemon + CLI** th
 
 **Zero Cloud. Zero Data Leaks. 100% Native Logseq AST.**
 
+## 🏗️ Architecture at a glance
+
+Matryca Plumber is a **three-surface runtime** — background daemon, Sovereign UI, and optional CLI/MCP — that converges on **one headless mutation plane**. Every surface reads and writes the same Logseq OG vault on disk (`LOGSEQ_GRAPH_PATH`): no Logseq HTTP API, no cloud database, no split-brain datastore. Humans co-edit the same `.md` trees while the daemon runs Phase 1 catalog harvest and Phase 2 cognitive lint against a **local LLM** (LM Studio or Ollama).
+
+```mermaid
+flowchart TB
+  subgraph operators [Operators and agents]
+    Human[Human · Logseq optional]
+    UI[Sovereign UI :8500]
+    Daemon[Maintenance daemon]
+    CLI[matryca CLI --json]
+    MCP[FastMCP stdio optional]
+  end
+
+  subgraph plane [Shared headless mutation plane]
+    GD[graph_dispatch]
+    Lock[OCC + page_rmw_lock]
+    Parser[logseq-matryca-parser]
+    GD --> Lock
+    GD --> Parser
+  end
+
+  subgraph local [Local inference — 100% offline]
+    LLM[LM Studio / Ollama]
+  end
+
+  subgraph vault [LOGSEQ_GRAPH_PATH — single source of truth]
+    Pages[pages/ · journals/ · templates/]
+    Meta[.matryca_* cache & ledgers\nmatryca-l1/ session rules]
+  end
+
+  Human <-->|co-edit Markdown| Pages
+  UI -->|start · stop · config · telemetry| Daemon
+  Daemon -->|Phase 1 harvest · Phase 2 lint| GD
+  Daemon <-->|structured JSON| LLM
+  CLI --> GD
+  MCP --> GD
+  Lock -->|atomic UTF-8 writes| Pages
+  Meta -.-> GD
+```
+
+Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Phase 1→2 lifecycle, Trust & Safety tiers, LLM OS contract).
+
 ---
 
 ## ⚠️ Important: Clone Your Graph First
