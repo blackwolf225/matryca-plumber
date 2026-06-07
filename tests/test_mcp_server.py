@@ -17,6 +17,7 @@ from src.agent.graph_tool_helpers import (
     read_xray_page_markdown,
 )
 from src.agent.mcp_server import OutlineNode, register_mcp_tools
+from src.agent.outline_models import validate_outline_for_write
 
 
 def test_mcp_registers_five_mega_tools() -> None:
@@ -131,6 +132,49 @@ def test_outline_child_without_schema_fields() -> None:
         },
     )
     assert node.children[0].properties.get("source::") == "[[Paper]]"
+
+
+def test_outline_heading_level_coerces_int_in_properties() -> None:
+    """Parser round-trip: ``properties.heading_level`` int is hoisted and coerced to str."""
+    node = validate_outline_for_write(
+        {
+            "text": "### Section A",
+            "properties": {"heading_level": 3, "id": "aaa-bbb-ccc"},
+        },
+    )
+    assert node.heading_level == "3"
+    assert "heading_level" not in node.properties
+    assert "heading_level::" not in node.properties
+    assert node.properties.get("id") == "aaa-bbb-ccc"
+
+
+def test_outline_heading_level_coerces_int_top_level() -> None:
+    """Top-level ``heading_level: 2`` is accepted as the string ``\"2\"``."""
+    node = OutlineNode.model_validate({"text": "Title", "heading_level": 2})
+    assert node.heading_level == "2"
+    assert "heading_level" not in node.properties
+
+
+def test_headless_write_outline_strips_heading_level_from_disk(tmp_path: Path) -> None:
+    """``write_outline`` must not persist parser metadata as ``heading_level::`` on disk."""
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    parent_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    (pages / "Demo.md").write_text(
+        f"- Root page block\n  id:: {parent_id}\n",
+        encoding="utf-8",
+    )
+
+    outline: dict[str, Any] = {
+        "text": "### Section A",
+        "properties": {"heading_level": 3},
+    }
+    out = _headless_write_outline(str(tmp_path), parent_id, outline)
+
+    assert out.get("ok") is True
+    page_text = (pages / "Demo.md").read_text(encoding="utf-8")
+    assert "heading_level::" not in page_text
+    assert "Section A" in page_text
 
 
 def test_headless_write_outline_chains_parent_uuids(tmp_path: Path) -> None:

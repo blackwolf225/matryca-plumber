@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from logseq_matryca_parser.agent_writer import _deepest_line_end
 from logseq_matryca_parser.graph import LogseqGraph
-from logseq_matryca_parser.logos_core import LogseqNode
+from logseq_matryca_parser.logos_core import LogseqNode, LogseqPage
 from loguru import logger
 
 from ..config import MatrycaWikiConfig
@@ -72,6 +72,12 @@ from .graph_tool_helpers import (
 )
 from .l1_memory import read_l1_memory_async
 from .llm_context_payload import cap_llm_payload_chars
+from .page_input_normalizer import (
+    format_resolution_notes_footer,
+    normalize_page_ref,
+    normalize_page_ref_or_raw,
+    normalize_pipe_page_target,
+)
 from .quality_gate import advanced_query_security_violations, markdown_append_bounds_violations
 from .routing_hint import (
     append_read_page_routing_hint,
@@ -90,6 +96,105 @@ def _resolve_graph_node(graph: LogseqGraph, block_uuid: str) -> LogseqNode | Non
     if node is not None:
         return node
     return graph.get_node_by_embed_ref(block_uuid)
+
+
+def _persistable_node_uuid(node: LogseqNode) -> str:
+    source_uuid = getattr(node, "source_uuid", None)
+    if isinstance(source_uuid, str) and source_uuid.strip():
+        return source_uuid.strip()
+    return str(node.uuid)
+
+
+def _logseq_page_for_title(graph: LogseqGraph, page_title: str) -> LogseqPage | None:
+    page = graph.pages.get(page_title)
+    if page is not None:
+        return page
+    fold = page_title.casefold()
+    for key, candidate in graph.pages.items():
+        title = getattr(candidate, "title", key)
+        if key.casefold() == fold or str(title).casefold() == fold:
+            return candidate
+    return None
+
+
+def _fallback_page_bottom_parent_uuid(graph: LogseqGraph, page_title: str) -> str | None:
+    """Return the last top-level block UUID on ``page_title`` for safe page-bottom append."""
+    page = _logseq_page_for_title(graph, page_title)
+    if page is None:
+        return None
+    roots = getattr(page, "root_nodes", None) or []
+    if not roots:
+        return None
+    return _persistable_node_uuid(roots[-1])
+
+
+_SAFE_APPEND_WARNING = (
+    "Block ID invalid. Performed a safe append to the page instead."
+)
+
+
+def _resolve_write_parent_target(graph_path: str | Path, target: str) -> tuple[str, list[str]]:
+    """Resolve a write parent UUID, with page-bottom fallback when the page exists."""
+    warnings: list[str] = []
+    graph_root = Path(graph_path).expanduser().resolve()
+    graph = _cached_graph(graph_root)
+    raw = target.strip()
+    if not raw:
+        msg = "`target` must be the parent block UUID or `Page Title|block-uuid`."
+        raise ValueError(msg)
+
+    page_title: str | None = None
+    block_ref = raw
+
+    if "|" in raw:
+        page_part, block_part = [segment.strip() for segment in raw.split("|", 1)]
+        if not page_part or not block_part:
+            msg = "For `Page Title|block-uuid`, both page title and block reference are required."
+            raise ValueError(msg)
+        page_norm = normalize_page_ref(graph_path, page_part)
+        if page_norm is None:
+            msg = f"Page not found: {page_part!r}"
+            raise ValueError(msg)
+        page_title = page_norm.canonical_title
+        warnings.extend(page_norm.resolution_notes)
+        block_ref = block_part
+
+    try:
+        resolved_block = resolve_target(graph_path, block_ref)
+    except ValueError:
+        if page_title is not None:
+            warnings.append(_SAFE_APPEND_WARNING)
+            logger.warning(
+                "write target alias miss on page {}: {}",
+                page_title,
+                block_ref,
+            )
+            parent = _fallback_page_bottom_parent_uuid(graph, page_title)
+            if parent is None:
+                msg = f"Page {page_title!r} has no blocks for safe append fallback."
+                raise ValueError(msg) from None
+            return parent, warnings
+        raise
+
+    node = _resolve_graph_node(graph, resolved_block.strip())
+    if node is not None:
+        return _persistable_node_uuid(node), warnings
+
+    if page_title is not None:
+        warnings.append(_SAFE_APPEND_WARNING)
+        logger.warning(
+            "write target block miss on page {}: {}",
+            page_title,
+            resolved_block,
+        )
+        parent = _fallback_page_bottom_parent_uuid(graph, page_title)
+        if parent is None:
+            msg = f"Block `{resolved_block}` not found on page `{page_title}`."
+            raise ValueError(msg)
+        return parent, warnings
+
+    msg = f"No node registered for uuid={resolved_block}"
+    raise ValueError(msg)
 
 
 def _property_lines(properties: dict[str, str], block_uuid: str) -> list[str]:
@@ -323,8 +428,9 @@ async def dispatch_read(
         page_name = query.strip()
         if not page_name:
             return "For `target_type=page`, set `query` to the Logseq page title."
+        page_norm = normalize_page_ref_or_raw(graph_path, page_name)
         try:
-            markdown = await get_page_spatial_context(page_name, graph_path)
+            markdown = await get_page_spatial_context(page_norm.canonical_title, graph_path)
         except FileNotFoundError as exc:
             logger.bind(page=page_name, graph=graph_path).info(
                 "read_graph_data page miss: {}",
@@ -339,14 +445,20 @@ async def dispatch_read(
         except OSError as exc:
             logger.bind(page=page_name).exception("read_graph_data OS error")
             return f"Could not read the page file from disk: {exc}"
-        return append_read_page_routing_hint(cap_llm_payload_chars(markdown))
+        body = append_read_page_routing_hint(cap_llm_payload_chars(markdown))
+        return body + format_resolution_notes_footer(page_norm.resolution_notes)
 
     if target_type == "xray_page":
         page_name = query.strip()
         if not page_name:
             return "For `target_type=xray_page`, set `query` to the Logseq page title."
+        page_norm = normalize_page_ref_or_raw(graph_path, page_name)
         try:
-            xray_md = await asyncio.to_thread(read_xray_page_markdown, graph_path, page_name)
+            xray_md = await asyncio.to_thread(
+                read_xray_page_markdown,
+                graph_path,
+                page_norm.canonical_title,
+            )
         except FileNotFoundError:
             return "Page not found, you can create it."
         except ImportError as exc:
@@ -357,7 +469,8 @@ async def dispatch_read(
         except OSError as exc:
             logger.bind(page=page_name).exception("read_graph_data xray_page OS error")
             return f"Could not read the page file from disk: {exc}"
-        return cap_llm_payload_chars(xray_md)
+        body = cap_llm_payload_chars(xray_md)
+        return body + format_resolution_notes_footer(page_norm.resolution_notes)
 
     if target_type == "block_ast":
         block_query = query.strip()
@@ -640,31 +753,34 @@ async def dispatch_mutate(
 ) -> dict[str, Any]:
     """Route ``mutate_graph`` by ``action`` (headless on-disk writes)."""
     graph_path = graph_path_from_env()
-    try:
-        resolved_target = (
-            resolve_target(graph_path, target)
-            if graph_path and action != "append_journal"
-            else target
-        )
-    except ValueError as exc:
-        return _mutate_error(str(exc))
 
     if action == "write_outline":
         if not graph_path:
             return graph_missing_dict()
-        parent_uuid = resolved_target.strip()
-        if not parent_uuid:
-            return {"ok": False, "error": "`target` must be the parent block UUID."}
         outline = parse_json_object(payload, field_name="payload")
         try:
-            return await asyncio.to_thread(
+            parent_uuid, write_warnings = await asyncio.to_thread(
+                _resolve_write_parent_target,
+                graph_path,
+                target,
+            )
+            result = await asyncio.to_thread(
                 _headless_write_outline,
                 graph_path,
                 parent_uuid,
                 outline,
             )
-        except (ValueError, OSError, OCCConflictError) as exc:
+        except ValueError as exc:
             return _mutate_error(str(exc))
+        except OSError as exc:
+            return _mutate_error(str(exc))
+        except OCCConflictError as exc:
+            return _mutate_error(str(exc))
+        if write_warnings:
+            result["warnings"] = write_warnings
+            for note in write_warnings:
+                logger.warning(note)
+        return result
 
     if action == "edit_property":
         if not graph_path:
@@ -678,7 +794,8 @@ async def dispatch_mutate(
                 "lines_changed": 0,
             }
         try:
-            pipe_target = resolve_pipe_target(graph_path, target)
+            normalized_target, page_notes = normalize_pipe_page_target(graph_path, target)
+            pipe_target = resolve_pipe_target(graph_path, normalized_target)
         except ValueError as exc:
             return _mutate_error(str(exc))
         target_parts = [p.strip() for p in pipe_target.split("|", 1)]
@@ -716,7 +833,12 @@ async def dispatch_mutate(
                 baseline_mtime=baseline_mtime,
             ).as_dict()
 
-        return cast(dict[str, Any], await asyncio.to_thread(_edit))
+        edit_out = cast(dict[str, Any], await asyncio.to_thread(_edit))
+        if page_notes:
+            edit_out["warnings"] = page_notes
+            for note in page_notes:
+                logger.warning(note)
+        return edit_out
 
     if action == "append_journal":
         if not graph_path:
@@ -741,12 +863,17 @@ async def dispatch_mutate(
             dry_run=dry_run,
         )
 
-    parent_block = resolved_target.strip()
-    if not parent_block:
-        return {
-            "ok": False,
-            "error": "For inject_query, `target` must be the parent block UUID.",
-        }
+    if not graph_path:
+        return graph_missing_dict()
+
+    try:
+        parent_block, inject_warnings = await asyncio.to_thread(
+            _resolve_write_parent_target,
+            graph_path,
+            target,
+        )
+    except ValueError as exc:
+        return _mutate_error(str(exc))
     inject_opts = parse_json_object(payload, field_name="payload")
     query_preset = inject_opts.get("query_preset")
     tag = inject_opts.get("tag")
@@ -777,16 +904,16 @@ async def dispatch_mutate(
         return {"ok": False, "error": str(exc)}
 
     if dry_run:
-        return {
+        dry_out: dict[str, Any] = {
             "ok": True,
             "dry_run": True,
             "markdown": markdown,
             "uuid": None,
             "routing_hint": routing_hint_for_write_outline(),
         }
-
-    if not graph_path:
-        return graph_missing_dict()
+        if inject_warnings:
+            dry_out["warnings"] = inject_warnings
+        return dry_out
 
     occ = _occ_snapshot_for_block(graph_path, parent_block)
     try:
@@ -800,13 +927,18 @@ async def dispatch_mutate(
     except (ValueError, OSError, OCCConflictError) as exc:
         return _mutate_error(str(exc))
 
-    return {
+    inject_out: dict[str, Any] = {
         "ok": True,
         "dry_run": False,
         "uuid": new_uuid,
         "markdown": markdown,
         "routing_hint": routing_hint_for_write_outline(),
     }
+    if inject_warnings:
+        inject_out["warnings"] = inject_warnings
+        for note in inject_warnings:
+            logger.warning(note)
+    return inject_out
 
 
 async def dispatch_refactor(
@@ -821,17 +953,28 @@ async def dispatch_refactor(
 
     refactor_opts = parse_optional_json_query(payload)
     dry_run = bool(refactor_opts.get("dry_run", True))
+    refactor_notes: list[str] = []
     try:
         resolved_uuid = target_uuid
         if "|" in target_uuid:
-            resolved_uuid = resolve_pipe_target(graph_path, target_uuid)
+            normalized_target, refactor_notes = normalize_pipe_page_target(
+                graph_path,
+                target_uuid,
+            )
+            resolved_uuid = resolve_pipe_target(graph_path, normalized_target)
         elif target_uuid.strip():
-            resolved_uuid = resolve_target(graph_path, target_uuid)
+            page_norm = normalize_page_ref_or_raw(graph_path, target_uuid)
+            refactor_notes.extend(page_norm.resolution_notes)
+            resolved_uuid = resolve_target(graph_path, page_norm.canonical_title)
     except ValueError as exc:
         return _mutate_error(str(exc))
 
     if action == "split_large":
         page_ref = resolved_uuid.strip() or None
+        if page_ref:
+            page_norm = normalize_page_ref_or_raw(graph_path, page_ref)
+            page_ref = page_norm.canonical_title
+            refactor_notes.extend(page_norm.resolution_notes)
         min_chars = max(50, int(refactor_opts.get("min_chars", 400)))
         max_blocks = max(1, min(int(refactor_opts.get("max_blocks", 25)), 100))
         git_snap: dict[str, object] = (
@@ -855,10 +998,16 @@ async def dispatch_refactor(
 
         split_out = await asyncio.to_thread(_split)
         split_out["git_snapshot"] = git_snap
+        if refactor_notes:
+            split_out["warnings"] = refactor_notes
         return split_out
 
     if action == "reparent":
         reparent_page = resolved_uuid.strip()
+        if reparent_page:
+            page_norm = normalize_page_ref_or_raw(graph_path, reparent_page)
+            reparent_page = page_norm.canonical_title
+            refactor_notes.extend(page_norm.resolution_notes)
         if not reparent_page:
             return {"ok": False, "error": "For reparent, `target_uuid` must be the page title."}
         groups_raw = refactor_opts.get("groups")
@@ -890,6 +1039,8 @@ async def dispatch_refactor(
 
         reparent_out = await asyncio.to_thread(_reparent)
         reparent_out["git_snapshot"] = reparent_git
+        if refactor_notes:
+            reparent_out["warnings"] = refactor_notes
         return reparent_out
 
     flash_parts = [p.strip() for p in resolved_uuid.split("|", 1)]
@@ -901,6 +1052,9 @@ async def dispatch_refactor(
             ),
         }
     page_ref, source_uuid = flash_parts[0], flash_parts[1]
+    page_norm = normalize_page_ref_or_raw(graph_path, page_ref)
+    page_ref = page_norm.canonical_title
+    refactor_notes.extend(page_norm.resolution_notes)
     max_cards = max(1, min(int(refactor_opts.get("max_cards", 30)), 200))
 
     def _flash() -> dict[str, Any]:
@@ -912,7 +1066,10 @@ async def dispatch_refactor(
             dry_run=dry_run,
         ).as_dict()
 
-    return await asyncio.to_thread(_flash)
+    flash_out = await asyncio.to_thread(_flash)
+    if refactor_notes:
+        flash_out["warnings"] = refactor_notes
+    return flash_out
 
 
 async def dispatch_lint(

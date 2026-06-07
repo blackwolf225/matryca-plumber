@@ -15,6 +15,8 @@ PageType = Literal["entity", "project", "knowledge", "hub", "feedback"]
 Domain = Literal["tech", "business", "content", "ops"]
 EntityType = Literal["person", "client", "tool", "service", "technology"]
 
+_HEADING_LEVEL_PROP_KEYS = frozenset({"heading_level", "heading_level::"})
+
 
 class OutlineNode(BaseModel):
     """Hierarchical outline node as accepted by agent tools (JSON-serializable)."""
@@ -37,6 +39,59 @@ class OutlineNode(BaseModel):
         default=None,
         description="Optional; merged into ``entity-type::`` when ``page_type`` is entity.",
     )
+    heading_level: str | None = Field(
+        default=None,
+        description="Parser/LLM heading depth metadata (1–6); not persisted as a Logseq property.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_heading_level_input(cls, data: Any) -> Any:  # noqa: ANN401
+        """Hoist ``heading_level`` from ``properties`` and strip parser echo keys."""
+        if not isinstance(data, dict):
+            return data
+        props = data.get("properties")
+        if isinstance(props, dict):
+            props_copy = dict(props)
+            hoisted: Any = None
+            for key in _HEADING_LEVEL_PROP_KEYS:
+                if key in props_copy:
+                    hoisted = props_copy.pop(key)
+                    break
+            if hoisted is not None and data.get("heading_level") is None:
+                data = {**data, "heading_level": hoisted}
+            if props_copy != props:
+                data = {**data, "properties": props_copy}
+        hl = data.get("heading_level")
+        if isinstance(hl, (int, float)) and not isinstance(hl, bool):
+            data = {**data, "heading_level": str(hl)}
+        return data
+
+    @field_validator("heading_level", mode="before")
+    @classmethod
+    def _coerce_heading_level(cls, value: Any) -> Any:  # noqa: ANN401
+        """Accept LLM ``int`` heading depths (e.g. ``1``) as strings (``\"1\"``)."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return value
+
+    @field_validator("properties", mode="before")
+    @classmethod
+    def _coerce_property_values(cls, value: Any) -> Any:  # noqa: ANN401
+        """Stringify numeric/boolean property values echoed from parser JSON."""
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            return value
+        out: dict[str, Any] = {}
+        for key, val in value.items():
+            if isinstance(val, (int, float, bool)):
+                out[key] = str(val)
+            else:
+                out[key] = val
+        return out
 
     @field_validator("children", mode="before")
     @classmethod

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MCP page-input normalization** — `src/agent/page_input_normalizer.py` leniently resolves agent page titles (`/` ↔ `___`, `.md` / `pages/` stripping, case-insensitive match) at MCP read/mutate/refactor entrypoints without touching `logseq-matryca-parser`.
+
+### Fixed
+
+- **MCP outline validation** — Automatic type coercion (`int` → `str`) for `heading_level` in `mutate_graph` / `write_outline` payloads; parser echo keys are hoisted from `properties` and stripped before disk write so `heading_level::` never lands in Logseq `.md` files (improves Agent Experience with local LLMs such as Hermes).
+- **MCP write resilience** — `write_outline` / `inject_query` with `Page Title|block` targets perform a safe page-bottom append when the block UUID or `[n]` alias is invalid but the page exists; warnings are returned in the JSON payload and logged to stderr.
+
 ## [1.9.6] - 2026-06-07
 
 ### Added

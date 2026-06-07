@@ -13,6 +13,11 @@ from ..graph.markdown_blocks import locate_block_by_uuid
 from ..graph.path_sandbox import graph_safe_page_path
 from ..utils.json_repair import loads_repaired_json
 from ..utils.regex_policy import validate_regex_pattern
+from .page_input_normalizer import (
+    format_resolution_notes_footer,
+    normalize_page_ref_or_raw,
+    normalize_pipe_page_target,
+)
 
 MAX_REGEX_SCAN_BYTES = 5_000_000
 _REGEX_SCAN_TIMEOUT_SECONDS = 5.0
@@ -149,7 +154,9 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
         msg = "For `target_type=xray_page`, set `query` to the Logseq page title."
         raise ValueError(msg)
 
-    path = resolve_logseq_page_md(graph_path, title)
+    page_norm = normalize_page_ref_or_raw(graph_path, title)
+    path = resolve_logseq_page_md(graph_path, page_norm.canonical_title)
+    title = page_norm.canonical_title
     parsed = get_spatial_context(str(path))
     roots = getattr(parsed, "root_nodes", None) or []
     if not roots:
@@ -166,26 +173,32 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
     save_alias_registry(graph_path, persist_registry)
     alias_count = len(persistable)
     state_name = alias_file_path(graph_path).name
-    return (
+    header = (
         f"# X-Ray: [[{title}]]\n\n"
         f"**Aliases:** {alias_count} block(s) mapped to `[0]`…`[{alias_count - 1}]` "
         f"in `{state_name}` at the graph root. "
         "Pass `[n]` as `target` or in `Page Title|[n]` for `mutate_graph` / `refactor_blocks`.\n\n"
         f"{body}\n"
     )
+    return header + format_resolution_notes_footer(page_norm.resolution_notes)
 
 
 def read_subtree_markdown(graph_path: str, query: str) -> str:
     """Return Markdown for a block subtree; optional ``# Heading`` filter in JSON query."""
     from .alias_state import resolve_pipe_target
 
-    resolved_query = resolve_pipe_target(graph_path, query)
+    normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    resolved_query = resolve_pipe_target(graph_path, normalized_query)
     opts: dict[str, Any] = {}
     page_ref = resolved_query
     block_uuid = ""
     if resolved_query.strip().startswith("{"):
         opts = parse_optional_json_query(resolved_query)
-        page_ref = str(opts.get("page", "")).strip()
+        raw_page = str(opts.get("page", "")).strip()
+        page_norm = normalize_page_ref_or_raw(graph_path, raw_page) if raw_page else None
+        page_ref = page_norm.canonical_title if page_norm else ""
+        if page_norm:
+            page_notes.extend(page_norm.resolution_notes)
         block_uuid = str(opts.get("block_uuid", opts.get("uuid", ""))).strip()
     else:
         parts = [p.strip() for p in resolved_query.split("|", 1)]
@@ -239,19 +252,21 @@ def read_subtree_markdown(graph_path: str, query: str) -> str:
         excerpt_lines = filtered or excerpt_lines
 
     excerpt = "".join(excerpt_lines)
-    return (
+    body = (
         f"# Subtree excerpt\n\n"
         f"- **Page:** [[{page_ref}]]\n"
         f"- **Block UUID:** `{block_uuid}`\n\n"
         f"```markdown\n{excerpt.rstrip()}\n```\n"
     )
+    return body + format_resolution_notes_footer(page_notes)
 
 
 def read_block_ast_markdown(graph_path: str, query: str) -> str:
     """Return the on-disk Markdown subtree for one block (page title + ``id::`` UUID)."""
     from .alias_state import resolve_pipe_target
 
-    resolved_query = resolve_pipe_target(graph_path, query)
+    normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    resolved_query = resolve_pipe_target(graph_path, normalized_query)
     parts = [p.strip() for p in resolved_query.split("|", 1)]
     if len(parts) != 2 or not parts[0] or not parts[1]:
         msg = (
@@ -272,12 +287,13 @@ def read_block_ast_markdown(graph_path: str, query: str) -> str:
         )
     b_idx, _id_idx, end = loc
     excerpt = "".join(lines[b_idx:end])
-    return (
+    body = (
         f"# Block AST excerpt\n\n"
         f"- **Page:** [[{page_ref}]]\n"
         f"- **Block UUID:** `{block_uuid}`\n\n"
         f"```markdown\n{excerpt.rstrip()}\n```\n"
     )
+    return body + format_resolution_notes_footer(page_notes)
 
 
 def _scan_pages_for_regex(
