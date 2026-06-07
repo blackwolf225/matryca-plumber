@@ -7,7 +7,7 @@ v1.8 delivered Ironclad AST parity and OCC. v1.9 improves **headless agent ergon
 
 **v1.9.2** adds the distribution layer: [`llms.txt`](../../llms.txt) / [`.well-known/llms.txt`](../../.well-known/llms.txt) and [`agent-onboarding.md`](agent-onboarding.md) — verified `uvx` commands and anti-patterns for external hosts.
 
-**v1.9.3** adds live Sovereign UI telemetry — see [`live-telemetry-ui.md`](live-telemetry-ui.md) (5s polling, daemon heartbeat, `daemon_pid` auto-unfreeze). **v1.9.4** consolidates Journey Log into one cumulative daily journal bullet (§4 below). **v1.9.5** adds the LLM OS contract and `read bootstrap_status` — see [`llm-os-instructions.md`](llm-os-instructions.md).
+**v1.9.3** adds live Sovereign UI telemetry — see [`live-telemetry-ui.md`](live-telemetry-ui.md) (5s polling, daemon heartbeat, `daemon_pid` auto-unfreeze). **v1.9.4** consolidates Journey Log into one cumulative daily journal bullet (§4 below). **v1.9.5** adds the LLM OS contract and `read bootstrap_status` — see [`llm-os-instructions.md`](llm-os-instructions.md). **v1.9.7** adds AX robustness (lenient page titles, safe `write_outline` fallback) — see [`agent-ax-robustness.md`](agent-ax-robustness.md) §5.
 
 ---
 
@@ -163,6 +163,30 @@ sequenceDiagram
 
 ---
 
+## 5. AX robustness — lenient reads & safe writes (v1.9.7+)
+
+**Module:** `src/agent/page_input_normalizer.py` · **Dispatch:** `graph_dispatch._resolve_write_parent_target`
+
+| Surface | Behavior |
+|---------|----------|
+| `read page` / `xray_page` / `block_ast` / `subtree` | Normalize `query` page segment (`/` ↔ `___`, `.md` strip, case-insensitive) |
+| `mutate write_outline` | Accept `Page Title\|uuid` or `Page Title\|[n]`; safe append + `warnings` on bad block ref |
+| `mutate edit_property` | Normalize page segment in `Page Title\|block` target |
+| Path traversal in page title | Rejected — MCP returns error text / `ok: false` |
+
+**JSON mutate responses** may include `warnings: string[]` — agents must read these before assuming exact parent placement.
+
+**CLI example (page-pipe write with fallback):**
+```bash
+matryca --json mutate write_outline \
+  --target "Architecture/Plumber|bad-uuid-here" \
+  --payload '{"text":"Recovered block","children":[]}'
+```
+
+Full spec: [`agent-ax-robustness.md`](agent-ax-robustness.md). Chaos tests: `tests/test_agent_experience_robustness.py`.
+
+---
+
 ## CLI command tree (v1.9)
 
 | Command | Role |
@@ -192,6 +216,7 @@ Global: **`--json`** on any subcommand.
 ## Related reading
 
 - [`agent-onboarding.md`](agent-onboarding.md) — `llms.txt`, PyPI `uvx`, maintainer sync checklist
+- [`agent-ax-robustness.md`](agent-ax-robustness.md) — lenient page resolution, safe writes, `warnings` contract
 - [`link-verification.md`](link-verification.md) — dead-link / missing-asset pipeline (feeds Journey Log metrics)
 - [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) — agent tool reference (updated for `subtree`)
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — v1.9 structural hygiene section

@@ -150,6 +150,17 @@ Spec: [`docs/openspec/link-verification.md`](openspec/link-verification.md).
 
 Spec: [`docs/openspec/agent-dx.md`](openspec/agent-dx.md).
 
+#### Agent Experience robustness (v1.9.7+)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| Page input normalizer | `src/agent/page_input_normalizer.py` | Lenient page title resolution at MCP entrypoints (`/` ↔ `___`, casing, traversal guard) |
+| Write target resolver | `src/agent/graph_dispatch.py` | `_resolve_write_parent_target` — safe append fallback for invalid block refs |
+| Empty-page outline writer | `src/agent/graph_dispatch.py` | `_headless_write_outline_empty_page` — EOF append when page has no blocks |
+| Outline validation | `src/agent/outline_models.py` | `heading_level` int→str coercion; strip before disk write |
+
+Spec: [`docs/openspec/agent-ax-robustness.md`](openspec/agent-ax-robustness.md). Tests: `tests/test_agent_experience_robustness.py`.
+
 ### 2. Sovereign UI (React + FastAPI control room)
 
 **Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8500`

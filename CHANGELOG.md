@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.8] - 2026-06-07
+
+**Documentation harmonization — AX Robustness aligned with code**
+
+### Changed
+
+- **`llms.txt` / `.well-known/llms.txt`** — Bumped to v1.9.8; added §2.3 AX robustness (lenient page titles, `Page Title|block` writes, `warnings` contract), zero-shot mutate example, and anti-patterns for filename hand-crafting.
+- **`SYSTEM_PROMPT.md`** — Updated `mutate_graph` / `write_outline` targets, X-Ray pipe form, namespace normalization, and `heading_level` disk contract.
+- **`docs/ARCHITECTURE.md`** — New AX robustness component table (`page_input_normalizer`, write target resolver, empty-page writer).
+- **`docs/openspec/`** — New [`agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md); index, `agent-onboarding.md`, and `agent-dx.md` cross-linked.
+- **`README.md`** — Current version v1.9.8; agent callout links AX spec.
+- **MCP tool docstrings** — `mutate_graph` / `write_outline` documents `Page Title|block` and `warnings` field.
+
 ## [1.9.7] - 2026-06-07
 
 **Agent Experience (AX) Robustness & Lenient Resolution**

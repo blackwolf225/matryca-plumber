@@ -1,8 +1,8 @@
-# Agent onboarding (`llms.txt`) — v1.9.5
+# Agent onboarding (`llms.txt`) — v1.9.8
 
-**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status`  
+**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status` · v1.9.6 — Hermes lazy AST · v1.9.7 — AX robustness · v1.9.8 — doc harmonization  
 **Artifacts:** [`llms.txt`](../../llms.txt) (repo root), [`.well-known/llms.txt`](../../.well-known/llms.txt) (canonical URL path)  
-**Companion spec:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log — cumulative daily journal bullet)
+**Companion specs:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log) · [`agent-ax-robustness.md`](agent-ax-robustness.md) (lenient page titles, safe writes)
 
 External LLM hosts (Cursor, Claude Code, Windsurf, Hermes, custom agents) must reach Matryca Plumber through a **versioned PyPI wheel**, not a cloned dev tree. The `llms.txt` files encode that contract: imperative commands, verified flags, and explicit anti-patterns.
 
@@ -69,6 +69,10 @@ Hermes spawns the same stdio MCP server via `~/.hermes/config.yaml`. Prerequisit
 
 Verified guide: [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md). Integration test: `tests/test_hermes_mcp_handshake.py`.
 
+### AX robustness (v1.9.7+)
+
+Section 2.3 of `llms.txt` documents lenient page title normalization and safe `write_outline` fallback for local LLMs. Full spec: [`agent-ax-robustness.md`](agent-ax-robustness.md). Regression tests: `tests/test_agent_experience_robustness.py`.
+
 ---
 
 ## LLM OS contract (Tier-2 agents)
@@ -89,7 +93,7 @@ When adding or renaming CLI subcommands:
 
 1. Run the command locally with `LOGSEQ_GRAPH_PATH` set.
 2. Update **`llms.txt`** and **`.well-known/llms.txt`** in the same PR.
-3. Cross-check [`agent-dx.md`](agent-dx.md), [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md), and [`llm-os-instructions.md`](llm-os-instructions.md) if MCP discriminators or agent contracts change.
+3. Cross-check [`agent-dx.md`](agent-dx.md), [`agent-ax-robustness.md`](agent-ax-robustness.md), [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md), and [`llm-os-instructions.md`](llm-os-instructions.md) if MCP discriminators or agent contracts change.
 4. Ship a **patch release** so `uvx` consumers pick up accurate instructions on PyPI.
 
 When Shadow DB SQLite + FTS5 ships (v2.0), follow the migration trigger in [`llm-os-instructions.md`](llm-os-instructions.md).

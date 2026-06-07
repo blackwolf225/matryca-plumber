@@ -1,4 +1,4 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.6)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.8)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
@@ -9,7 +9,7 @@ Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as thi
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.9.6 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.9.8 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +47,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.9.6)
+## 2. Core CLI (verified v1.9.8)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -140,7 +140,32 @@ mcp_servers:
 
 Full guide: `docs/integrations/hermes-agent.md` · stderr telemetry: `AST cache bootstrap started|complete` in `~/.hermes/logs/mcp-stderr.log`.
 
-### 2.3 Diagnostics & audit (no `doctor` command)
+### 2.3 AX robustness — page titles & write targets (v1.9.7+)
+
+Local LLMs often send **wrong page title formats**. Plumber normalizes before lookup:
+
+| You may send | Plumber accepts |
+|--------------|-----------------|
+| `Domain/Topic` (semantic) | Canonical Logseq title |
+| `Domain___Topic` or `Domain___Topic.md` | Same (namespace encoding) |
+| `pages/Domain___Topic.md` | Strips prefix/suffix |
+| Wrong casing `DOMAIN/topic` | Case-insensitive match |
+
+**Never send** path traversal (`../`, `../../etc/passwd`) — rejected with a clear error; MCP session survives.
+
+**`mutate_graph` / `write_outline` targets:**
+
+| `target` | When to use |
+|----------|-------------|
+| `parent-block-uuid` | After `xray_page` or spatial read |
+| `[n]` | X-Ray alias from `.matryca_xray_state.json` |
+| `Page Title\|block-uuid` or `Page Title\|[n]` | **Recommended** when the model might hallucinate UUIDs |
+
+If the block ref is invalid but the **page exists**, Plumber **safe-appends** at page bottom and returns `warnings` (check them). Bare unknown aliases like `[42]` without a page still fail with `ok: false`.
+
+Spec: `docs/openspec/agent-ax-robustness.md`
+
+### 2.4 Diagnostics & audit (no `doctor` command)
 
 There is **no** `doctor` subcommand. Use these instead:
 
@@ -192,6 +217,14 @@ export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
 uvx matryca-plumber context load "My Project"
 ```
 
+**F. Write outline with page context (safe fallback if UUID wrong)**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --json mutate write_outline \
+  --target "My Project|aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" \
+  --payload '{"text":"New bullet","children":[]}'
+```
+
 For **today's journal page** as `read page`, use the **exact Logseq page title** shown in the app (locale-dependent), not a file path like `journals/2026_06_05.md`.
 
 ---
@@ -203,6 +236,8 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 * **DO NOT** `pip install matryca-plumber` unless the user explicitly asked for a global install.
 * **DO NOT** invent flags: no `--graph`, no `doctor`, no `mcp --port 8080`.
 * **DO NOT** ask the user to install Python dependencies manually — **`uvx`** resolves the wheel.
+* **DO NOT** hand-craft `pages/*.md` filenames with raw `/` — pass **semantic titles** (`Domain/Topic`); Plumber maps to `Domain___Topic.md`.
+* **DO NOT** panic on `warnings` in mutate JSON — read them; Plumber may have recovered via safe append.
 
 ---
 
@@ -210,6 +245,7 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 
 * Operator README: `README.md`
 * Agent onboarding spec: `docs/openspec/agent-onboarding.md`
+* **AX robustness spec:** `docs/openspec/agent-ax-robustness.md`
 * LLM OS contract (two-tier, Soft Gate, Safe-Sync): `SYSTEM_PROMPT.md` § "LLM OS"
 * Agent DX spec (CLI JSON, Journey Log — one cumulative `- 🤖 Matryca Activity` bullet per day in the daemon journal): `docs/openspec/agent-dx.md`
 * Security (MCP gate, graph allowlist, CLI redaction): `SECURITY.md`

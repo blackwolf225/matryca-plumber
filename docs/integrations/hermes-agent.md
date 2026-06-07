@@ -230,6 +230,7 @@ PY
 
 | Document | Relevance |
 |----------|-----------|
+| [`docs/openspec/agent-ax-robustness.md`](../openspec/agent-ax-robustness.md) | v1.9.7+ lenient page titles & safe `write_outline` for local LLMs on Hermes |
 | [`docs/openspec/agent-dx.md`](../openspec/agent-dx.md) | Lists Hermes as external agent surface |
 | [`docs/openspec/runtime-bootstrap.md`](../openspec/runtime-bootstrap.md) | What runs at MCP lifespan start |
 | [`SECURITY.md`](../../SECURITY.md) | `MATRYCA_MCP_ENABLED` gate |

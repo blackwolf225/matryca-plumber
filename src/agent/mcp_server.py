@@ -188,9 +188,10 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Create or patch durable graph content via headless on-disk writes.
 
-        **``action=write_outline``** — ``target`` = parent **block UUID** (or X-Ray ``[n]`` alias).
+        **``action=write_outline``** — ``target`` = parent **block UUID**, X-Ray ``[n]``,
+        or ``Page Title|block-uuid`` / ``Page Title|[n]`` (v1.9.7+ safe append on invalid block).
         ``payload`` = JSON outline tree (``text``, optional ``properties`` / schema fields,
-        nested ``children``) matching ``OutlineNode``.
+        nested ``children``) matching ``OutlineNode``. Response may include ``warnings``.
 
         **``action=edit_property``** — ``target`` = ``Page Title|block-uuid``.
         ``payload`` = JSON: ``search``, ``replacement``, optional ``dry_run`` (default true),

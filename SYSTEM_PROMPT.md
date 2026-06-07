@@ -158,6 +158,8 @@ JSON tree: `text`, optional `properties`, nested `children`. Optional schema fie
 
 Classify only blocks you intentionally tag; children usually omit schema fields.
 
+**`heading_level` (v1.9.6+):** Local models may send `heading_level` as an integer in JSON. Plumber coerces it to a string and **never** writes `heading_level::` to disk — do not rely on that property in persisted blocks.
+
 ---
 
 ## CRITICAL: synthetic IDs and broken links
@@ -187,7 +189,7 @@ These rules mirror Logseq OG's Clojure/Datalog on-disk contract. Violations caus
 1. **Two property planes** — page frontmatter (no bullet) vs block properties (+2 indent under bullet). Never prefix page `tags::` with `- `.
 2. **Property placement** — block properties MUST sit directly under the bullet text, before children or multiline continuations. Never orphan or delete existing `id::` lines.
 3. **Multiline padding** — Shift+Enter continuations use `indent + 2 spaces`; preserve Windows `\r\n` or Unix `\n` line endings when editing — Matryca normalizes reads but you must not strip `\r` manually mid-block.
-4. **Namespace filenames** — semantic `Domain/Topic` → on-disk `Domain___Topic.md` with percent-encoding for reserved OS chars; never hand-craft filenames with raw `/`.
+4. **Namespace filenames** — semantic `Domain/Topic` → on-disk `Domain___Topic.md` with percent-encoding for reserved OS chars; never hand-craft filenames with raw `/`. **v1.9.7+:** pass semantic titles to tools — Plumber normalizes `___`, `.md`, and casing (`page_input_normalizer.py`). Path traversal (`../`) is rejected.
 5. **UTF-8 only** — all graph I/O is `encoding="utf-8"`.
 6. **Dead zones** — never mutate lines inside fenced code blocks, HTML comments, or `#+BEGIN_QUERY` … `#+END_QUERY` regions.
 7. **Sandbox boundary** — never supply paths outside `LOGSEQ_GRAPH_PATH` or L1 `$HOME` scope; traversal attempts are rejected fatally.
@@ -202,9 +204,10 @@ For large pages, prefer **`read_graph_data` / `target_type="xray_page"`** with `
 
 On later **`mutate_graph`** or **`refactor_blocks`** calls (including separate CLI invocations), pass **`[n]`** directly wherever you would use a 36-character UUID:
 
-- `write_outline` / `inject_query`: `target` = `[0]` (parent block alias)
+- `write_outline` / `inject_query`: `target` = `[0]` (parent block alias) **or** `Page Title|[0]` (recommended for local LLMs)
 - `edit_property` / `generate_flashcards`: `target` or `target_uuid` = `Page Title|[1]`
-- Unknown or stale aliases raise a clear error — re-run `xray_page` on that page to refresh the map
+- Unknown alias **without** page context → `ok: false` — re-run `xray_page` on that page to refresh the map
+- **v1.9.7+ safe fallback:** `Page Title|bad-uuid` on an existing page → outline appended at page bottom; response includes `warnings` — read them before continuing
 
 Use `target_type="page"` when you need full spatial metadata (`synthetic_id`, `source_uuid`, properties). Use **`xray_page`** when you only need topology + text and minimal tokens.
 
@@ -350,12 +353,12 @@ Open `TODO` / `LATER` / `WAITING` in `journals/` for the last N days (default 7,
 ```json
 {
   "action": "write_outline",
-  "target": "parent-block-uuid-from-logseq-or-prior-output",
+  "target": "My Project|parent-block-uuid-or-[0]",
   "payload": "{\"text\":\"New parent bullet\",\"properties\":{\"tags::\":\"[[Topic]]\"},\"children\":[{\"text\":\"Child with evidence\",\"properties\":{\"source::\":\"https://example.com\"}}]}"
 }
 ```
 
-`target` = parent **block UUID** (required). `payload` = `OutlineNode` JSON. Append-only discipline: do not silently overwrite human blocks. May auto-git-snapshot when `MATRYCA_GIT_SNAPSHOT_ON_WRITE` is enabled.
+`target` = parent **block UUID**, X-Ray **`[n]`**, or **`Page Title|block-ref`** (pipe form recommended when UUIDs may be hallucinated). `payload` = `OutlineNode` JSON. Append-only discipline: do not silently overwrite human blocks. On invalid block ref with valid page, Plumber may **safe-append** at page bottom and return `warnings`. May auto-git-snapshot when `MATRYCA_GIT_SNAPSHOT_ON_WRITE` is enabled.
 
 ```json
 {
@@ -505,7 +508,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 ### Phase 3 — Update
 
 - **External outline paste (atomic)** → `ingest_document` with `source_name` + `raw_text` (fresh UUIDs, ingest page + `LOG`/`GLOSSARY`; parse uses OS temp only — never scratch files in `pages/`).
-- `mutate_graph` / `write_outline` only with a **real parent block UUID**.
+- `mutate_graph` / `write_outline` with a **real parent block UUID** or **`Page Title|block`** (v1.9.7+ safe fallback when block ref is wrong but page exists).
 - Append; do not silently overwrite human bullets.
 - Attach `id::` to durable anchors; `source::` on factual leaves; `updated::` per your conventions.
 - Property-only changes → `edit_property` (dry-run first).
