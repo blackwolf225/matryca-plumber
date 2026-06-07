@@ -7,14 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.7] - 2026-06-07
+
+**Agent Experience (AX) Robustness & Lenient Resolution**
+
 ### Added
 
 - **MCP page-input normalization** — `src/agent/page_input_normalizer.py` leniently resolves agent page titles (`/` ↔ `___`, `.md` / `pages/` stripping, case-insensitive match) at MCP read/mutate/refactor entrypoints without touching `logseq-matryca-parser`.
+- **Chaos-hardened AX tests** — `tests/test_agent_experience_robustness.py` stress-tests path traversal rejection, namespace edge cases, and safe fallback writes for hallucinated LLM targets.
 
 ### Fixed
 
 - **MCP outline validation** — Automatic type coercion (`int` → `str`) for `heading_level` in `mutate_graph` / `write_outline` payloads; parser echo keys are hoisted from `properties` and stripped before disk write so `heading_level::` never lands in Logseq `.md` files (improves Agent Experience with local LLMs such as Hermes).
-- **MCP write resilience** — `write_outline` / `inject_query` with `Page Title|block` targets perform a safe page-bottom append when the block UUID or `[n]` alias is invalid but the page exists; warnings are returned in the JSON payload and logged to stderr.
+- **MCP write resilience** — `write_outline` / `inject_query` with `Page Title|block` targets perform a safe page-bottom append when the block UUID or `[n]` alias is invalid but the page exists; empty or blockless pages append at EOF; warnings are returned in the JSON payload and logged to stderr.
+- **MCP input hardening** — Path traversal in page titles is rejected before filesystem lookup; repeated `/` and inline `.md` segments are normalized; integer targets like `0` are coerced safely.
 
 ## [1.9.6] - 2026-06-07
 

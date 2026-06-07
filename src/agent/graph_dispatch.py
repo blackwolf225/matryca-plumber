@@ -31,6 +31,7 @@ from ..graph.link_tag_hop import format_hop_report_markdown
 from ..graph.markdown_blocks import (
     OCCConflictError,
     OCCSnapshot,
+    atomic_write_bytes,
     atomic_write_bytes_if_unchanged,
     canonical_line_suffix,
     graph_safe_page_path,
@@ -131,14 +132,40 @@ def _fallback_page_bottom_parent_uuid(graph: LogseqGraph, page_title: str) -> st
 _SAFE_APPEND_WARNING = (
     "Block ID invalid. Performed a safe append to the page instead."
 )
+_EMPTY_PAGE_APPEND_NOTE = "Page has no outline blocks; appending at end of file."
 
 
-def _resolve_write_parent_target(graph_path: str | Path, target: str) -> tuple[str, list[str]]:
-    """Resolve a write parent UUID, with page-bottom fallback when the page exists."""
+def _coerce_write_target(target: object) -> str:
+    """Coerce LLM-hallucinated targets (``0``, ``True``, etc.) to a safe string."""
+    if target is None:
+        return ""
+    if isinstance(target, bool):
+        return str(target).lower()
+    return str(target).strip()
+
+
+def _write_target_fallback(
+    graph: LogseqGraph,
+    page_title: str,
+    warnings: list[str],
+) -> tuple[str | None, str | None, list[str]]:
+    """Return either a parent UUID or an empty-page append target."""
+    parent = _fallback_page_bottom_parent_uuid(graph, page_title)
+    if parent is not None:
+        return parent, None, warnings
+    warnings.append(_EMPTY_PAGE_APPEND_NOTE)
+    return None, page_title, warnings
+
+
+def _resolve_write_parent_target(
+    graph_path: str | Path,
+    target: object,
+) -> tuple[str | None, str | None, list[str]]:
+    """Resolve write parent UUID, with page-bottom or empty-file fallback when possible."""
     warnings: list[str] = []
     graph_root = Path(graph_path).expanduser().resolve()
     graph = _cached_graph(graph_root)
-    raw = target.strip()
+    raw = _coerce_write_target(target)
     if not raw:
         msg = "`target` must be the parent block UUID or `Page Title|block-uuid`."
         raise ValueError(msg)
@@ -151,7 +178,10 @@ def _resolve_write_parent_target(graph_path: str | Path, target: str) -> tuple[s
         if not page_part or not block_part:
             msg = "For `Page Title|block-uuid`, both page title and block reference are required."
             raise ValueError(msg)
-        page_norm = normalize_page_ref(graph_path, page_part)
+        try:
+            page_norm = normalize_page_ref(graph_path, page_part)
+        except ValueError:
+            raise
         if page_norm is None:
             msg = f"Page not found: {page_part!r}"
             raise ValueError(msg)
@@ -169,16 +199,12 @@ def _resolve_write_parent_target(graph_path: str | Path, target: str) -> tuple[s
                 page_title,
                 block_ref,
             )
-            parent = _fallback_page_bottom_parent_uuid(graph, page_title)
-            if parent is None:
-                msg = f"Page {page_title!r} has no blocks for safe append fallback."
-                raise ValueError(msg) from None
-            return parent, warnings
+            return _write_target_fallback(graph, page_title, warnings)
         raise
 
     node = _resolve_graph_node(graph, resolved_block.strip())
     if node is not None:
-        return _persistable_node_uuid(node), warnings
+        return _persistable_node_uuid(node), None, warnings
 
     if page_title is not None:
         warnings.append(_SAFE_APPEND_WARNING)
@@ -187,11 +213,7 @@ def _resolve_write_parent_target(graph_path: str | Path, target: str) -> tuple[s
             page_title,
             resolved_block,
         )
-        parent = _fallback_page_bottom_parent_uuid(graph, page_title)
-        if parent is None:
-            msg = f"Block `{resolved_block}` not found on page `{page_title}`."
-            raise ValueError(msg)
-        return parent, warnings
+        return _write_target_fallback(graph, page_title, warnings)
 
     msg = f"No node registered for uuid={resolved_block}"
     raise ValueError(msg)
@@ -402,6 +424,124 @@ def _headless_write_outline(
     }
 
 
+def _headless_write_outline_empty_page(
+    graph_path: str | Path,
+    page_title: str,
+    outline: dict[str, Any],
+) -> dict[str, Any]:
+    """Append an outline to an empty or blockless page file (safe fallback path)."""
+    from .outline_models import OutlineNode, outline_block_count, validate_outline_for_write
+
+    root = validate_outline_for_write(outline)
+    graph_root = Path(graph_path).expanduser().resolve()
+    page_path = graph_safe_page_path(graph_root, page_title)
+    graph = _cached_graph(graph_root)
+    tab_size = graph.tab_size
+    created_ids: list[str] = []
+
+    def emit_node(node: OutlineNode, indent_level: int, out_lines: list[str]) -> None:
+        new_uuid = str(uuid_module.uuid4())
+        created_ids.append(new_uuid)
+        bullet_indent = " " * (indent_level * tab_size)
+        body_indent = " " * ((indent_level + 1) * tab_size)
+        content_lines = node.text.splitlines()
+        head = content_lines[0] if content_lines else ""
+        out_lines.append(f"{bullet_indent}- {strip_line_endings(head)}\n")
+        for extra in content_lines[1:]:
+            out_lines.append(f"{body_indent}{strip_line_endings(extra)}\n")
+        for prop in _property_lines(dict(node.properties), new_uuid):
+            out_lines.append(f"{body_indent}{prop}\n")
+        for child in node.children:
+            emit_node(child, indent_level + 1, out_lines)
+
+    block_lines: list[str] = []
+    emit_node(root, 0, block_lines)
+
+    with page_rmw_lock(page_path):
+        occ: OCCSnapshot | None = OCCSnapshot.capture(page_path) if page_path.is_file() else None
+        if occ is not None and occ.drifted():
+            raise OCCConflictError(
+                page_path,
+                baseline_mtime=occ.baseline_mtime,
+                current_mtime=read_file_mtime(page_path),
+            )
+        prev = read_graph_file_text(page_path, graph_root) if page_path.is_file() else ""
+        section = "".join(
+            strip_line_endings(line) + canonical_line_suffix(line) for line in block_lines
+        )
+        new_text = prev.rstrip("\n") + ("\n\n" if prev.strip() else "") + section
+        baseline_mtime = occ.baseline_mtime if occ is not None else None
+        if page_path.is_file():
+            if baseline_mtime is None or not atomic_write_bytes_if_unchanged(
+                page_path,
+                new_text.encode("utf-8"),
+                graph_root=graph_root,
+                baseline_mtime=baseline_mtime,
+                robot_commit_summary=f"appended outline to empty page {page_title}",
+            ):
+                raise OCCConflictError(
+                    page_path,
+                    baseline_mtime=baseline_mtime or 0.0,
+                    current_mtime=read_file_mtime(page_path),
+                )
+            if occ is not None:
+                occ.refresh_after_own_write()
+        else:
+            page_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_bytes(
+                page_path,
+                new_text.encode("utf-8"),
+                graph_root=graph_root,
+                robot_commit_summary=f"created page outline {page_title}",
+            )
+
+    join_hint = routing_hint_for_write_outline()
+    if root.properties.get("type::") == "entity":
+        join_hint = f"{join_hint}\n{routing_hint_for_entity_alias_preflight()}"
+    return {
+        "ok": True,
+        "uuids": created_ids,
+        "routing_hint": join_hint,
+        "outline_block_count": outline_block_count(outline),
+        "git_snapshot": {
+            "committed": True,
+            "skipped": False,
+            "reason": "post-write robot commits via hooks",
+        },
+    }
+
+
+async def _run_write_outline(
+    graph_path: str,
+    target: object,
+    outline: dict[str, Any],
+) -> dict[str, Any]:
+    parent_uuid, empty_page_title, write_warnings = await asyncio.to_thread(
+        _resolve_write_parent_target,
+        graph_path,
+        target,
+    )
+    if empty_page_title:
+        result = await asyncio.to_thread(
+            _headless_write_outline_empty_page,
+            graph_path,
+            empty_page_title,
+            outline,
+        )
+    else:
+        result = await asyncio.to_thread(
+            _headless_write_outline,
+            graph_path,
+            parent_uuid or "",
+            outline,
+        )
+    if write_warnings:
+        result["warnings"] = write_warnings
+        for note in write_warnings:
+            logger.warning(note)
+    return result
+
+
 async def dispatch_read(
     wiki_config: MatrycaWikiConfig,
     target_type: ReadGraphTarget,
@@ -428,7 +568,10 @@ async def dispatch_read(
         page_name = query.strip()
         if not page_name:
             return "For `target_type=page`, set `query` to the Logseq page title."
-        page_norm = normalize_page_ref_or_raw(graph_path, page_name)
+        try:
+            page_norm = normalize_page_ref_or_raw(graph_path, page_name)
+        except ValueError as exc:
+            return str(exc)
         try:
             markdown = await get_page_spatial_context(page_norm.canonical_title, graph_path)
         except FileNotFoundError as exc:
@@ -452,7 +595,10 @@ async def dispatch_read(
         page_name = query.strip()
         if not page_name:
             return "For `target_type=xray_page`, set `query` to the Logseq page title."
-        page_norm = normalize_page_ref_or_raw(graph_path, page_name)
+        try:
+            page_norm = normalize_page_ref_or_raw(graph_path, page_name)
+        except ValueError as exc:
+            return str(exc)
         try:
             xray_md = await asyncio.to_thread(
                 read_xray_page_markdown,
@@ -479,9 +625,11 @@ async def dispatch_read(
                 "For `target_type=block_ast`, set `query` to `Page Title|block-uuid` "
                 "or `Page Title|[n]` after `xray_page`."
             )
-        return cap_llm_payload_chars(
-            await asyncio.to_thread(read_block_ast_markdown, graph_path, block_query),
-        )
+        try:
+            block_md = await asyncio.to_thread(read_block_ast_markdown, graph_path, block_query)
+        except ValueError as exc:
+            return str(exc)
+        return cap_llm_payload_chars(block_md)
 
     if target_type == "subtree":
         subtree_query = query.strip()
@@ -759,28 +907,13 @@ async def dispatch_mutate(
             return graph_missing_dict()
         outline = parse_json_object(payload, field_name="payload")
         try:
-            parent_uuid, write_warnings = await asyncio.to_thread(
-                _resolve_write_parent_target,
-                graph_path,
-                target,
-            )
-            result = await asyncio.to_thread(
-                _headless_write_outline,
-                graph_path,
-                parent_uuid,
-                outline,
-            )
+            return await _run_write_outline(graph_path, target, outline)
         except ValueError as exc:
             return _mutate_error(str(exc))
         except OSError as exc:
             return _mutate_error(str(exc))
         except OCCConflictError as exc:
             return _mutate_error(str(exc))
-        if write_warnings:
-            result["warnings"] = write_warnings
-            for note in write_warnings:
-                logger.warning(note)
-        return result
 
     if action == "edit_property":
         if not graph_path:
@@ -867,13 +1000,28 @@ async def dispatch_mutate(
         return graph_missing_dict()
 
     try:
-        parent_block, inject_warnings = await asyncio.to_thread(
+        parent_block, empty_page_title, inject_warnings = await asyncio.to_thread(
             _resolve_write_parent_target,
             graph_path,
             target,
         )
     except ValueError as exc:
         return _mutate_error(str(exc))
+    if empty_page_title:
+        inject_warnings = [
+            *inject_warnings,
+            "inject_query requires a parent block; empty-page fallback is not supported.",
+        ]
+        return {
+            "ok": False,
+            "error": (
+                f"Page `{empty_page_title}` has no outline blocks. "
+                "Run `read_graph_data` / `xray_page` first, then pass a valid parent UUID or `[n]`."
+            ),
+            "warnings": inject_warnings,
+        }
+    if not parent_block:
+        return _mutate_error("Could not resolve parent block for inject_query.")
     inject_opts = parse_json_object(payload, field_name="payload")
     query_preset = inject_opts.get("query_preset")
     tag = inject_opts.get("tag")

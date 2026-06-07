@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +15,9 @@ from ..graph.page_path import (
 from ..graph.path_sandbox import resolved_graph_root
 from ..rag.matryca_hooks import resolve_logseq_page_md
 
+_UNSAFE_PAGE_REF_MSG = "Invalid page reference: path traversal is not allowed."
+_MULTI_SLASH_RE = re.compile(r"/{2,}")
+
 
 @dataclass(frozen=True)
 class NormalizedPageRef:
@@ -24,16 +28,39 @@ class NormalizedPageRef:
     changed: bool = False
 
 
+def _validate_page_ref_input(sanitized: str) -> None:
+    """Reject path traversal and absolute paths before any filesystem lookup."""
+    normalized = sanitized.strip().replace("\\", "/")
+    if not normalized:
+        return
+    if normalized.startswith("/"):
+        raise ValueError(_UNSAFE_PAGE_REF_MSG)
+    if ".." in Path(normalized).parts:
+        raise ValueError(_UNSAFE_PAGE_REF_MSG)
+
+
 def _sanitize_raw_page_input(raw: str) -> tuple[str, list[str]]:
     notes: list[str] = []
     t = raw.strip().replace("\\", "/")
     if t.startswith("pages/"):
         t = t.removeprefix("pages/")
         notes.append("Stripped `pages/` prefix from page reference.")
-    if t.endswith(".md"):
+    while t.endswith(".md"):
         t = t.removesuffix(".md")
         notes.append("Stripped `.md` suffix from page reference.")
-    return t.strip(), notes
+    if ".md/" in t or t.endswith(".md"):
+        inline_parts = [segment.removesuffix(".md") for segment in t.split("/")]
+        inline_clean = "/".join(part for part in inline_parts if part)
+        if inline_clean and inline_clean != t:
+            notes.append("Removed inline `.md` segments from page namespace.")
+            t = inline_clean
+    t = _MULTI_SLASH_RE.sub("/", t)
+    if "//" in raw.replace("\\", "/") and "/" in t:
+        notes.append("Collapsed repeated `/` in page namespace.")
+    t = t.strip()
+    if t:
+        _validate_page_ref_input(t)
+    return t, notes
 
 
 def _semantic_title_candidates(sanitized: str) -> list[str]:
@@ -123,8 +150,11 @@ def format_resolution_notes_footer(notes: list[str]) -> str:
 
 __all__ = [
     "NormalizedPageRef",
+    "UNSAFE_PAGE_REF_MSG",
     "format_resolution_notes_footer",
     "normalize_page_ref",
     "normalize_page_ref_or_raw",
     "normalize_pipe_page_target",
 ]
+
+UNSAFE_PAGE_REF_MSG = _UNSAFE_PAGE_REF_MSG

@@ -154,7 +154,11 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
         msg = "For `target_type=xray_page`, set `query` to the Logseq page title."
         raise ValueError(msg)
 
-    page_norm = normalize_page_ref_or_raw(graph_path, title)
+    try:
+        page_norm = normalize_page_ref_or_raw(graph_path, title)
+    except ValueError as exc:
+        msg = str(exc)
+        raise ValueError(msg) from exc
     path = resolve_logseq_page_md(graph_path, page_norm.canonical_title)
     title = page_norm.canonical_title
     parsed = get_spatial_context(str(path))
@@ -187,7 +191,11 @@ def read_subtree_markdown(graph_path: str, query: str) -> str:
     """Return Markdown for a block subtree; optional ``# Heading`` filter in JSON query."""
     from .alias_state import resolve_pipe_target
 
-    normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    try:
+        normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    except ValueError as exc:
+        msg = str(exc)
+        raise ValueError(msg) from exc
     resolved_query = resolve_pipe_target(graph_path, normalized_query)
     opts: dict[str, Any] = {}
     page_ref = resolved_query
@@ -265,7 +273,11 @@ def read_block_ast_markdown(graph_path: str, query: str) -> str:
     """Return the on-disk Markdown subtree for one block (page title + ``id::`` UUID)."""
     from .alias_state import resolve_pipe_target
 
-    normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    try:
+        normalized_query, page_notes = normalize_pipe_page_target(graph_path, query)
+    except ValueError as exc:
+        msg = str(exc)
+        raise ValueError(msg) from exc
     resolved_query = resolve_pipe_target(graph_path, normalized_query)
     parts = [p.strip() for p in resolved_query.split("|", 1)]
     if len(parts) != 2 or not parts[0] or not parts[1]:
