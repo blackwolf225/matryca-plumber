@@ -7,27 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.6] - 2026-06-07
+
 ### Added
 
-- **Hermes Agent MCP integration** — [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) with verified host config, troubleshooting, and `tests/test_hermes_mcp_handshake.py` (stdio `tools/list` within 30 s on a fixture vault).
+- **Hermes Agent MCP integration** — [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) with verified host config, `connect_timeout` vs tool `timeout` guidance, troubleshooting, and `tests/test_hermes_mcp_handshake.py` (stdio `tools/list` within 30 s on a fixture vault).
+- **README** — Panoramic Mermaid architecture diagram in the intro (three-surface runtime, shared `graph_dispatch` plane, vault, local LLM); links to [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- **README** — Live GitHub star history chart at the bottom via [star-history.com](https://www.star-history.com) SVG API (`<picture>` with light/dark theme).
+- **Release notes** — [`docs/releases/v1.9.6-GITHUB.md`](docs/releases/v1.9.6-GITHUB.md) (GitHub Release copy-paste).
 
 ### Changed
 
 - **Lazy AST bootstrap for MCP stdio** — `prepare_matryca_runtime(..., eager_graph=False)` in MCP lifespan defers `LogseqGraph.load_directory` until the first graph tool call; daemon/CLI/UI remain eager. Structured stderr telemetry: `AST cache bootstrap started|complete` with `markdown_files`, `duration_s`, `pages_indexed`.
+- **PyPI metadata** — Added Python 3.12/3.13 Trove classifiers so `pypi/pyversions` works after the next PyPI publish.
+- **Documentation** — `llms.txt`, `.well-known/llms.txt`, ARCHITECTURE, OpenSpec index, and `agent-onboarding.md` aligned with Hermes host config and lazy MCP handshake (v1.9.6).
 
 ### Fixed
 
 - **GitHub traffic badges** — README Shields.io endpoints now read badge JSON from the `metrics` branch (`raw.githubusercontent.com/.../metrics/metrics/...`); `metrics-saver` publishes a metrics-only orphan branch via `METRICS_TOKEN` instead of bloating the branch with the full repo tree.
-- **README badges** — Python badge reads `requires-python` from `pyproject.toml` (PyPI `pyversions` showed `missing` without Trove classifiers); coverage anchor and test-count badge aligned with current suite (`630+`, `cov-fail-under=70` at `pyproject.toml` L138).
-
-### Changed
-
-- **PyPI metadata** — Added Python 3.12/3.13 Trove classifiers so `pypi/pyversions` works after the next PyPI publish.
-
-### Added
-
-- **README** — Panoramic Mermaid architecture diagram in the intro (three-surface runtime, shared `graph_dispatch` plane, vault, local LLM); links to [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-- **README** — Live GitHub star history chart at the bottom via [star-history.com](https://www.star-history.com) SVG API (`<picture>` with light/dark theme).
+- **README badges** — Python badge reads `requires-python` from `pyproject.toml` (PyPI `pyversions` showed `missing` without Trove classifiers); coverage anchor and test-count badge aligned with current suite (`640+`, `cov-fail-under=70` at `pyproject.toml` L138).
+- **L1 provisioning test** — `tests/test_provision_l1.py` isolates from repo `.env` via `reload_plumber_dotenv` noop so local developer vault paths do not leak into CI/local runs.
 
 ## [1.9.5] - 2026-06-05
 
