@@ -1,0 +1,35 @@
+name: Question
+description: Ask a question — consider GitHub Discussions for open-ended debate
+title: "[Question] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Prefer [GitHub Discussions](https://github.com/MarcoPorcellato/matryca-plumber/discussions)** for open-ended architecture debate, RFCs, and community Q&A.
+
+        Use this template only when you need a **trackable question** that may become a feature or bug.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish? Matryca version, Logseq version, setup.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: discussion_check
+    attributes:
+      label: Triage
+      options:
+        - label: I checked Discussions and did not find an existing thread for this topic
+          required: false

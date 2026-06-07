@@ -1,0 +1,56 @@
+name: Epic / Tracking Issue
+description: Parent issue for a multi-release initiative (v2.0+)
+title: "[EPIC] "
+labels:
+  - epic
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for **parent tracking issues** that span multiple PRs and sub-issues.
+        For single features, use **Feature Request**. For questions, use **Question** (or open a Discussion).
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this initiative exist? Link RFC Discussions here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: success_criteria
+    attributes:
+      label: Success criteria
+      description: What does "done" look like for this epic?
+    validations:
+      required: true
+
+  - type: textarea
+    id: sub_issues
+    attributes:
+      label: Sub-issues
+      description: List child issues (create them first, then link as GitHub sub-issues).
+      placeholder: |
+        - #24 Shadow DB read path
+        - #25 Safe-Sync write path
+    validations:
+      required: false
+
+  - type: input
+    id: discussion
+    attributes:
+      label: RFC Discussion URL (optional)
+      placeholder: https://github.com/MarcoPorcellato/matryca-plumber/discussions/19
+    validations:
+      required: false
+
+  - type: dropdown
+    id: milestone_hint
+    attributes:
+      label: Target milestone
+      options:
+        - v2.0.0 — Shadow DB & Safe-Sync Architecture
+        - Other / TBD
+    validations:
+      required: false

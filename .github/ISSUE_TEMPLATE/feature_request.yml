@@ -7,8 +7,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Matryca Plumber** is an **autonomous**, **local-first**, **database-free** background AI **daemon** for **Logseq OG**. It is the graph's **headless mutation plane** on pure Markdown — not a passive editor plugin.
-        Features that require auxiliary databases, a hosted system of record, cloud sync as a hard dependency, or unstructured page blobs are usually out of scope.
+        **Matryca Plumber** is an **autonomous**, **local-first** background AI **daemon** for **Logseq OG**. It is the graph's **headless mutation plane** on pure Markdown — not a passive editor plugin.
+
+        **v2.0 note:** The planned **Shadow DB** (`shadow.sqlite`) is a daemon-owned **read cache**, not a system of record. Logseq Markdown on disk remains authoritative. Proposals that add hosted databases, cloud sync as a hard dependency, or unstructured page blobs are usually out of scope.
 
   - type: textarea
     id: problem
@@ -29,8 +30,8 @@ body:
   - type: textarea
     id: paradigm_alignment
     attributes:
-      label: How does this align with local-first, zero-auxiliary-db philosophy?
-      description: Explain why the feature keeps data on disk / in Logseq and avoids SQLite, Postgres, Redis, or other central stores.
+      label: How does this align with local-first philosophy?
+      description: Explain why the feature keeps Logseq Markdown as system of record. Shadow DB cache proposals must state they are read-only mirrors, not new sources of truth.
     validations:
       required: true
 
@@ -39,7 +40,7 @@ body:
     attributes:
       label: Paradigm checklist
       options:
-        - label: No auxiliary databases — graph content stays Logseq Markdown on disk; no new system-of-record store (SQLite, Postgres, Redis, etc.)
+        - label: Logseq Markdown stays system of record — no Postgres/Redis/cloud system-of-record; Shadow DB (if any) is a read-only daemon cache only
           required: true
         - label: Block-shaped thinking — respects the outliner model (blocks, nesting, `id::`) rather than flat document blobs
           required: true

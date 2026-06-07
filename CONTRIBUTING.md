@@ -276,6 +276,26 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 
 ---
 
+## GitHub Issues workflow
+
+| Use | When |
+|-----|------|
+| **[Discussion](https://github.com/MarcoPorcellato/matryca-plumber/discussions)** | RFCs, architecture debate, open-ended community Q&A |
+| **Issue** | Trackable work with a clear done state |
+| **`[EPIC]` parent issue** | Multi-PR initiatives (e.g. v2.0 Shadow DB) with **sub-issues** |
+| **`question` label** | Community questions that may convert to features |
+
+**Conventions:**
+
+- Apply **labels as GitHub metadata** — do not write `Labels: foo, bar` in the issue body.
+- Link PRs with `Fixes #N` / `Closes #N`.
+- v2.0 work uses milestone **`v2.0.0 — Shadow DB & Safe-Sync Architecture`** and labels `v2.0`, `epic`, `core`, `database`, `safety`, `mcp`, `dx` as appropriate.
+- Agent UX contract work (Soft Gate, `bootstrap_status`) shipped in **v1.9.5**; tracked under **`v1.9.6 - Agent UX`** for issue closure.
+
+**Templates:** [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) — `feature_request.yml`, `bug_report.yml`, `epic.yml`, `question.yml`.
+
+---
+
 ## Reporting bugs
 
 Include OS, Logseq version, LM Studio model, Matryca Plumber version, and **zipped** Loguru / ops logs from **`logs/matryca_plumber_ops.log`** (and rotated archives beside that path, if present). See the [bug report issue template](.github/ISSUE_TEMPLATE/bug_report.yml).
