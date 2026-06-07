@@ -129,9 +129,7 @@ def _fallback_page_bottom_parent_uuid(graph: LogseqGraph, page_title: str) -> st
     return _persistable_node_uuid(roots[-1])
 
 
-_SAFE_APPEND_WARNING = (
-    "Block ID invalid. Performed a safe append to the page instead."
-)
+_SAFE_APPEND_WARNING = "Block ID invalid. Performed a safe append to the page instead."
 _EMPTY_PAGE_APPEND_NOTE = "Page has no outline blocks; appending at end of file."
 
 
