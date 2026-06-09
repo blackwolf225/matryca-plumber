@@ -133,17 +133,20 @@ def gh_auth_preflight(repo: str) -> None:
     try:
         run_gh("auth", "status")
     except GhError as exc:
-        raise GhError(
-            f"{exc}\nRun: gh auth login"
-        ) from exc
+        raise GhError(f"{exc}\nRun: gh auth login") from exc
 
     probe = "_matryca_audit_write_probe"
     try:
         run_gh(
-            "label", "create", probe,
-            "--repo", repo,
-            "--description", "write probe",
-            "--color", "000000",
+            "label",
+            "create",
+            probe,
+            "--repo",
+            repo,
+            "--description",
+            "write probe",
+            "--color",
+            "000000",
         )
         run_gh("label", "delete", probe, "--repo", repo, "--yes")
     except GhError as exc:
@@ -166,10 +169,15 @@ def ensure_labels(repo: str, labels: list[LabelSpec], *, dry_run: bool) -> None:
             continue
         try:
             run_gh(
-                "label", "create", spec.name,
-                "--repo", repo,
-                "--description", spec.description,
-                "--color", spec.color,
+                "label",
+                "create",
+                spec.name,
+                "--repo",
+                repo,
+                "--description",
+                spec.description,
+                "--color",
+                spec.color,
             )
             print(f"  created label: {spec.name}")
         except GhError:
@@ -227,9 +235,12 @@ def ensure_milestones(
         number_raw = run_gh(
             "api",
             f"repos/{repo}/milestones",
-            "-f", f"title={spec.title}",
-            "-f", f"description={spec.description}",
-            "--jq", ".number",
+            "-f",
+            f"title={spec.title}",
+            "-f",
+            f"description={spec.description}",
+            "--jq",
+            ".number",
         )
         number = int(number_raw)
         result[spec.title] = number
@@ -254,7 +265,9 @@ def format_issue_title(issue: IssueSpec) -> str:
     return f"[{category_tag}] {issue.title} {AUDIT_TITLE_MARKER} #{issue.id:02d}]"
 
 
-def format_issue_body(issue: IssueSpec, *, audit_source: str, codebase_version: str) -> str:
+def format_issue_body(
+    issue: IssueSpec, *, audit_source: str, codebase_version: str
+) -> str:
     """Render issue body per GitHub workflow standards."""
     files_md = "\n".join(f"- `{path}`" for path in issue.files)
     return f"""## Problem Description
@@ -304,12 +317,18 @@ def find_existing_issue(repo: str, title: str) -> int | None:
     """Return issue number if an issue with exact title exists."""
     try:
         raw = run_gh(
-            "issue", "list",
-            "--repo", repo,
-            "--state", "all",
-            "--search", f'in:title "{title}"',
-            "--json", "number,title",
-            "--limit", "5",
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "all",
+            "--search",
+            f'in:title "{title}"',
+            "--json",
+            "number,title",
+            "--limit",
+            "5",
         )
     except GhError:
         return None
@@ -339,7 +358,9 @@ def create_issue(
         print(f"  skip (exists): #{existing} {title}")
         return existing
 
-    body = format_issue_body(issue, audit_source=audit_source, codebase_version=codebase_version)
+    body = format_issue_body(
+        issue, audit_source=audit_source, codebase_version=codebase_version
+    )
     labels = issue_labels(issue)
     label_arg = ",".join(labels)
 
@@ -349,12 +370,18 @@ def create_issue(
         return None
 
     url = run_gh(
-        "issue", "create",
-        "--repo", repo,
-        "--title", title,
-        "--body", body,
-        "--milestone", issue.milestone,
-        "--label", label_arg,
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--milestone",
+        issue.milestone,
+        "--label",
+        label_arg,
     )
     # gh prints URL like https://github.com/owner/repo/issues/42
     number = int(url.rstrip("/").split("/")[-1])
@@ -367,7 +394,9 @@ def create_issue(
 # ---------------------------------------------------------------------------
 
 
-def load_audit_data(path: Path) -> tuple[str, str, list[MilestoneSpec], list[LabelSpec], list[IssueSpec]]:
+def load_audit_data(
+    path: Path,
+) -> tuple[str, str, list[MilestoneSpec], list[LabelSpec], list[IssueSpec]]:
     """Parse JSON audit data file."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     audit_source = str(raw.get("audit_source", path.name))
@@ -433,7 +462,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Print planned actions without calling GitHub API",
     )
     parser.add_argument(
-        "--yes", "-y",
+        "--yes",
+        "-y",
         action="store_true",
         help="Skip interactive confirmation prompt",
     )
@@ -453,7 +483,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: data file not found: {args.data}", file=sys.stderr)
         return 1
 
-    audit_source, codebase_version, milestones, labels, issues = load_audit_data(args.data)
+    audit_source, codebase_version, milestones, labels, issues = load_audit_data(
+        args.data
+    )
 
     print("== Matryca Plumber — v1.9.x Perfection Audit Tracker ==")
     print(f"Data file:     {args.data}")
@@ -507,7 +539,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         except GhError as exc:
             print(f"  ERROR: {exc}", file=sys.stderr)
-            print("  Stopping issue loop to avoid partial state confusion.", file=sys.stderr)
+            print(
+                "  Stopping issue loop to avoid partial state confusion.",
+                file=sys.stderr,
+            )
             return 1
 
         if number is None and not args.dry_run:
