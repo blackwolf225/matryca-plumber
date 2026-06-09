@@ -111,9 +111,7 @@ def run_gh(
             check=False,
         )
     except FileNotFoundError as exc:
-        raise GhError(
-            "GitHub CLI (`gh`) not found. Install: https://cli.github.com/"
-        ) from exc
+        raise GhError("GitHub CLI (`gh`) not found. Install: https://cli.github.com/") from exc
 
     if check and proc.returncode != 0:
         stderr = proc.stderr.strip() or proc.stdout.strip()
@@ -151,8 +149,7 @@ def gh_auth_preflight(repo: str) -> None:
         run_gh("label", "delete", probe, "--repo", repo, "--yes")
     except GhError as exc:
         raise GhError(
-            f"{exc}\nToken may lack write access. Run:\n"
-            f"  gh auth refresh -h github.com -s repo"
+            f"{exc}\nToken may lack write access. Run:\n  gh auth refresh -h github.com -s repo"
         ) from exc
 
 
@@ -411,8 +408,7 @@ def load_audit_data(
     codebase_version = str(raw.get("codebase_version", "unknown"))
 
     milestones = [
-        MilestoneSpec(title=m["title"], description=m["description"])
-        for m in raw["milestones"]
+        MilestoneSpec(title=m["title"], description=m["description"]) for m in raw["milestones"]
     ]
     labels = [
         LabelSpec(name=l["name"], description=l["description"], color=l["color"])
