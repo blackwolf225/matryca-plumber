@@ -262,7 +262,9 @@ def format_issue_title(issue: IssueSpec) -> str:
         "Performance": "Performance",
         "Tech Debt": "Tech Debt",
     }.get(issue.category, issue.category)
-    return f"[{category_tag}] {issue.title} {AUDIT_TITLE_MARKER} #{issue.id:02d}]"
+    return (
+        f"[{category_tag}] {issue.title} {AUDIT_TITLE_MARKER} #{issue.id:02d}]"
+    )
 
 
 def format_issue_body(
