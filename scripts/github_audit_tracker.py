@@ -269,7 +269,10 @@ def format_issue_title(issue: IssueSpec) -> str:
 
 
 def format_issue_body(
-    issue: IssueSpec, *, audit_source: str, codebase_version: str
+    issue: IssueSpec,
+    *,
+    audit_source: str,
+    codebase_version: str,
 ) -> str:
     """Render issue body per GitHub workflow standards."""
     files_md = "\n".join(f"- `{path}`" for path in issue.files)
@@ -362,7 +365,9 @@ def create_issue(
         return existing
 
     body = format_issue_body(
-        issue, audit_source=audit_source, codebase_version=codebase_version
+        issue,
+        audit_source=audit_source,
+        codebase_version=codebase_version,
     )
     labels = issue_labels(issue)
     label_arg = ",".join(labels)
