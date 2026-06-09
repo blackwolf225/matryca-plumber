@@ -1,8 +1,8 @@
-# Agent onboarding (`llms.txt`) — v1.9.8
+# Agent onboarding (`llms.txt`) — v1.9.9
 
-**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status` · v1.9.6 — Hermes lazy AST · v1.9.7 — AX robustness · v1.9.8 — doc harmonization  
+**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status` · v1.9.6 — Hermes lazy AST · v1.9.7 — AX robustness · v1.9.8 — doc harmonization · v1.9.9 — Security & Sandbox  
 **Artifacts:** [`llms.txt`](../../llms.txt) (repo root), [`.well-known/llms.txt`](../../.well-known/llms.txt) (canonical URL path)  
-**Companion specs:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log) · [`agent-ax-robustness.md`](agent-ax-robustness.md) (lenient page titles, safe writes)
+**Companion specs:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log) · [`agent-ax-robustness.md`](agent-ax-robustness.md) (lenient page titles, safe writes) · [`security-sandbox.md`](security-sandbox.md) (path sandbox, bounded JSON, CI read gate)
 
 External LLM hosts (Cursor, Claude Code, Windsurf, Hermes, custom agents) must reach Matryca Plumber through a **versioned PyPI wheel**, not a cloned dev tree. The `llms.txt` files encode that contract: imperative commands, verified flags, and explicit anti-patterns.
 
@@ -93,7 +93,7 @@ When adding or renaming CLI subcommands:
 
 1. Run the command locally with `LOGSEQ_GRAPH_PATH` set.
 2. Update **`llms.txt`** and **`.well-known/llms.txt`** in the same PR.
-3. Cross-check [`agent-dx.md`](agent-dx.md), [`agent-ax-robustness.md`](agent-ax-robustness.md), [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md), and [`llm-os-instructions.md`](llm-os-instructions.md) if MCP discriminators or agent contracts change.
+3. Cross-check [`agent-dx.md`](agent-dx.md), [`agent-ax-robustness.md`](agent-ax-robustness.md), [`security-sandbox.md`](security-sandbox.md) (when touching graph reads or JSON sidecars), [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md), and [`llm-os-instructions.md`](llm-os-instructions.md) if MCP discriminators or agent contracts change.
 4. Ship a **patch release** so `uvx` consumers pick up accurate instructions on PyPI.
 
 When Shadow DB SQLite + FTS5 ships (v2.0), follow the migration trigger in [`llm-os-instructions.md`](llm-os-instructions.md).
@@ -105,5 +105,6 @@ When Shadow DB SQLite + FTS5 ships (v2.0), follow the migration trigger in [`llm
 - [`llm-os-instructions.md`](llm-os-instructions.md) — two-tier architecture, Soft Gate, `bootstrap_status`
 - [`agent-dx.md`](agent-dx.md) — JSON envelope, `context load`, `read subtree`, Journey Log
 - [`l1-l2-routing.md`](l1-l2-routing.md) — L1 memory vs L2 graph for agents
+- [`security-sandbox.md`](security-sandbox.md) — path sandbox, bounded JSON, contributor read gate (v1.9.9)
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md) — three-surface runtime and distribution
 - [`RELEASE_PROCESS.md`](../RELEASE_PROCESS.md) — tagging and PyPI publish via CI

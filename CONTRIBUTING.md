@@ -17,7 +17,7 @@ This project exists so humans and **autonomous local systems** can collaborate o
 | **Operator control plane** | `src/cli/**` (incl. `ui_server.py`, `ui_auth.py`), `frontend/` | **Zero-Trust** local API (`X-Matryca-Token`), cockpit UX |
 | **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path. Standalone tools: **`store_fact`** (identity), **`ingest_document`** (atomic external Markdown — see [`docs/openspec/ingest.md`](docs/openspec/ingest.md)). |
 
-Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (v1.9.3 Sovereign UI), [`llms.txt`](llms.txt) (agent execution guide).
+Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) (v1.9.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (v1.9.3 Sovereign UI), [`llms.txt`](llms.txt) (agent execution guide).
 
 **Configuration:** [`.env.example`](.env.example) is the operator reference, split into **Operator essentials** (day-one / Settings drawer) and **Advanced / high impact** (mutating lint, MCP, security). Each key documents **Default (code)** and **Template** when they differ. Agents must keep `.env.example` in sync when changing env vars — see [`.cursor/rules/07-env-example.mdc`](.cursor/rules/07-env-example.mdc). `MATRYCA_LM_INSTRUCTOR_*` and `MATRYCA_LLM_PROMPT_CACHE_MODE` are legacy or reserved (not read by runtime). CI: `tests/test_env_example_coverage.py`.
 
@@ -42,6 +42,7 @@ These rules are enforced in code and in CI. **Violating them in a PR will be rej
 ### Phase 0 — Paradigm lock
 
 - Operate only on files inside the designated graph root (`path_sandbox.assert_path_within_graph`).
+- Read graph Markdown and sidecars with **`read_graph_file_text()`** (or bounded JSON helpers) — not raw `Path.read_text()` under `src/graph`, `src/agent`, or `src/rag`. CI **`make sandbox-read-check`** enforces this (v1.9.9).
 - Never introduce a central database, ORM, or external state store for graph content.
 - Prefer direct file I/O over the Logseq HTTP API for background linting, indexing, and analysis.
 
@@ -177,8 +178,10 @@ Ensure your repo **`.env`** includes the Ironclad security block from **`.env.ex
 | `make typecheck` | `mypy src/ tests/` (strict) |
 | `make test` | `pytest -q` |
 | `make test-fast` | Faster gate: no coverage, skips slow security soak (see `Makefile`) |
+| `make sandbox-read-check` | Ensures graph/agent/rag reads use `read_graph_file_text()` (v1.9.9) |
 | `make perf` | `pytest -m slow` — memory / harvest soak (optional, not in default CI) |
-| **`make check`** | **`format` → `lint` → `typecheck` → `test`** (full local gate) |
+| **`make check`** | **`lint` → `typecheck` → `sandbox-read-check` → `test`** (full local gate) |
+| **`make ci`** | **`format-check` → `lint` → `typecheck` → `sandbox-read-check` → `test`** (GitHub Actions) |
 
 **Focused loops (UI / daemon telemetry):** while iterating on Sovereign UI or checkpoint code, run a subset instead of the full suite:
 
@@ -205,11 +208,12 @@ npm run build
 
 That means, in order:
 
-1. **Ruff** — auto-fix and format the tree, then lint clean
+1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
 2. **Mypy** — strict type-check on `src/` and `tests/`
-3. **Pytest** — full suite (**610+** targets on `main`; slow tests excluded unless you run `make perf`)
+3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag)
+4. **Pytest** — full suite (**683+** targets on `main`; slow tests excluded unless you run `make perf`)
 
-GitHub Actions on pushes and pull requests to **`main`** runs the same gate (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make check`. **Any failing test blocks merge.**
+GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 
 Never commit secrets (no `.env`, tokens, or private graph paths in git).
 
@@ -219,7 +223,7 @@ When you add, rename, or remove **CLI subcommands or flags** that external agent
 
 1. Verify commands with `LOGSEQ_GRAPH_PATH` set and `uvx matryca-plumber …`.
 2. Update **[`llms.txt`](llms.txt)** and **[`.well-known/llms.txt`](.well-known/llms.txt)** in the **same PR** (byte-identical).
-3. Cross-check [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) and [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md).
+3. Cross-check [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md), and [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) when graph read paths or JSON sidecars change.
 
 Patch releases should ship after agent-surface changes so PyPI `uvx` consumers receive accurate instructions.
 

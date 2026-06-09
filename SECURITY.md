@@ -34,10 +34,12 @@ Matryca Plumber ships several **defense-in-depth** controls you should configure
 | CLI stdout redaction | _(always on for `--json` / machine output)_ | — | `redact_secrets_in_text` masks API keys and credential-shaped properties before writing to `sys.stdout`; CodeQL suppressions document stdout as the intentional CLI channel. |
 | MCP error sanitization | `MATRYCA_DEBUG` | `false` | When off, MCP tools do not return raw OS paths in error strings. |
 | CPU sandbox | `MATRYCA_CPU_SANDBOX` / `MATRYCA_PLUMBER_NICE_LEVEL` | `true` / `19` | Low-priority scheduling and optional affinity (`[edge]` extra for `psutil`). |
+| Bounded JSON checkpoints | `MATRYCA_JSON_MAX_BYTES` | `64000000` (64 MiB) | Caps graph-local JSON reads (catalog, registry, daemon state, semantic cache) via `read_bounded_json()` — local memory DoS mitigation (v1.9.9). |
+| LLM debug NDJSON | `MATRYCA_LLM_DEBUG_LOG_PATH` / `MATRYCA_LLM_DEBUG_JSON` | (optional) | When enabled, log path must lie under allowed roots; payloads are secret-redacted before append (v1.9.9). |
 
 **Dependency updates:** Transitive security fixes land via `uv.lock` (for example `aiohttp` ≥3.14.0 in v1.9.2). Dependabot PRs may trigger [`.github/workflows/dependabot-uv-fix.yml`](.github/workflows/dependabot-uv-fix.yml) to regenerate the lockfile on the PR branch.
 
-**Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host ([Hermes Agent](docs/integrations/hermes-agent.md), Cursor, Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`.
+**Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (new installs from [`.env.example`](.env.example) template `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host ([Hermes Agent](docs/integrations/hermes-agent.md), Cursor, Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`. Graph code must read vault bytes through `read_graph_file_text()` — see [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md).
 
 ### MCP trust boundary
 

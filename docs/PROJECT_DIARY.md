@@ -1,12 +1,32 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.5**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.9**).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-09] v1.9.9 — Security & Sandbox (milestone closure)
+
+### Context
+
+Pre-v2.0 audit (#27–#33) found path-sandbox gaps in link verification reads, unbounded JSON sidecar loads, symlink exposure in wiki lint, permissive debug-log paths, and scattered raw `Path.read_text()` in graph/agent/rag code.
+
+### Milestones shipped
+
+1. **Path sandbox reads** — `read_graph_file_text()` migration; link-registry `page_relpath` validation; `_resolve_asset_path` sandbox before asset checks.
+2. **Bounded JSON** — `read_bounded_json()` + `MATRYCA_JSON_MAX_BYTES` (64 MiB default) on catalog, registry, daemon state, semantic cache.
+3. **CI anti-regression** — `scripts/check_graph_read_sandbox.py` wired as `make sandbox-read-check` in `make check` / `make ci`.
+4. **Operator defaults** — `.env.example` templates `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`; debug NDJSON path allowlist + secret redaction.
+5. **OpenSpec + agent docs** — [`docs/openspec/security-sandbox.md`](openspec/security-sandbox.md); `llms.txt` §2.4 Security & Sandbox.
+
+### Architectural outcome
+
+Graph I/O is **defense-in-depth**: sandbox validation on every read path, bounded sidecar JSON, and CI enforcement so new bypasses cannot land silently. Closes the v1.9.x **Security & Sandbox** GitHub milestone.
 
 ---
 

@@ -1,4 +1,4 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.8)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.9)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
@@ -9,7 +9,7 @@ Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as thi
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.9.8 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.9.9 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +47,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.9.8)
+## 2. Core CLI (verified v1.9.9)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -165,7 +165,21 @@ If the block ref is invalid but the **page exists**, Plumber **safe-appends** at
 
 Spec: `docs/openspec/agent-ax-robustness.md`
 
-### 2.4 Diagnostics & audit (no `doctor` command)
+### 2.4 Security & Sandbox (v1.9.9+)
+
+Graph reads and writes stay inside **`LOGSEQ_GRAPH_PATH`**. v1.9.9 adds defense-in-depth beyond MCP title normalization:
+
+| Control | Operator note |
+|---------|----------------|
+| Path sandbox | `read_graph_file_text()` on graph paths; `../` and symlink escape → `PathTraversalSecurityError` |
+| Link registry | Tampered `.matryca_link_registry.json` paths are rejected before read |
+| JSON size cap | `MATRYCA_JSON_MAX_BYTES` (default 64 MiB) on catalog/registry/daemon/cache loaders |
+| UI token | Set `MATRYCA_UI_TOKEN` on shared hosts; `.env.example` templates `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true` |
+| Debug NDJSON | `MATRYCA_LLM_DEBUG_LOG_PATH` must lie under allowed roots; secrets redacted when enabled |
+
+**Do not** rely on raw filesystem reads of `pages/` — use Plumber tools (section 2.1). Full matrix: `SECURITY.md` · spec: `docs/openspec/security-sandbox.md`
+
+### 2.5 Diagnostics & audit (no `doctor` command)
 
 There is **no** `doctor` subcommand. Use these instead:
 
@@ -248,7 +262,7 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 * **AX robustness spec:** `docs/openspec/agent-ax-robustness.md`
 * LLM OS contract (two-tier, Soft Gate, Safe-Sync): `SYSTEM_PROMPT.md` § "LLM OS"
 * Agent DX spec (CLI JSON, Journey Log — one cumulative `- 🤖 Matryca Activity` bullet per day in the daemon journal): `docs/openspec/agent-dx.md`
-* Security (MCP gate, graph allowlist, CLI redaction): `SECURITY.md`
+* Security (MCP gate, graph sandbox, bounded JSON, CLI redaction): `SECURITY.md` · `docs/openspec/security-sandbox.md`
 * Hermes Agent MCP (lazy handshake, timeouts): `docs/integrations/hermes-agent.md`
 
 ---

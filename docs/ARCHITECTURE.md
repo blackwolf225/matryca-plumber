@@ -509,6 +509,10 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | Concern | Implementation |
 |---------|----------------|
 | Path traversal | `path_sandbox.assert_path_within_graph` |
+| Graph UTF-8 reads | `read_graph_file_text()` — CI `sandbox-read-check` blocks raw `Path.read_text()` in graph/agent/rag (v1.9.9) |
+| Bounded JSON sidecars | `read_bounded_json()` + `MATRYCA_JSON_MAX_BYTES` on catalog/registry/daemon/cache loaders (v1.9.9) |
+| Link registry tamper | `link_verification` validates registry `page_relpath` and asset refs before read (v1.9.9) |
+| LLM debug NDJSON | `agent_debug_log` path allowlist + secret redaction when `MATRYCA_LLM_DEBUG_*` enabled (v1.9.9) |
 | Credential leakage into graph | `quality_gate.outline_security_violations` |
 | L1 rules path escape | `l1_memory.py` — reads only under `$HOME` or temp; `README.md` excluded from LLM payload |
 | Startup filesystem | `runtime_bootstrap.py` — logs, L1, cache, templates, optional `matryca-wiki.yml` before harvest |
@@ -893,6 +897,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.8** | Edge computing & performance | PagePromptSession, adaptive `llm_client`, mmap reads, CPU sandbox, backlink index, BM25 slimming, cooperative harvest, memory teardown |
 | **1.8 round 4** | Pre-release audit | Stateless graph insights, compression persist sanitize, 8k block catalog, Phase 2 lock-on-write-only, `id::` excluded from property matchers |
 | **1.9** | Structural graph hygiene | Link verification sidecar, Journey Log, CLI `--json`, `context load`, `read subtree` |
+| **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
 | **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
 
 ---
@@ -907,6 +912,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/identity-config.md`](openspec/identity-config.md) — Telos / AI Constraints and `store_fact`
 - [`openspec/ingest.md`](openspec/ingest.md) — atomic `ingest_document` pipeline
 - [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
+- [`openspec/security-sandbox.md`](openspec/security-sandbox.md) — path sandbox, bounded JSON, CI read gate (v1.9.9)
 - [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)
 - [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md) — `llms.txt` / PyPI `uvx` agent contract (v1.9.2)
 - [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md) — two-tier LLM OS, Soft Gate, `bootstrap_status` (v1.9.5)

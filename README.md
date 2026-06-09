@@ -7,7 +7,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
 
-[![Tests](https://img.shields.io/badge/tests-640%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-683%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/mypy-strict-2b6cb0)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/CONTRIBUTING.md)
@@ -23,11 +23,11 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.8** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.9** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **Current: v1.9.8** — **Documentation harmonization** — `llms.txt`, OpenSpec, `SYSTEM_PROMPT.md`, and `ARCHITECTURE.md` aligned with v1.9.7 AX code (lenient page resolution, safe fallback append). **v1.9.7** — **Agent Experience (AX) robustness** — lenient page namespace resolution (`/` ↔ `___`, case-insensitive) and safe fallback append for invalid LLM write targets. **v1.9.6** — **Hermes Agent** MCP integration and **lazy AST handshake** (stdio `tools/list` in seconds on large vaults; cold parse on first graph tool). **v1.9.5** — **LLM OS** — two-tier Gardener vs Cognitive Agent contract, Master Index **Soft Gate**, and `read bootstrap_status` Phase 1 semaphore for MCP/CLI agents. **v1.9.4** — Journey Log hygiene (one cumulative journal bullet per day). **v1.9.3** — Live Telemetry for the Sovereign UI. **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **Current: v1.9.9** — **Security & Sandbox** — path sandbox on link verification reads, bounded JSON checkpoints (`MATRYCA_JSON_MAX_BYTES`), `read_graph_file_text()` migration, CI `sandbox-read-check`, debug-log allowlist + redaction, `.env.example` templates explicit UI token. **v1.9.8** — **Documentation harmonization** — `llms.txt`, OpenSpec, `SYSTEM_PROMPT.md`, and `ARCHITECTURE.md` aligned with v1.9.7 AX code (lenient page resolution, safe fallback append). **v1.9.7** — **Agent Experience (AX) robustness** — lenient page namespace resolution (`/` ↔ `___`, case-insensitive) and safe fallback append for invalid LLM write targets. **v1.9.6** — **Hermes Agent** MCP integration and **lazy AST handshake** (stdio `tools/list` in seconds on large vaults; cold parse on first graph tool). **v1.9.5** — **LLM OS** — two-tier Gardener vs Cognitive Agent contract, Master Index **Soft Gate**, and `read bootstrap_status` Phase 1 semaphore for MCP/CLI agents. **v1.9.4** — Journey Log hygiene (one cumulative journal bullet per day). **v1.9.3** — Live Telemetry for the Sovereign UI. **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -172,6 +172,7 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Structural link verification (v1.9)**: Passive harvest of URLs and `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks; OCC-safe **`dead-link::`** / **`missing-asset::`** block properties ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)).
 - **Agent-centric DX (v1.9)**: Global CLI **`--json`**, **`matryca context load`**, **`read subtree`**, and **Journey Log** — one cumulative `- 🤖 Matryca Activity` bullet in today's journal (daily totals, updated in place) ([`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md)).
 - **Agent onboarding (v1.9.2+)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
+- **Security & Sandbox (v1.9.9)**: Sandbox-validated graph reads (`read_graph_file_text`), bounded JSON checkpoints, link-registry path validation, CI `sandbox-read-check` ([`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md), [`SECURITY.md`](SECURITY.md)).
 - **LLM OS contract (v1.9.5)**: Tier-2 agents check `bootstrap_status` and `[[Matryca Master Index]]` before blind vault search; Soft Gate offers Local Daemon / Blind Search / Cloud Indexing ([`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md), [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) § "LLM OS").
 
 ---
@@ -183,10 +184,10 @@ It's a local React dashboard running on `http://127.0.0.1:8500` that provides:
 - **Pre-flight checklist** (modal on each UI open): operator guidance plus automated readiness checks before **Start Engine** is enabled.
 - **Live Graph Telemetry (v1.9.3)**: Progress bar, Phase 1/2 pills, and token counters refresh about every **5 seconds** while the engine runs — including during long LLM turns ([`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md)).
 - **Dynamic Impact**: Mathematically separates *Organic Human Mind* (your notes) from *Agent Cognition* (AI enhancements).
-- **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Set `MATRYCA_UI_TOKEN` on shared hosts (or `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`); session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
+- **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Set `MATRYCA_UI_TOKEN` on shared hosts; new installs from [`.env.example`](.env.example) template `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`. Session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
 - **Trust & Safety Drawer**: Visually toggle what the AI is allowed to edit (Safe Mode, Augmented Mode, Surgeon Mode).
 
-See [`SECURITY.md`](SECURITY.md) for the full operator hardening matrix (`MATRYCA_MCP_ENABLED`, graph path allowlist, shared LLM SSRF policy, log redaction).
+See [`SECURITY.md`](SECURITY.md) for the full operator hardening matrix (`MATRYCA_MCP_ENABLED`, graph path allowlist, bounded JSON, shared LLM SSRF policy, log redaction).
 
 ### Pre-flight checklist (what you see in the app)
 
@@ -305,7 +306,7 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (630+ passing, Mypy strict)
+# Run tests (683+ passing, Mypy strict)
 make check
 
 # Optional: slow memory / harvest soak tests
@@ -319,17 +320,18 @@ make perf
 | Document | Description |
 |----------|-------------|
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9.9 Security & Sandbox + LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
-| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.5 LLM OS, live telemetry). |
+| [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.5 LLM OS, v1.9.9 security, live telemetry). |
 | [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) | LLM prompt layout, memory, and I/O contracts. |
 | [`docs/BRANDING.md`](docs/BRANDING.md) | Product name (**Matryca Plumber**), Matryca.ai attribution, writing rules. |
 | [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) | Startup provisioning: logs, L1, cache, wiki YAML. |
 | [`docs/openspec/l1-l2-routing.md`](docs/openspec/l1-l2-routing.md) | L1 memory vs L2 graph routing for agents. |
 | [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) | Telos / AI Constraints and `store_fact`. |
 | [`docs/openspec/ingest.md`](docs/openspec/ingest.md) | `ingest_document` atomic ingestion pipeline. |
-| [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) | v1.9 URL/asset hygiene and sidecar registry. |
+| [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) | v1.9 URL/asset hygiene, sidecar registry, v1.9.9 sandbox reads. |
+| [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) | v1.9.9 path sandbox, bounded JSON, CI `sandbox-read-check`. |
 | [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) | v1.9 CLI JSON, context macro, Journey Log. |
 | [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) | Agent execution guide (PyPI `uvx`, verified commands). |
 | [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) | `llms.txt` contract, anti-patterns, maintainer checklist. |

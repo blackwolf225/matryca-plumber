@@ -86,6 +86,8 @@ Protected lines (fenced code, queries) are excluded via `compute_page_protected_
 
 Registry keys are deterministic: `{page_relpath}|{block_uuid}|{kind}|{target}`.
 
+**v1.9.9 sandbox (Security & Sandbox milestone):** Before any asset or registry-backed read, `link_verification` validates `page_relpath` and resolved asset paths with `path_sandbox`. Tampered registry rows and traversal refs (`../`, symlink escape) are treated as missing — no bytes read outside `LOGSEQ_GRAPH_PATH`. Spec: [`security-sandbox.md`](security-sandbox.md).
+
 ---
 
 ## On-graph result (AST parity)

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Documentation harmonization (v1.9.9)** — `README.md`, `llms.txt` / `.well-known/llms.txt` (§2.4 Security & Sandbox), `SECURITY.md`, `CONTRIBUTING.md`, `SYSTEM_PROMPT.md`, `docs/ARCHITECTURE.md`, and OpenSpec index aligned with v1.9.9 Security & Sandbox code; new [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md).
+
 ## [1.9.9] - 2026-06-09
 
 **Security & Sandbox — v1.9.x perfection track (milestone closure)**

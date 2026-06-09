@@ -1,6 +1,6 @@
 # Agent Experience (AX) robustness — lenient resolution & safe writes (v1.9.7+)
 
-**Milestone:** v1.9.7 — AX Robustness & Lenient Resolution · v1.9.8 — documentation harmonization  
+**Milestone:** v1.9.7 — AX Robustness & Lenient Resolution · v1.9.8 — documentation harmonization · v1.9.9 — Security & Sandbox (complements MCP title normalization; see [`security-sandbox.md`](security-sandbox.md))  
 **Modules:** [`src/agent/page_input_normalizer.py`](../../src/agent/page_input_normalizer.py), [`src/agent/graph_dispatch.py`](../../src/agent/graph_dispatch.py) (`_resolve_write_parent_target`, `_headless_write_outline_empty_page`), [`src/agent/outline_models.py`](../../src/agent/outline_models.py) (`heading_level` coercion)  
 **Tests:** [`tests/test_agent_experience_robustness.py`](../../tests/test_agent_experience_robustness.py)
 
