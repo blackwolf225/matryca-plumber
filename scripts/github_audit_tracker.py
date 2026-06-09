@@ -259,10 +259,7 @@ def format_issue_title(issue: IssueSpec) -> str:
         "Performance": "Performance",
         "Tech Debt": "Tech Debt",
     }.get(issue.category, issue.category)
-    return (
-        f"[{category_tag}] {issue.title} {AUDIT_TITLE_MARKER} "
-        f"#{issue.id:02d}]"
-    )
+    return f"[{category_tag}] {issue.title} {AUDIT_TITLE_MARKER} #{issue.id:02d}]"
 
 
 def format_issue_body(
@@ -487,9 +484,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: data file not found: {args.data}", file=sys.stderr)
         return 1
 
-    audit_source, codebase_version, milestones, labels, issues = load_audit_data(
-        args.data
-    )
+    audit_source, codebase_version, milestones, labels, issues = load_audit_data(args.data)
 
     print("== Matryca Plumber — v1.9.x Perfection Audit Tracker ==")
     print(f"Data file:     {args.data}")
