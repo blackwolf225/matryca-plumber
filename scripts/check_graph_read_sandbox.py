@@ -66,7 +66,9 @@ def main() -> int:
         print("Direct Path.read_text() on graph paths is forbidden outside the sandbox allowlist:")
         for item in violations:
             print(f"  - {item}")
-        print("Use read_graph_file_text() / read_graph_page_text() from path_sandbox / markdown_io.")
+        print(
+            "Use read_graph_file_text() / read_graph_page_text() from path_sandbox / markdown_io."
+        )
         return 1
 
     print("sandbox-read-check: OK")
