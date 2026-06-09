@@ -295,7 +295,8 @@ def format_issue_body(
 - Category: {issue.category}
 - Milestone: {issue.milestone}
 
-_Closes when merged with tests green (`make check`) and CHANGELOG updated per `06-auto-changelog.mdc`._
+_Closes when merged with tests green (`make check`) and CHANGELOG updated per_
+_`06-auto-changelog.mdc`._
 """
 
 
@@ -408,8 +409,8 @@ def load_audit_data(
         MilestoneSpec(title=m["title"], description=m["description"]) for m in raw["milestones"]
     ]
     labels = [
-        LabelSpec(name=l["name"], description=l["description"], color=l["color"])
-        for l in raw["labels"]
+        LabelSpec(name=label["name"], description=label["description"], color=label["color"])
+        for label in raw["labels"]
     ]
     issues = [
         IssueSpec(
@@ -506,13 +507,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Repository:    {repo}")
     print()
 
-    if not args.dry_run and not args.yes:
-        if not confirm(
+    if (
+        not args.dry_run
+        and not args.yes
+        and not confirm(
             f"This will create up to {len(milestones)} milestones and {len(issues)} "
             f"issues on {repo}. Continue?"
-        ):
-            print("Cancelled.")
-            return 0
+        )
+    ):
+        print("Cancelled.")
+        return 0
 
     created_issues = 0
     skipped_issues = 0
