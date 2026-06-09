@@ -11,6 +11,7 @@ from .global_fence_scanner import compute_page_protected_line_indices
 from .markdown_blocks import atomic_write_bytes, iter_graph_markdown_files
 from .mldoc_properties import double_quoted_spans_in_value, parse_logseq_property_line
 from .page_write_lock import page_rmw_lock
+from .path_sandbox import read_graph_file_text
 
 _TAG_RE = re.compile(r"#([\w./-]+)", re.UNICODE)
 
@@ -98,7 +99,7 @@ def scan_tag_clusters(graph_root: str | Path) -> list[TagLintRow]:
     clusters: dict[str, TagCluster] = {}
     for path in iter_graph_markdown_files(root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         for line in text.splitlines():
@@ -257,7 +258,7 @@ def lint_unify_logseq_tags(
     for path in iter_graph_markdown_files(root):
         with page_rmw_lock(path):
             try:
-                raw = path.read_text(encoding="utf-8", errors="replace")
+                raw = read_graph_file_text(path, root, errors="replace")
             except OSError as exc:
                 file_results.append(
                     TagUnifyFileResult(

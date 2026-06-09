@@ -8,6 +8,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from ...graph.path_sandbox import read_graph_file_text
 from ..page_prompt_session import PagePromptSession, build_page_prompt_session
 from ..plumber_config import PlumberLintConfig
 from ._shared import ModuleOutcome, is_journal_page_path
@@ -121,7 +122,7 @@ def run_cognitive_lint_pipeline(
             outcome,
         )
         if page_path.is_file():
-            content = page_path.read_text(encoding="utf-8", errors="replace")
+            content = read_graph_file_text(page_path, graph_root, errors="replace")
 
     if config.heal_dangling:
         _run_cognitive_module_safe(
@@ -166,7 +167,7 @@ def run_cognitive_lint_pipeline(
             outcome,
         )
         if page_path.is_file():
-            content = page_path.read_text(encoding="utf-8", errors="replace")
+            content = read_graph_file_text(page_path, graph_root, errors="replace")
 
     if config.property_hygiene and not journal_page:
         _run_cognitive_module_safe(
@@ -186,7 +187,7 @@ def run_cognitive_lint_pipeline(
         )
 
     if page_path.is_file():
-        content = page_path.read_text(encoding="utf-8", errors="replace")
+        content = read_graph_file_text(page_path, graph_root, errors="replace")
     disk_changed = content != initial_content or page_title in outcome.pages_modified
     if disk_changed and session is not None:
         session = _rebuild_prompt_session(

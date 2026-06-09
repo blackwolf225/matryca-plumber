@@ -8,6 +8,7 @@ from .path_sandbox import (
     SECURITY_VIOLATION_MSG,
     PathTraversalSecurityError,
     assert_path_within_graph,
+    read_graph_file_text,
     resolved_graph_root,
 )
 
@@ -55,7 +56,7 @@ def read_logseq_template(
         msg = f"template not found: {path}"
         raise FileNotFoundError(msg)
 
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_graph_file_text(path, graph_root, errors="replace")
     rel = path.relative_to(Path(graph_root).expanduser().resolve(strict=False))
     return (rel.as_posix(), text)
 

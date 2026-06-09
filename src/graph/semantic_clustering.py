@@ -17,6 +17,7 @@ from typing import Any
 
 from loguru import logger
 
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import atomic_write_bytes
 
@@ -540,8 +541,8 @@ def load_semantic_clusters(graph_root: Path) -> dict[str, list[str]] | None:
     if not path.is_file():
         return None
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = read_bounded_json(path)
+    except BoundedJsonError as exc:
         logger.warning("Ignoring corrupt semantic cluster cache at {}: {}", path, exc)
         return None
     if not isinstance(payload, dict):
@@ -578,8 +579,8 @@ def load_or_compute_semantic_clusters(
         path = semantic_clusters_path(graph_root)
         if path.is_file():
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+                payload = read_bounded_json(path)
+            except BoundedJsonError:
                 payload = None
             if isinstance(payload, dict):
                 cached_at = payload.get("catalog_updated_at")

@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import unquote
 
+from .path_sandbox import read_graph_file_text
+
 _WIKILINK = re.compile(r"\[\[([^\]#|]+)(?:\|[^\]]+)?\]\]")
 # Inline #tag — avoid markdown headings (line-start # followed by space).
 _TAG_INLINE = re.compile(r"(?<![\w/])#([\w/-]+)")
@@ -115,7 +117,7 @@ def build_structural_graph(graph_root: str | Path) -> dict[str, set[tuple[str, s
     for path in paths:
         stem = path.stem
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
 

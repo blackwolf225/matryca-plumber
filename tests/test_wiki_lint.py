@@ -24,3 +24,15 @@ def test_lint_skips_non_prefixed_pages(tmp_path: Path) -> None:
     (pages / "Journal.md").write_text("- x\n", encoding="utf-8")
     cfg = MatrycaWikiConfig(wiki_file_prefix="Matryca___")
     assert lint_wiki_prefixed_pages(tmp_path, cfg) == []
+
+
+def test_lint_skips_symlink_escape(tmp_path: Path) -> None:
+    graph = tmp_path / "graph"
+    pages = graph / "pages"
+    pages.mkdir(parents=True)
+    outside = tmp_path / "outside.md"
+    outside.write_text("type:: secret\n", encoding="utf-8")
+    link = pages / "Matryca___Evil.md"
+    link.symlink_to(outside)
+    cfg = MatrycaWikiConfig(wiki_file_prefix="Matryca___")
+    assert lint_wiki_prefixed_pages(graph, cfg) == []

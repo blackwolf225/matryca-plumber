@@ -14,7 +14,7 @@ from loguru import logger
 
 from .io_retry import IO_RETRY_ATTEMPTS, IO_RETRY_INITIAL_DELAY_S, IO_RETRY_MAX_DELAY_S
 from .logseq_uuid import assert_valid_block_refs_in_markdown
-from .path_sandbox import PathTraversalSecurityError, assert_path_within_graph
+from .path_sandbox import PathTraversalSecurityError, assert_path_within_graph, read_graph_file_text
 from .path_sandbox import graph_safe_page_path as _graph_safe_page_path
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
@@ -112,7 +112,7 @@ def read_page_lines(
         return None, None, "path_escapes_graph"
     if not path.is_file():
         return None, None, "page_not_found"
-    text = path.read_text(encoding="utf-8")
+    text = read_graph_file_text(path, root, encoding="utf-8")
     return path, text.splitlines(keepends=True), None
 
 

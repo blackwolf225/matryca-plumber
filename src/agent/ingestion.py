@@ -28,6 +28,7 @@ from ..graph.markdown_blocks import (
 )
 from ..graph.page_properties import stamp_plumber_authored_page
 from ..graph.page_write_lock import page_rmw_lock
+from ..graph.path_sandbox import read_graph_file_text
 from ..utils.secret_redaction import secret_violations_in_text
 from .graph_tool_helpers import graph_missing_text, graph_path_from_env
 
@@ -201,7 +202,7 @@ def _append_markdown_page(
     section_text = section.rstrip() + "\n"
 
     with page_rmw_lock(path):
-        prev = path.read_text(encoding="utf-8") if path.is_file() else ""
+        prev = read_graph_file_text(path, graph_root, encoding="utf-8") if path.is_file() else ""
         if not prev.strip():
             prev = stamp_plumber_authored_page("")
         new_text = prev.rstrip("\n") + ("\n\n" if prev.strip() else "") + section_text
@@ -249,7 +250,11 @@ def _build_glossary_section(
     if not pairs:
         return ""
     glossary_path = graph_safe_page_path(graph_root, GLOSSARY_PAGE_TITLE)
-    existing = glossary_path.read_text(encoding="utf-8") if glossary_path.is_file() else ""
+    existing = (
+        read_graph_file_text(glossary_path, graph_root, encoding="utf-8")
+        if glossary_path.is_file()
+        else ""
+    )
     existing_fold = existing.casefold()
     lines: list[str] = []
     for term, block_uuid in pairs:

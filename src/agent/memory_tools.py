@@ -18,6 +18,7 @@ from ..daemon.config_layer import (
 )
 from ..graph.graph_path_validate import validate_logseq_graph_path
 from ..graph.markdown_blocks import atomic_write_bytes
+from ..graph.path_sandbox import read_graph_file_text
 from .graph_dispatch import _headless_append_child
 from .graph_tool_helpers import graph_missing_text, graph_path_from_env
 
@@ -40,7 +41,7 @@ def _ensure_config_page(graph_root: Path) -> Path:
     """Create ``pages/matryca-config.md`` with base headings when missing."""
     path = resolve_identity_config_path(graph_root, for_write=True)
     if path.is_file():
-        content = path.read_text(encoding="utf-8")
+        content = read_graph_file_text(path, graph_root, encoding="utf-8")
         if content.strip():
             return path
     path.parent.mkdir(parents=True, exist_ok=True)

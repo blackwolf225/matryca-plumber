@@ -8,6 +8,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ..config import MatrycaWikiConfig
+from .alias_index import is_scannable_graph_markdown
+from .path_sandbox import read_graph_file_text
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 _TYPE_RE = re.compile(r"(?im)^\s*type::\s*(\S+)\s*$")
@@ -61,9 +63,11 @@ def lint_wiki_prefixed_pages(
     for path in sorted(pages.glob("*.md")):
         if not path.is_file() or not path.name.startswith(prefix):
             continue
+        if not is_scannable_graph_markdown(path, root):
+            continue
         rel = str(path.relative_to(root))
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError as exc:
             findings.append(
                 WikiLintFinding(

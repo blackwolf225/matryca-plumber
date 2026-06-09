@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Link verification sandbox** — `_resolve_asset_path` and link-registry `page_relpath` values are validated with `path_sandbox` before any read; traversal refs and tampered registry rows are treated as missing/invalid ([#27](https://github.com/MarcoPorcellato/matryca-plumber/issues/27), [#28](https://github.com/MarcoPorcellato/matryca-plumber/issues/28)).
+- **Bounded JSON checkpoints** — graph-local JSON loaders use `read_bounded_json()` with `MATRYCA_JSON_MAX_BYTES` (default 64 MiB) to prevent local memory DoS ([#31](https://github.com/MarcoPorcellato/matryca-plumber/issues/31)).
+- **wiki_lint symlink filter** — prefixed page lint skips non-scannable paths via `is_scannable_graph_markdown()` ([#32](https://github.com/MarcoPorcellato/matryca-plumber/issues/32)).
+- **LLM debug log hardening** — `MATRYCA_LLM_DEBUG_LOG_PATH` must lie under allowed roots; NDJSON payloads are secret-redacted before append ([#29](https://github.com/MarcoPorcellato/matryca-plumber/issues/29)).
+- **UI explicit token default** — `.env.example` templates `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`; ephemeral-token startup warning cites `/api/config` risk ([#30](https://github.com/MarcoPorcellato/matryca-plumber/issues/30)).
+- **Defense-in-depth graph reads** — graph/agent/rag modules migrate to `read_graph_file_text()`; CI `sandbox-read-check` blocks new direct `read_text()` bypasses ([#33](https://github.com/MarcoPorcellato/matryca-plumber/issues/33)).
+
 ## [1.9.8] - 2026-06-07
 
 **Documentation harmonization — AX Robustness aligned with code**

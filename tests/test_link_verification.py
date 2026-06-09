@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -224,3 +225,51 @@ def test_merge_prunes_links_removed_from_page(graph_with_page: tuple[Path, Path]
     page.write_text(stripped, encoding="utf-8")
     merge_page_links_into_registry(root, page, stripped)
     assert load_link_registry(root) == {}
+
+
+def test_asset_traversal_outside_graph_treated_as_missing(tmp_path: Path) -> None:
+    from src.graph.link_verification import _asset_missing
+
+    root = tmp_path / "graph"
+    pages = root / "pages"
+    pages.mkdir(parents=True)
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(b"png")
+    page = pages / "note.md"
+    page.write_text("- img\n  id:: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n", encoding="utf-8")
+    assert _asset_missing(root, "pages/note.md", "../../secret.png") is True
+
+
+def test_load_registry_drops_tampered_page_relpath(tmp_path: Path) -> None:
+    root = tmp_path / "graph"
+    root.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret\n", encoding="utf-8")
+    reg_path = link_registry_path(root)
+    reg_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entries": {
+                    "bad": {
+                        "kind": "url",
+                        "target": "https://example.com",
+                        "page_relpath": f"../{outside.name}",
+                        "block_uuid": BLOCK,
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    assert load_link_registry(root) == {}
+
+
+def test_flag_block_rejects_tampered_page_relpath(graph_with_page: tuple[Path, Path]) -> None:
+    root, _page = graph_with_page
+    assert not flag_block_hygiene_property(
+        root,
+        "../etc/passwd",
+        BLOCK,
+        "dead-link",
+    )

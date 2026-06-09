@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ..graph.path_sandbox import read_graph_file_text
+
 _TOKEN = re.compile(r"[0-9a-z]+", re.IGNORECASE)
 
 
@@ -34,7 +36,7 @@ def rank_pages_by_keyword(
     scored: list[tuple[str, int]] = []
     for path in _iter_page_files(root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace").lower()
+            text = read_graph_file_text(path, root, errors="replace").lower()
         except OSError:
             continue
         hits = text.count(needle)

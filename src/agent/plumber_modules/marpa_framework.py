@@ -229,7 +229,7 @@ def run_marpa_framework(
 
     with page_rmw_lock(page_path):
         if page_path.is_file():
-            text = page_path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(page_path, graph_root, errors="replace")
         else:
             text = content
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):

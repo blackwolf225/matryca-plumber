@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .markdown_blocks import atomic_write_bytes
 from .page_write_lock import page_rmw_lock
+from .path_sandbox import read_graph_file_text
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+")
 _LEGACY_ACTIVITY_HEADING = "## 🤖 Matryca Activity"
@@ -140,7 +141,7 @@ def scan_journal_tasks(
             continue
         report.files_scanned += 1
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError as exc:
             report.notes.append(f"Could not read `{path}`: {exc}")
             continue
@@ -280,7 +281,7 @@ def upsert_matryca_activity_block(
     with page_rmw_lock(path):
         prev = ""
         if path.is_file():
-            prev = path.read_text(encoding="utf-8", errors="replace")
+            prev = read_graph_file_text(path, root, errors="replace")
         cleaned = _strip_legacy_matryca_activity_sections(prev)
         lines = cleaned.splitlines() if cleaned else []
         idx = _find_top_level_activity_line(lines)
@@ -353,7 +354,7 @@ def append_journal_markdown_section(
     with page_rmw_lock(path):
         prev = ""
         if path.is_file():
-            prev = path.read_text(encoding="utf-8", errors="replace")
+            prev = read_graph_file_text(path, root, errors="replace")
         new_text = prev.rstrip("\n") + ("\n\n" if prev.strip() else "") + section
 
         if dry_run:
