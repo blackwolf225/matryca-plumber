@@ -124,8 +124,9 @@ repomix-output.xml
 repomix-output.txt
 repomix-output.json
 .repomix-cache/
-.cursor/
+.cursor/*
 !.cursor/rules/
+!.cursor/rules/**
 
 # ========================================
 # 🌐 Frontend (React / Node.js)
