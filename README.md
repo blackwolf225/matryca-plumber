@@ -135,6 +135,22 @@ matryca plumber start    # background worker only; no browser
 matryca plumber status   # UI still shows pre-flight; engine may already show IDLE/RUNNING
 ```
 
+### Plumber commands — UI vs daemon
+
+`matryca-plumber status` is shorthand for `matryca plumber status` (same for `start`, `stop`, `ui`, `audit`, `cluster`).
+
+| Command | What it starts | Browser / `:8500` | Maintenance daemon |
+|---------|----------------|-------------------|----------------------|
+| **`matryca plumber status`** (recommended) | Sovereign UI + local API | Yes — [http://127.0.0.1:8500](http://127.0.0.1:8500) | No — use **Start Engine** in the UI or `plumber start` |
+| **`matryca plumber ui`** | Same as `status` | Yes | No |
+| **`matryca plumber start`** | Background daemon only | No | Yes |
+| **`matryca plumber start --foreground`** | Foreground daemon (logs in terminal) | No | Yes |
+| **`matryca plumber stop`** | — | — | Stops daemon |
+
+The UI binds port **8500** in seconds (lazy graph index). Graph analytics cards may take longer on the **first** load while the in-memory AST warms up. The React bundle is served from `frontend/dist/` (auto-built on first `status`/`ui` when `frontend/node_modules/` exists).
+
+**Common mistake:** `matryca plumber start` does **not** open the dashboard — run `matryca plumber status` in another terminal (or skip `start` and use **Start Engine** from the UI).
+
 ### 4. Set it and forget it (Background Service)
 Install it as a LaunchAgent/systemd service so it wakes up with your OS:
 ```bash
@@ -195,7 +211,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 
 **Operator steps (same text as the UI wizard):**
 
-1. **Control room connection** — If you can read this dashboard, the local API on port `8500` is up. Keep the window open while the engine runs.
+1. **Control room connection** — If you can read this dashboard, `matryca plumber status` (or `ui`) has started the local API on port `8500`. That command does **not** start the maintenance daemon by itself. Keep the window open while the engine runs.
 
 2. **Logseq graph (test vault first)** — Point `LOGSEQ_GRAPH_PATH` at the **root** of a Logseq OG vault (the folder that contains `pages/`). Use a **clone** for your first run; do not enable Logseq Sync on test graphs. In the UI: **Settings** (gear) → **Logseq Graph Path** → absolute path → Save.
 

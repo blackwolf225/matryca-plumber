@@ -146,8 +146,13 @@ def prepare_matryca_runtime(
     get_identity_store(graph_root).reload_if_stale(force=True)
 
 
-def try_prepare_matryca_runtime_from_env() -> None:
-    """Provision runtime dirs from the current process environment (idempotent)."""
+def try_prepare_matryca_runtime_from_env(*, eager_graph: bool = True) -> None:
+    """Provision runtime dirs from the current process environment (idempotent).
+
+    Args:
+        eager_graph: When ``False`` (Sovereign UI, MCP stdio), defer AST parsing until
+            the first graph read. When ``True`` (daemon, agent CLI), load immediately.
+    """
     ensure_repo_dotenv_from_example()
     from ..agent.plumber_config import reload_plumber_dotenv
 
@@ -155,16 +160,20 @@ def try_prepare_matryca_runtime_from_env() -> None:
     wiki_config = load_matryca_wiki_config()
     graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
     if not graph_raw:
-        prepare_matryca_runtime(graph_root=None, wiki_config=wiki_config)
+        prepare_matryca_runtime(graph_root=None, wiki_config=wiki_config, eager_graph=eager_graph)
         return
     from ..graph.graph_path_validate import validate_logseq_graph_path
 
     try:
         graph_root = validate_logseq_graph_path(graph_raw)
     except ValueError:
-        prepare_matryca_runtime(graph_root=None, wiki_config=wiki_config)
+        prepare_matryca_runtime(graph_root=None, wiki_config=wiki_config, eager_graph=eager_graph)
         return
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=wiki_config)
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=wiki_config,
+        eager_graph=eager_graph,
+    )
 
 
 __all__ = [

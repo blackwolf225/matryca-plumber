@@ -367,10 +367,12 @@ async def run_cli(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint: load ``.env``, parse args, run async dispatch."""
-    try_prepare_matryca_runtime_from_env()
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "plumber" and args.plumber_action in {"status", "ui"}:
+    ui_only = args.command == "plumber" and args.plumber_action in {"status", "ui"}
+    if not ui_only:
+        try_prepare_matryca_runtime_from_env()
+    if ui_only:
         try:
             run_ui_server()
         except KeyboardInterrupt:

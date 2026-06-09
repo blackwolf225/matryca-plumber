@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Sovereign UI fast startup** — `matryca plumber status` / `ui` skip eager AST bootstrap in `cli.main()` and use `eager_graph=False` in the UI lifespan so port `8500` and the React shell bind in seconds; graph analytics load on the first dashboard request. **Docs:** `README.md`, `CONTRIBUTING.md`, `docs/ARCHITECTURE.md`, `llms.txt`, and OpenSpec (`runtime-bootstrap`, `agent-dx`) clarify **`status`/`ui` vs `start`**.
 - **Documentation harmonization (v1.9.9)** — `README.md`, `llms.txt` / `.well-known/llms.txt` (§2.4 Security & Sandbox), `SECURITY.md`, `CONTRIBUTING.md`, `SYSTEM_PROMPT.md`, `docs/ARCHITECTURE.md`, and OpenSpec index aligned with v1.9.9 Security & Sandbox code; new [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md).
 
 ## [1.9.9] - 2026-06-09

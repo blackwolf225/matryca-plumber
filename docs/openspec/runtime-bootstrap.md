@@ -12,12 +12,14 @@ Matryca Plumber provisions **directories and optional config files** before harv
 
 | Entry surface | Trigger |
 |---------------|---------|
-| **Maintenance daemon** | `start_daemon_foreground` and `MaintenanceDaemon.run_forever` (before bootstrap harvest) |
-| **MCP stdio** | `app_lifespan` in `src/main.py` — **light** bootstrap only (`eager_graph=False`); AST loads on first graph tool call |
-| **CLI** | `cli.main` immediately after `reload_plumber_dotenv()` |
-| **Sovereign UI** | FastAPI lifespan on server start; `POST /api/config`; `POST /api/daemon/start`; `GET /api/preflight` |
+| **Maintenance daemon** | `start_daemon_foreground` and `MaintenanceDaemon.run_forever` (before bootstrap harvest) — **eager** AST |
+| **MCP stdio** | `app_lifespan` in `src/main.py` — **light** bootstrap (`eager_graph=False`); AST on first graph tool call |
+| **Agent CLI** (`read`, `search`, …) | `cli.main` via `try_prepare_matryca_runtime_from_env()` — **eager** AST |
+| **Sovereign UI** | `matryca plumber status` / `ui` → FastAPI lifespan (`eager_graph=False`); also `POST /api/config`, `POST /api/daemon/start`, `GET /api/preflight` |
 
-When a valid graph is configured, **daemon / CLI / UI** also **bootstraps the in-memory `LogseqGraph` cache** and loads **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)). **MCP stdio** defers AST parsing until the first tool that needs the graph (lazy load) so MCP hosts (e.g. Hermes Agent) complete `initialize` / `tools/list` in seconds; see [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md).
+`matryca plumber status` / `ui` does **not** run eager bootstrap in `cli.main` (UI lifespan handles light provisioning). `matryca plumber start` does **not** start the UI.
+
+When a valid graph is configured, **daemon and agent CLI** **bootstrap the in-memory `LogseqGraph` cache** eagerly and load **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)). **MCP stdio** and the **Sovereign UI** defer AST parsing until the first graph read (lazy load) so handshakes and `:8500` bind in seconds on large vaults; see [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md).
 
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
 

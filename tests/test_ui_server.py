@@ -262,7 +262,10 @@ def test_get_state_requires_graph_root(
     auth_headers: dict[str, str],
 ) -> None:
     monkeypatch.delenv("LOGSEQ_GRAPH_PATH", raising=False)
-    monkeypatch.setattr("src.cli.ui_server.try_prepare_matryca_runtime_from_env", lambda: None)
+    monkeypatch.setattr(
+        "src.cli.ui_server.try_prepare_matryca_runtime_from_env",
+        lambda **_kwargs: None,
+    )
     monkeypatch.setattr("src.cli.ui_server._ensure_graph_root_env_loaded", lambda: None)
 
     with TestClient(app) as client:

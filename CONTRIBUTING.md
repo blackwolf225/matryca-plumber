@@ -132,31 +132,43 @@ Optional git snapshots on the graph repo are fine; they remain files on disk.
 
    On the first daemon/CLI/UI/MCP start, **`prepare_matryca_runtime()`** provisions log dirs, sibling **`matryca-l1/`**, **`.matryca_semantic_cache/`**, **`templates/`**, and an optional **`matryca-wiki.yml`** (see [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md)).
 
+### Plumber commands — UI vs daemon
+
+| Command | Role |
+|---------|------|
+| **`matryca plumber status`** / **`ui`** | Starts the Sovereign UI + FastAPI on **`http://127.0.0.1:8500`**. Does **not** start the maintenance daemon. |
+| **`matryca plumber start`** | Starts the maintenance daemon only. Does **not** open a browser or bind `:8500`. |
+| **`matryca plumber stop`** | Stops the daemon. |
+
+Shorthand (`matryca-plumber status`, `matryca-plumber start`, …) routes to the same `plumber` subcommands.
+
 ### Daemon-first dev loop (recommended)
 
 After `make install`, validate changes the way operators run the **Agentic OS** (use the `.env` from step **5** — same `LOGSEQ_GRAPH_PATH` and LM settings you use for tests):
 
-- **Build the Sovereign UI** (once, or when `frontend/` changes):
+- **Build the Sovereign UI** (once, or when `frontend/` changes; `status`/`ui` auto-runs `npm run build` when `node_modules/` exists):
 
    ```bash
    cd frontend && npm ci && npm run build && cd ..
    ```
 
-- **Run the Plumber daemon** — foreground is best while iterating:
-
-   ```bash
-   uv run matryca plumber start --foreground
-   ```
-
-   Or detach with `uv run matryca plumber start` and tail **`logs/matryca_plumber_ops.log`**.
-
-- **Open the cockpit** — in another terminal:
+- **Open the cockpit** (typical first step):
 
    ```bash
    uv run matryca plumber status
    ```
 
-   Browse to **`http://127.0.0.1:8500`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`, loopback-only), and watch **live telemetry** (~**5s** refresh on progress, pills, and token counters while the engine runs). If the daemon was started from a terminal first, the UI still polls `/api/state` when it reports a live **`daemon_pid`**; click **Start Engine** for logs and graph analytics.
+   Browse to **`http://127.0.0.1:8500`**, complete the **Zero-Trust** token bootstrap (`GET /api/auth/session`, loopback-only), then click **Start Engine** — or start the daemon from a terminal first (below).
+
+- **Optional — run the daemon from the terminal** (foreground is best while iterating):
+
+   ```bash
+   uv run matryca plumber start --foreground
+   ```
+
+   Or detach with `uv run matryca plumber start` and tail **`logs/matryca_plumber_ops.log`**. In another terminal, `uv run matryca plumber status` attaches the UI; live telemetry (~**5s** refresh) works when `/api/state` reports a live **`daemon_pid`**.
+
+**Do not expect a dashboard from `plumber start` alone** — that command is headless graph maintenance only.
 
 Ensure your repo **`.env`** includes the Ironclad security block from **`.env.example`** (at minimum `MATRYCA_MCP_ENABLED=true` if you use MCP hosts). See [`SECURITY.md`](SECURITY.md) for the full matrix.
 

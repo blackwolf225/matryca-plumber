@@ -52,6 +52,19 @@ uvx matryca-plumber --json read page "My Project"
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
 
+### 2.0 Plumber commands — UI vs daemon (do not confuse)
+
+| Command | Starts | Does **not** start |
+|---------|--------|-------------------|
+| `status` / `ui` (or `plumber status` / `plumber ui`) | Sovereign UI + API on `http://127.0.0.1:8500` | maintenance daemon |
+| `plumber start` | background maintenance daemon | browser / UI server |
+| `plumber start --foreground` | foreground daemon (terminal logs) | browser / UI server |
+| `plumber stop` | — | stops daemon |
+
+**Lazy UI bootstrap:** `status` / `ui` bind `:8500` in seconds; the in-memory graph index loads on the first analytics request (large vaults). Use **Start Engine** in the UI or `plumber start` to run Phase 1/2 maintenance.
+
+**Common mistake:** `plumber start` alone does **not** open the dashboard — run `status` in another terminal or use **Start Engine** after opening the UI.
+
 ### 2.1 Extract graph data as JSON (DO NOT grep `.md` files)
 
 Use **`read`** with a **positional** `target_type`, then an optional `query` string.
@@ -187,9 +200,9 @@ There is **no** `doctor` subcommand. Use these instead:
 |------|---------|
 | Bootstrap / graph insights dashboard | `uvx matryca-plumber plumber audit` or `uvx matryca-plumber audit` |
 | Semantic cluster neighborhoods | `uvx matryca-plumber plumber cluster` or `uvx matryca-plumber cluster` |
-| Sovereign UI + pre-flight checks | `uvx matryca-plumber status` (opens UI on `http://127.0.0.1:8500`; does not start daemon alone) |
+| Sovereign UI + pre-flight checks | `uvx matryca-plumber status` → UI on `http://127.0.0.1:8500` (no daemon until **Start Engine** or `plumber start`) |
 | Block-reference lint | `uvx matryca-plumber lint block_refs` |
-| Daemon lifecycle | `uvx matryca-plumber plumber start` / `plumber stop` |
+| Maintenance daemon (headless) | `uvx matryca-plumber plumber start` / `plumber stop` (no browser; pair with `status` for the cockpit) |
 
 **JSON audit output:**
 ```bash

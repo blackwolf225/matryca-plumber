@@ -34,6 +34,7 @@ Both files must stay **byte-identical**; edit one and mirror the other in the sa
 | `git clone` + `pip install -e .` to “use” the tool | `uvx matryca-plumber` |
 | `grep` / `find` on `pages/` | `uvx matryca-plumber --json read page "…"` |
 | Invent `doctor`, `--graph`, `mcp --port 8080` | Commands listed in section 2 of `llms.txt` |
+| Run `plumber start` expecting the browser dashboard | `status` / `ui` for `:8500`; `start` is daemon-only (see `llms.txt` §2.0) |
 
 ---
 

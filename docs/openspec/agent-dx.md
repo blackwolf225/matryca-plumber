@@ -197,8 +197,13 @@ Full spec: [`agent-ax-robustness.md`](agent-ax-robustness.md). Chaos tests: `tes
 | `matryca refactor` | `split_large`, `reparent`, `generate_flashcards` |
 | `matryca lint` | `unify_tags`, `block_refs`, `full_wiki_scan` |
 | **`matryca context load`** | Semantic macro (page or subtree bundle) |
-| `matryca plumber` | Daemon + Sovereign UI |
+| `matryca plumber start` | Maintenance daemon only (no browser, no `:8500`) |
+| `matryca plumber status` / `ui` | Sovereign UI on `http://127.0.0.1:8500` (no daemon until **Start Engine** or `start`) |
+| `matryca plumber stop` | Stop daemon |
+| `matryca plumber audit` / `cluster` | Graph insights CLI |
 | `matryca service` | LaunchAgent / systemd install |
+
+Shorthand: `matryca-plumber status` → `plumber status`, `matryca-plumber start` → `plumber start`.
 
 Global: **`--json`** on any subcommand.
 

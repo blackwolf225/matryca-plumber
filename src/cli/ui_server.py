@@ -584,7 +584,8 @@ def _ensure_graph_root_env_loaded() -> None:
 async def _ui_app_lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Provision logs and graph runtime dirs before serving API traffic."""
     _ensure_graph_root_env_loaded()
-    try_prepare_matryca_runtime_from_env()
+    # Lazy AST: bind HTTP immediately; graph index loads on first analytics/read call.
+    try_prepare_matryca_runtime_from_env(eager_graph=False)
     yield
 
 
@@ -1085,12 +1086,16 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = DEFAULT_UI_PORT) -> No
             "WARNING: Binding to 0.0.0.0 exposes authenticated API routes on the LAN. "
             "/api/auth/session remains loopback-only; MATRYCA_UI_TOKEN is required."
         )
+    sys.stdout.write("Starting Matryca Plumber control room…\n")
+    sys.stdout.flush()
     _ensure_frontend_built()
     _mount_frontend_assets()
 
     dashboard_url = f"http://{host}:{port}/"
-    sys.stdout.write(f"Matryca Plumber API listening on http://{host}:{port}\n")
     sys.stdout.write(f"Control room: {dashboard_url}\n")
+    sys.stdout.write(
+        f"API: http://{host}:{port} (graph index loads on first dashboard analytics request)\n"
+    )
     if _ui_docs_enabled():
         sys.stdout.write(f"Interactive docs: http://{host}:{port}/docs\n")
     sys.stdout.flush()

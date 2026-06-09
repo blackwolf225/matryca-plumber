@@ -149,14 +149,13 @@ def test_daemon_run_forever_prepares_before_bootstrap_pipeline(
     assert order == ["prepare", "bootstrap"]
 
 
-def test_ui_lifespan_calls_try_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ui_lifespan_calls_try_prepare_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.cli.ui_server import _ui_app_lifespan
 
-    called = False
+    calls: list[bool] = []
 
-    def _prepare() -> None:
-        nonlocal called
-        called = True
+    def _prepare(*, eager_graph: bool = True) -> None:
+        calls.append(eager_graph)
 
     monkeypatch.setattr("src.cli.ui_server.try_prepare_matryca_runtime_from_env", _prepare)
     monkeypatch.setattr("src.cli.ui_server._ensure_graph_root_env_loaded", lambda: None)
@@ -168,4 +167,22 @@ def test_ui_lifespan_calls_try_prepare(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
     asyncio.run(_run())
-    assert called is True
+    assert calls == [False]
+
+
+def test_cli_ui_skips_eager_prepare_before_run_ui_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.cli import main as cli_main
+
+    order: list[str] = []
+
+    monkeypatch.setattr(
+        "src.cli.try_prepare_matryca_runtime_from_env",
+        lambda **kwargs: order.append(f"prepare:eager={kwargs.get('eager_graph', True)}"),
+    )
+    monkeypatch.setattr("src.cli.run_ui_server", lambda: order.append("ui"))
+
+    with pytest.raises(SystemExit) as exc:
+        cli_main(["plumber", "ui"])
+
+    assert exc.value.code == 0
+    assert order == ["ui"]

@@ -165,6 +165,8 @@ Spec: [`docs/openspec/agent-ax-robustness.md`](openspec/agent-ax-robustness.md).
 
 **Entry:** `matryca plumber status` / `matryca plumber ui` → `src/cli/ui_server.py` on `http://127.0.0.1:8500`
 
+These commands start the **control room only** — not the maintenance daemon. Operators launch graph work via **Start Engine** in the UI (`POST /api/daemon/start`) or separately with `matryca plumber start`. Shorthand: `matryca-plumber status` → `plumber status`.
+
 A **monolithic** Uvicorn process serves:
 
 - **REST API** — `/api/state`, `/api/logs`, `/api/config`, daemon control, LM model discovery (SSRF-hardened)
@@ -179,7 +181,7 @@ The UI never becomes a second source of truth: it reads daemon checkpoints and l
 
 `register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** (identity) and **`ingest_document`** (atomic external markdown → ingest page + `LOG`/`GLOSSARY`, parse via OS temp files only). **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
 
-**Lazy AST bootstrap (v1.9.6):** MCP `app_lifespan` calls `prepare_matryca_runtime(..., eager_graph=False)` so Hermes and other hosts complete `initialize` / `tools/list` in seconds. Daemon, CLI, and Sovereign UI remain **eager** (full `LogseqGraph.load_directory` at startup). The AST index loads on the first tool path that calls `get_graph_ast_cache().get_graph()`; stderr logs `AST cache bootstrap started|complete` with `markdown_files`, `duration_s`, `pages_indexed`. See [`integrations/hermes-agent.md`](integrations/hermes-agent.md).
+**Lazy AST bootstrap (v1.9.6+):** MCP `app_lifespan` and the **Sovereign UI** FastAPI lifespan call `prepare_matryca_runtime(..., eager_graph=False)` so stdio handshakes and `:8500` bind in seconds on large vaults. The **maintenance daemon** and agent **`matryca read` / `search` / …** paths remain **eager** (`eager_graph=True`). Deferred surfaces load the AST on the first call to `get_graph_ast_cache().get_graph()` (e.g. MCP graph tools, UI `/api/graph-analytics`); stderr logs `AST cache bootstrap started|complete` with `markdown_files`, `duration_s`, `pages_indexed`. See [`integrations/hermes-agent.md`](integrations/hermes-agent.md).
 
 **Routing fix (`plumber_entry.py`):** the `matryca-plumber` console script inspects `sys.argv`. Known CLI commands (`plumber`, `read`, `search`, shorthand `start`/`status`/…) route to `cli.main` **without** importing FastMCP. Bare invocations (typical MCP host stdio spawn) fall through to `main.main()`. This disentangles **operator CLI stdout** from **MCP JSON-RPC on stdio** — a class of integration bugs that plagued single-entrypoint packages.
 
@@ -456,7 +458,7 @@ graph LR
 
 ## Runtime bootstrap
 
-Every Matryca Plumber surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **`prepare_matryca_runtime()`** in `src/utils/runtime_bootstrap.py` after environment load and **before** graph processing. The helper is idempotent. **`eager_graph=True`** (default) loads the AST index immediately; **MCP stdio** passes **`eager_graph=False`** and defers AST parsing to the first graph tool call.
+Every Matryca Plumber surface calls **`prepare_matryca_runtime()`** in `src/utils/runtime_bootstrap.py` after environment load and **before** graph processing. The helper is idempotent. **`eager_graph=True`** (default) loads the AST index immediately — **daemon**, **`matryca read` / `search` / …** via `cli.main`. **`eager_graph=False`** — **MCP stdio** and **Sovereign UI** — defers `LogseqGraph.load_directory` until the first graph read.
 
 | Provisioned at startup | Location | Motivation |
 |------------------------|----------|------------|
@@ -465,7 +467,7 @@ Every Matryca Plumber surface (daemon, MCP lifespan, CLI, Sovereign UI) calls **
 | Semantic cache dir | `<vault>/.matryca_semantic_cache/` | `master_catalog.json`, `backlink_counts.json`, `semantic_clusters.json`, per-inference `*.json`; excluded from `pages/` scans |
 | Templates dir | `<vault>/templates/` (or YAML `templates_subdir`) | `read_logseq_template` |
 | Wiki orchestration | `<vault>/matryca-wiki.yml` | Seeded from `matryca-wiki.example.yml` when missing |
-| AST + identity RAM | `get_graph_ast_cache`, `get_identity_store` | **Eager** surfaces: at startup. **MCP lazy:** on first `get_graph()` (identity loads with first graph access) |
+| AST + identity RAM | `get_graph_ast_cache`, `get_identity_store` | **Eager:** daemon + agent CLI. **Lazy:** MCP + Sovereign UI — on first `get_graph()` (identity loads with first graph access) |
 
 **Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), ingest / `LOG` / `GLOSSARY` pages (first `ingest_document`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
 
