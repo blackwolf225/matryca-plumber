@@ -1,0 +1,411 @@
+{
+  "audit_source": "v1_9_perfection_audit_0770f64a.plan.md",
+  "codebase_version": "1.9.8",
+  "milestones": [
+    {
+      "title": "v1.9.9 — Security & Sandbox",
+      "description": "Perfection audit: hardening path sandbox, debug logging, UI auth, JSON bounds, and defense-in-depth reads. Prerequisite for v2.0 Shadow DB."
+    },
+    {
+      "title": "v1.9.10 — Concurrency & Data Integrity",
+      "description": "Perfection audit: OCC/lock gaps on hub pages, master_catalog flock, catalog cache coherence, harvest drift, json_flock parity."
+    },
+    {
+      "title": "v1.9.11 — Performance & I/O",
+      "description": "Perfection audit: AST incremental reload, catalog/alias hot paths, daemon checkpoint debounce, vault scan deduplication."
+    },
+    {
+      "title": "v1.9.12 — Code Perfection & Tech Debt",
+      "description": "Perfection audit: env_parse DRY, maintenance_daemon split, graph_dispatch registry, mypy strict cleanup. Prerequisite for v2.0."
+    }
+  ],
+  "labels": [
+    {"name": "security", "description": "Security hardening and sandbox", "color": "B60205"},
+    {"name": "performance", "description": "Performance and I/O optimization", "color": "1D76DB"},
+    {"name": "tech-debt", "description": "Refactoring and maintainability", "color": "C5DEF5"},
+    {"name": "v1.9.x", "description": "v1.9.x Code Perfection track (pre-v2.0)", "color": "5319E7"},
+    {"name": "audit-2026", "description": "Created from v1.9.x perfection audit", "color": "FEF2C0"}
+  ],
+  "issues": [
+    {
+      "id": 1,
+      "title": "Path traversal on read in _resolve_asset_path (link verification)",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Alto",
+      "problem": "In `src/graph/link_verification.py` L203–209, relative asset refs (`![](../../outside)`) are resolved with `(page_path.parent / ref).resolve()` without `assert_path_within_graph()`. Malicious or corrupted markdown can use `_asset_missing()` as a file-existence oracle outside the vault. Writes are sandboxed; reads are not.",
+      "solution": "After `resolve()`, call `assert_path_within_graph(resolved, graph_root)`; on failure treat the asset as missing/invalid. Add tests in `tests/test_security_remediation.py` with `../` refs and symlink escape.",
+      "files": ["src/graph/link_verification.py", "tests/test_security_remediation.py"]
+    },
+    {
+      "id": 2,
+      "title": "page_relpath from link registry read without sandbox validation",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Medio",
+      "problem": "In `src/graph/link_verification.py` (~L514–528), `page_path = graph_root / page_relpath` has no `..` check. If `.matryca_link_registry.json` is tampered (writable in graph root), `read_text()` may read arbitrary files. The subsequent write is blocked by sandbox, but the read happens first.",
+      "solution": "Validate `page_relpath` with `resolve_graph_relative_key()` / `assert_path_within_graph()` before any I/O. Reject registry entries with non-conformant paths at load time.",
+      "files": ["src/graph/link_verification.py", "src/graph/path_sandbox.py"]
+    },
+    {
+      "id": 3,
+      "title": "MATRYCA_LLM_DEBUG_LOG_PATH writes to arbitrary path without secret redaction",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Medio",
+      "problem": "`src/utils/agent_debug_log.py` L23–27 uses `Path(custom)` without allowlist (`config_paths`). With `MATRYCA_LLM_DEBUG_JSON=true`, LLM payloads (including prompts) are appended as NDJSON without `redact_for_log()`. Risk of API key leak to operator-chosen debug paths.",
+      "solution": "(1) Resolve path via `resolve_optional_path_under_allowed_roots()`; (2) apply `redact_secrets_in_text()` / `redact_for_log()` to `data` before serialization; (3) document in `.env.example`.",
+      "files": ["src/utils/agent_debug_log.py", "src/utils/config_paths.py", ".env.example"]
+    },
+    {
+      "id": 4,
+      "title": "Ephemeral UI token exposed on loopback to any local process",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Medio (Alto on shared hosts)",
+      "problem": "`src/cli/ui_auth.py` generates a random token when `MATRYCA_UI_TOKEN` is unset; `src/cli/ui_server.py` exposes it via `GET /api/auth/session` on loopback. On multi-user hosts or with local malware, any process can obtain the token and call `/api/config` (which includes `LLM_API_KEY`).",
+      "solution": "(1) Default `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true` for new installs; (2) structured startup warning when using ephemeral token; (3) document LAN risk in README Security section.",
+      "files": ["src/cli/ui_auth.py", "src/cli/ui_server.py", ".env.example"]
+    },
+    {
+      "id": 5,
+      "title": "No size limit on json.loads for graph-local checkpoint files",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Basso–Medio",
+      "problem": "`master_catalog.json`, link registry, semantic cache, and daemon state are loaded with `read_text()` + `json.loads()` without size caps (`src/graph/master_catalog.py` L233–240, `src/graph/link_verification.py` L150). A huge JSON file in the graph root can cause local memory DoS.",
+      "solution": "Introduce `read_bounded_json(path, max_bytes=...)` in `src/utils/` with env `MATRYCA_JSON_MAX_BYTES` (default e.g. 32–64 MB). Apply to all JSON checkpoint loaders.",
+      "files": ["src/graph/master_catalog.py", "src/graph/link_verification.py", "src/agent/plumber_modules/semantic_cache_router.py", "src/utils/ (new helper)"]
+    },
+    {
+      "id": 6,
+      "title": "wiki_lint does not filter symlink escape on pages/*.md",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Basso",
+      "problem": "`src/graph/wiki_lint.py` globs flat `pages/` and calls `read_text()` directly, without `is_scannable_graph_markdown()` used in `src/graph/alias_index.py`. A symlink under `pages/` can cause reads outside the vault during daemon lint.",
+      "solution": "Filter every path with `is_scannable_graph_markdown(graph_root, path)` before read; align with `alias_index`.",
+      "files": ["src/graph/wiki_lint.py", "src/graph/alias_index.py"]
+    },
+    {
+      "id": 7,
+      "title": "Defense-in-depth: 30+ read_text() calls bypass read_graph_file_text()",
+      "category": "Security",
+      "milestone": "v1.9.9 — Security & Sandbox",
+      "impact": "Basso",
+      "problem": "Internal modules (`insights_engine`, `graph_analytics`, `local_query`, `maintenance_daemon`) call `Path.read_text()` on scan-derived paths, not MCP input. Safe today by construction but fragile to future refactors. `src/graph/path_sandbox.py` exposes `read_graph_file_text()` which is rarely used.",
+      "solution": "CI lint/grep rule flagging `read_text()` in `src/graph/` and `src/agent/` outside a whitelist; migrate gradually to `read_graph_file_text()`.",
+      "files": ["~15 modules in src/graph/, src/agent/, src/rag/"]
+    },
+    {
+      "id": 8,
+      "title": "Hub pages written without OCC or page_rmw_lock",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Alto",
+      "problem": "`write_master_index_page` (`src/graph/master_catalog.py` L508–515) and `write_graph_insights_page` (`src/graph/insights_engine.py` L350–356) call `atomic_write_bytes` without lock or mtime check. User edits in Logseq while daemon recompiles index → silent overwrite of human changes.",
+      "solution": "(1) `occ_snapshot` + abort on drift; (2) `page_rmw_lock`; (3) or mark hubs `matryca-generated:: true` and skip overwrite when human mtime > last daemon compile. Tests in `tests/test_hubs.py`.",
+      "files": ["src/graph/master_catalog.py", "src/graph/insights_engine.py", "tests/test_hubs.py"]
+    },
+    {
+      "id": 9,
+      "title": "master_catalog.json loaded without cross_process_json_flock",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Alto",
+      "problem": "`_load_catalog_payload_from_disk` (`src/graph/master_catalog.py` L233–240) uses `path.read_text()` without flock, while `save()` uses flock + atomic write. Race: read during `atomic_write_bytes` replace → partial JSON → `persist_allowed=False` or backup restore.",
+      "solution": "Wrap load in `cross_process_json_flock(path)`; or read-via-temp-copy under lock. Add concurrency test in `tests/test_json_flock.py`.",
+      "files": ["src/graph/master_catalog.py", "src/graph/json_flock.py"]
+    },
+    {
+      "id": 10,
+      "title": "In-process catalog cache stale vs concurrent disk writer",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Alto",
+      "problem": "`load_master_catalog` (`src/graph/master_catalog.py` L280–292) returns cache when mtime unchanged. Process A holds stale RAM catalog, upserts + saves; Process B saved in between → last-writer-wins, B's deltas lost. Common with `_sync_catalog_after_page_write` + parallel harvest.",
+      "solution": "(1) Merge-on-save with reload when disk mtime > cached mtime; (2) or serialize all catalog writers via extended flock covering load+mutate+save; (3) debounce save (see audit issue #23).",
+      "files": ["src/graph/master_catalog.py", "src/agent/maintenance_daemon.py", "src/graph/bootstrap_harvest.py"]
+    },
+    {
+      "id": 11,
+      "title": "Harvest upserts catalog when semantic index append OCC-aborts",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Alto",
+      "problem": "`harvest_page_into_catalog` (`src/graph/bootstrap_harvest.py` L262–276) calls `_append_minimal_semantic_index` which can abort silently (L142–163), then always `catalog.upsert()` with LLM summary. Result: `master_catalog.json` claims a summary not present in the `.md` body.",
+      "solution": "Return bool from `_append_minimal_semantic_index`; upsert catalog only on successful write or when summary already in page. Regression test in `tests/test_bootstrap_yield.py`.",
+      "files": ["src/graph/bootstrap_harvest.py", "tests/test_bootstrap_yield.py"]
+    },
+    {
+      "id": 12,
+      "title": "needs_refresh uses truncated seconds; OCC uses float nanoseconds",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`needs_refresh` (`src/graph/master_catalog.py` L194–200) compares `mtime_ns // 1_000_000_000` with `entry.last_mtime` (integer seconds). OCC uses `math.isclose` on float `st_mtime` (`markdown_blocks.py` L219–224). Multiple edits within one second → harvest skips refresh while OCC would detect drift.",
+      "solution": "Align with `file_mtime_drifted()` or persist `last_mtime_ns` in catalog entry. Soft migration of catalog JSON schema.",
+      "files": ["src/graph/master_catalog.py", "src/graph/markdown_blocks.py"]
+    },
+    {
+      "id": 13,
+      "title": "auto_split creates child pages without child path lock",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`auto_split.py` L117–128 creates child pages with `atomic_write_bytes` inside parent lock but without `page_rmw_lock(child)`. TOCTOU on `is_file()`; MCP vs daemon race on same child title.",
+      "solution": "Acquire `page_rmw_lock(new_page_path)` before creation; OCC on child if exists. Test in `tests/test_plumber_cognitive_modules.py`.",
+      "files": ["src/agent/plumber_modules/auto_split.py"]
+    },
+    {
+      "id": 14,
+      "title": "json_flock lacks parity with page_write_lock (degradation, NB, reentrancy)",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`json_flock.py` uses blocking `LOCK_EX` without retry, no `MATRYCA_ALLOW_FLOCK_DEGRADATION`, no-op on Windows. `page_write_lock.py` has NB + backoff + depth tracking. On cloud FS with degradation enabled, page lock degrades but JSON may block indefinitely or fail to coordinate cross-process.",
+      "solution": "Extract shared locking into `src/utils/platform_lock.py`; apply same NB+retry policy to JSON flock; document Windows single-writer requirement.",
+      "files": ["src/graph/json_flock.py", "src/graph/page_write_lock.py"]
+    },
+    {
+      "id": 15,
+      "title": "Link registry saved with non-atomic write_text",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`_save_registry_unlocked` (`src/graph/link_verification.py` L171) uses `path.write_text()` instead of `atomic_write_bytes`. Crash mid-write under flock → truncated corrupt JSON.",
+      "solution": "Replace with `atomic_write_bytes` or tmp+fsync+replace pattern used in daemon state.",
+      "files": ["src/graph/link_verification.py"]
+    },
+    {
+      "id": 16,
+      "title": "Semantic cache purge and cluster load without flock",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`purge_expired_semantic_cache` (`semantic_cache_router.py` L272–303) reads/deletes cache files without flock while `cache_put` writes under flock. `load_semantic_clusters` (`semantic_clustering.py` L537–546) reads without flock during freshness check.",
+      "solution": "Use `cross_process_json_flock` on purge read+delete; flock on cluster load. Tests in `tests/test_semantic_cache_router.py`.",
+      "files": ["src/agent/plumber_modules/semantic_cache_router.py", "src/graph/semantic_clustering.py"]
+    },
+    {
+      "id": 17,
+      "title": "Race seeding matryca-config.md in store_fact",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Basso–Medio",
+      "problem": "`_ensure_config_page` (`src/agent/memory_tools.py` L39–53): concurrent `store_fact` calls may both see missing file and seed with `atomic_write_bytes` — last writer wins; subsequent append may have wrong baseline.",
+      "solution": "`page_rmw_lock` + atomic check; or `atomic_write_bytes_if_unchanged` with create-if-not-exists semantics.",
+      "files": ["src/agent/memory_tools.py"]
+    },
+    {
+      "id": 18,
+      "title": "Daemon shutdown suppresses errors on final catalog/daemon saves",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Medio",
+      "problem": "`maintenance_daemon.py` L2051–2058 uses `contextlib.suppress(Exception)` on `catalog.save()` and `save_daemon_state()` during graceful shutdown. Final I/O failures go unnoticed → lost checkpoint.",
+      "solution": "Log at `logger.error` with stack; optional single retry; catch only `OSError` instead of `suppress(Exception)`.",
+      "files": ["src/agent/maintenance_daemon.py"]
+    },
+    {
+      "id": 19,
+      "title": "link_verification compares mtime with != instead of file_mtime_drifted",
+      "category": "Bug",
+      "milestone": "v1.9.10 — Concurrency & Data Integrity",
+      "impact": "Basso",
+      "problem": "`link_verification.py` L525–527: `read_file_mtime(page_path) != baseline_mtime` — float representation edge cases can cause false aborts vs rest of codebase.",
+      "solution": "Use `file_mtime_drifted()` from `markdown_blocks.py`.",
+      "files": ["src/graph/link_verification.py"]
+    },
+    {
+      "id": 20,
+      "title": "AST cache full-reload on delete or parser failure",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`ast_cache.apply_file_event` (`src/daemon/ast_cache.py` L71–76, L85): on delete or parser exception → `LogseqGraph.load_directory()` entire vault. At 10k files: seconds–minutes and hundreds of MB RAM. Bulk delete watch storms amplify.",
+      "solution": "On delete: incremental `graph.remove_page(path)`; on parser error: single-page reload with controlled fallback; full reload only on explicit corruption signature. Add stderr telemetry metrics.",
+      "files": ["src/daemon/ast_cache.py", "tests/test_file_watcher.py"]
+    },
+    {
+      "id": 21,
+      "title": "load_master_catalog triggers rebuild_alias_index full-scan on every reload",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`load_master_catalog` (`src/graph/master_catalog.py` L316) calls `rebuild_alias_index()` on every reload, walking entire graph and bypassing `cached_build_alias_index` (`generational_cache.py`).",
+      "solution": "Use `cached_build_alias_index(graph_root)`; full alias rebuild only on catalog version bump or empty alias map.",
+      "files": ["src/graph/master_catalog.py", "src/graph/generational_cache.py", "src/graph/alias_index.py"]
+    },
+    {
+      "id": 22,
+      "title": "Daemon saves state JSON 2–3× per Phase-2 file",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`_process_llm_cycle_file` (`maintenance_daemon.py`) invokes `save_daemon_state` multiple times per intermediate checkpoint (L2525, L2562, L2704) under blocking `cross_process_json_flock`. Large vaults: MB-sized `files` ledger → I/O dominates duty cycle.",
+      "solution": "Debounce save (max 1 per N seconds or end of batch); in-memory dirty flag; flush on shutdown or every M files.",
+      "files": ["src/agent/maintenance_daemon.py"]
+    },
+    {
+      "id": 23,
+      "title": "_sync_catalog_after_page_write rewrites entire master_catalog.json per page",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`maintenance_daemon.py` L2276–2299: after each Phase-2 write, load catalog + upsert + full JSON save under flock. At 10k entries: repeated serialization per indexed page.",
+      "solution": "Batch catalog updates in memory; debounced flush (end of cycle or every 30s); align Phase-2 with harvest batch pattern.",
+      "files": ["src/agent/maintenance_daemon.py", "src/graph/master_catalog.py"]
+    },
+    {
+      "id": 24,
+      "title": "insights_engine and graph_analytics scan entire vault with redundant reads",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`insights_engine.py` runs 3 full-graph passes without cached `load_incoming_backlinks`. `graph_analytics.py` duplicates similar scans. `_find_tag_clusters` is O(n²) on tag overlap.",
+      "solution": "Reuse `backlink_index` + AST cache; single aggregated pass; inverted-index clustering instead of O(n²).",
+      "files": ["src/graph/insights_engine.py", "src/graph/graph_analytics.py", "src/graph/backlink_index.py"]
+    },
+    {
+      "id": 25,
+      "title": "hybrid_block_search loads all blocks in RAM with O(n) cosine",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Alto",
+      "problem": "`hybrid_block_search` (`semantic/search.py`) iterates up to `MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES` (default 50k) with per-record cosine. `semantic/store.py` holds entire `block_vectors.json` in RAM.",
+      "solution": "Pre-v2.0: lightweight ANN index (optional dep) or per-page vector shards; reduce default cap; lazy-load vectors by page title.",
+      "files": ["src/semantic/search.py", "src/semantic/store.py"]
+    },
+    {
+      "id": 26,
+      "title": "MmapTextView copies entire file with self._mmap[:]",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Medio",
+      "problem": "`markdown_io.py` L51–58: `decode_utf8()` and `search()` slice entire mmap → heap allocation = file size. For typical Logseq pages (<50KB) mmap provides little benefit.",
+      "solution": "Use `mmap.find()` for search without copy; raise `MATRYCA_MMAP_MIN_BYTES` threshold or skip mmap under 64KB; consider incremental `memoryview` decode.",
+      "files": ["src/graph/markdown_io.py"]
+    },
+    {
+      "id": 27,
+      "title": "Phase-2 reads same page twice per cognitive lint cycle",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Medio",
+      "problem": "`_process_llm_cycle_file` (`maintenance_daemon.py` L2535, L2564): double `read_text` on same page when cognitive lint is active.",
+      "solution": "Cache `text` in local variable within cycle; reuse for secondary lint pass.",
+      "files": ["src/agent/maintenance_daemon.py"]
+    },
+    {
+      "id": 28,
+      "title": "Backlink index invalidates entire cache on single-page patch",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Medio",
+      "problem": "`patch_backlink_index_for_paths` (`backlink_index.py`) invalidates signature and may trigger `_compute_incoming_full` — full vault read ×2 (pages + alias pass).",
+      "solution": "Incremental patch: update only incoming/outgoing for touched pages + involved aliases; full rebuild only on schema version change.",
+      "files": ["src/graph/backlink_index.py"]
+    },
+    {
+      "id": 29,
+      "title": "get_case_insensitive is O(n) over entire catalog",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Medio",
+      "problem": "`master_catalog.py` L156–165: linear scan over `self.pages` per case-insensitive lookup. At 10k titles on hot MCP resolve paths, cumulative cost is significant.",
+      "solution": "Maintain side index `lower_title → canonical_title` updated on upsert/remove.",
+      "files": ["src/graph/master_catalog.py"]
+    },
+    {
+      "id": 30,
+      "title": "harvest_page_into_catalog decodes full mmap after successful regex extract",
+      "category": "Performance",
+      "milestone": "v1.9.11 — Performance & I/O",
+      "impact": "Basso–Medio",
+      "problem": "`bootstrap_harvest.py` L217–236: after mmap regex extraction, calls `view.decode_utf8()` for LLM path even when regex harvest is sufficient.",
+      "solution": "Pass only required snippet to LLM; full decode only when LLM branch is activated.",
+      "files": ["src/graph/bootstrap_harvest.py"]
+    },
+    {
+      "id": 31,
+      "title": "Centralize _env_bool / _env_int (8+ duplicates)",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Medio",
+      "problem": "Identical truthy-env parsing in `plumber_config.py`, `markdown_io.py`, `link_verification.py`, `page_write_lock.py`, `ui_server.py`, `plumber_entry.py`, `llm_client.py`, `secret_redaction.py`. Drift risk on new truthy values.",
+      "solution": "New `src/utils/env_parse.py` with `env_bool`, `env_int`; re-export from `plumber_config`; remove local copies.",
+      "files": ["src/utils/env_parse.py (new)", "src/agent/plumber_config.py", "src/graph/markdown_io.py", "tests/test_plumber_config_env_serialization.py"]
+    },
+    {
+      "id": 32,
+      "title": "Split maintenance_daemon.py (3,181 lines, CC up to 41)",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Alto",
+      "problem": "God-module: `MaintenanceDaemon` ~1,138 lines, 42 methods. `_process_llm_cycle_file` CC=41, `run_cycle` CC=34. Hard to review; slow tests; regression risk before v2.0.",
+      "solution": "Extract without behavior change: `daemon_state.py`, `daemon_llm_cycle.py`, `daemon_semantic_write.py`, `daemon_process_lock.py`.",
+      "files": ["src/agent/maintenance_daemon.py", "src/agent/ (new modules)"]
+    },
+    {
+      "id": 33,
+      "title": "Refactor graph_dispatch.py from mega-dispatch to handler registry",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Medio",
+      "problem": "`dispatch_read` (CC=29), `dispatch_mutate` (CC=36), `dispatch_search` (CC=20), `dispatch_refactor` (CC=20) in `graph_dispatch.py` (1,268 lines). 23 uses of `Any`.",
+      "solution": "Registry `dict[str, Handler]` with TypedDict responses; each handler ≤50 lines, independently testable.",
+      "files": ["src/agent/graph_dispatch.py", "tests/test_graph_dispatch_search.py"]
+    },
+    {
+      "id": 34,
+      "title": "Eliminate 11 type: ignore suppressions in src/",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Basso–Medio",
+      "problem": "Suppressions in `maintenance_daemon.py` (3×), `memory_budget.py` (3×), `bootstrap_harvest.py`, `insights_engine.py`, `marpa_framework.py`, `file_watcher.py`. mypy strict passes but with gaps.",
+      "solution": "`Path()` wrap, `cast()` post-guard, typed JSON deserializer for daemon state, `TYPE_CHECKING` import for Observer.",
+      "files": ["src/agent/maintenance_daemon.py", "src/agent/memory_budget.py", "src/graph/bootstrap_harvest.py", "src/graph/insights_engine.py", "src/agent/plumber_modules/marpa_framework.py", "src/daemon/file_watcher.py"]
+    },
+    {
+      "id": 35,
+      "title": "Split property_line_edit.py high-complexity functions (CC 23–25)",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Medio",
+      "problem": "`edit_block_property_lines` CC=23, `append_page_alias_line` CC=25. Nested alias/property/indent logic — high regression risk on human co-editing.",
+      "solution": "Extract span-detection helpers and alias state machine; golden-file tests per operation.",
+      "files": ["src/graph/property_line_edit.py"]
+    },
+    {
+      "id": 36,
+      "title": "DRY: fcntl fallback, HTTP NoRedirect, format node markdown duplicates",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Basso",
+      "problem": "(1) fcntl try/import in 3 files; (2) `_NoRedirect` duplicated in `preflight.py` and `ui_server.py`; (3) `_format_node_markdown` / `_format_dict_node` parallel in `matryca_hooks.py`; (4) `BootstrapHarvestStatus` Literal duplicated in harvest and daemon.",
+      "solution": "`platform_lock.py`, `http_openai_models.py`, single node-format adapter, import Literal from `bootstrap_harvest.py`.",
+      "files": ["src/graph/json_flock.py", "src/graph/page_write_lock.py", "src/utils/preflight.py", "src/cli/ui_server.py", "src/rag/matryca_hooks.py"]
+    },
+    {
+      "id": 37,
+      "title": "Fragile coupling to private logseq_matryca_parser API",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Medio",
+      "problem": "`graph_dispatch.py` imports `_deepest_line_end` (private) from `logseq_matryca_parser.agent_writer`. Parser upgrades can break Plumber silently.",
+      "solution": "Request public export in parser (semver minor) or reimplement locally via `markdown_blocks.locate_block_by_uuid`.",
+      "files": ["src/agent/graph_dispatch.py", "logseq-matryca-parser dependency"]
+    },
+    {
+      "id": 38,
+      "title": "Expose public API on SessionAliasRegistry (remove SLF001)",
+      "category": "Tech Debt",
+      "milestone": "v1.9.12 — Code Perfection & Tech Debt",
+      "impact": "Basso",
+      "problem": "`graph_tool_helpers.py` and `alias_state.py` mutate `registry._alias_to_uuid` directly (`# noqa: SLF001`).",
+      "solution": "Add `register_alias()`, `persist_aliases()` methods on registry; encapsulate persistence.",
+      "files": ["src/agent/graph_tool_helpers.py", "src/agent/alias_state.py"]
+    }
+  ]
+}
