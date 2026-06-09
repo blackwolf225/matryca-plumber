@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.9] - 2026-06-09
+
+**Security & Sandbox — v1.9.x perfection track (milestone closure)**
+
 ### Security
 
 - **Link verification sandbox** — `_resolve_asset_path` and link-registry `page_relpath` values are validated with `path_sandbox` before any read; traversal refs and tampered registry rows are treated as missing/invalid ([#27](https://github.com/MarcoPorcellato/matryca-plumber/issues/27), [#28](https://github.com/MarcoPorcellato/matryca-plumber/issues/28)).
