@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 import httpx
 from loguru import logger
 
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .global_fence_scanner import compute_page_protected_line_indices
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import (
@@ -34,6 +35,12 @@ from .markdown_blocks import (
 )
 from .mldoc_properties import parse_logseq_property_line
 from .page_write_lock import page_rmw_lock
+from .path_sandbox import (
+    PathTraversalSecurityError,
+    is_resolved_path_within_graph,
+    read_graph_file_text,
+    resolve_graph_relative_key,
+)
 
 LINK_REGISTRY_FILENAME = ".matryca_link_registry.json"
 REGISTRY_VERSION = 1
@@ -147,8 +154,8 @@ def _load_registry_unlocked(path: Path) -> dict[str, LinkRegistryEntry]:
     if not path.is_file():
         return {}
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = read_bounded_json(path)
+    except (BoundedJsonError, OSError) as exc:
         logger.warning("Link registry unreadable: {}", exc)
         return {}
     entries_raw = payload.get("entries", {})
@@ -156,8 +163,16 @@ def _load_registry_unlocked(path: Path) -> dict[str, LinkRegistryEntry]:
         return {}
     out: dict[str, LinkRegistryEntry] = {}
     for key, item in entries_raw.items():
-        if isinstance(item, dict):
-            out[str(key)] = LinkRegistryEntry.from_json(item)
+        if not isinstance(item, dict):
+            continue
+        entry = LinkRegistryEntry.from_json(item)
+        if _safe_page_path(path.parent, entry.page_relpath) is None:
+            logger.warning(
+                "Link registry entry dropped (invalid page_relpath): {}",
+                entry.page_relpath,
+            )
+            continue
+        out[str(key)] = entry
     return out
 
 
@@ -200,13 +215,30 @@ def _persist_checked_registry_updates(
         _save_registry_unlocked(path, fresh)
 
 
+_INVALID_ASSET = ".matryca_invalid_asset"
+
+
+def _safe_page_path(graph_root: Path, page_relpath: str) -> Path | None:
+    """Resolve a registry page key under the graph root, or None when invalid."""
+    if not page_relpath.strip():
+        return None
+    try:
+        return resolve_graph_relative_key(graph_root, page_relpath)
+    except PathTraversalSecurityError:
+        return None
+
+
 def _resolve_asset_path(graph_root: Path, page_path: Path, asset_ref: str) -> Path:
     ref = asset_ref.strip()
     if ref.startswith("/"):
-        return graph_root / ".matryca_invalid_absolute_asset"
+        return graph_root / _INVALID_ASSET
     if ref.startswith("assets/"):
-        return graph_root / ref
-    return (page_path.parent / ref).resolve()
+        candidate = (graph_root / ref).resolve()
+    else:
+        candidate = (page_path.parent / ref).resolve()
+    if not is_resolved_path_within_graph(candidate, graph_root):
+        return graph_root / _INVALID_ASSET
+    return candidate
 
 
 def _block_has_property(
@@ -394,7 +426,9 @@ def _append_verify_error(result: LinkVerificationCycleResult, message: str) -> N
 
 
 def _asset_missing(graph_root: Path, page_relpath: str, asset_ref: str) -> bool:
-    page_path = graph_root / page_relpath
+    page_path = _safe_page_path(graph_root, page_relpath)
+    if page_path is None or not page_path.is_file():
+        return True
     resolved = _resolve_asset_path(graph_root, page_path, asset_ref)
     return not resolved.is_file()
 
@@ -511,8 +545,8 @@ def _mutate_block_hygiene_property(
     remove: bool,
 ) -> bool:
     """Add or remove ``dead-link::`` / ``missing-asset::`` under the block (OCC-safe)."""
-    page_path = graph_root / page_relpath
-    if not page_path.is_file():
+    page_path = _safe_page_path(graph_root, page_relpath)
+    if page_path is None or not page_path.is_file():
         return False
 
     prop_key = property_name if property_name.endswith("::") else f"{property_name}::"
@@ -525,7 +559,7 @@ def _mutate_block_hygiene_property(
     with page_rmw_lock(page_path):
         if read_file_mtime(page_path) != baseline_mtime:
             return False
-        raw = page_path.read_text(encoding="utf-8", errors="replace")
+        raw = read_graph_file_text(page_path, graph_root, errors="replace")
         lines = raw.splitlines(keepends=True)
         if not lines:
             lines = [""]
@@ -667,8 +701,8 @@ def register_page_links_from_path(graph_root: Path, page_path: Path) -> int:
             return _purge_registry_entries_for_page(graph_root, page_relpath)
         return 0
     try:
-        content = page_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        content = read_graph_file_text(page_path, graph_root, errors="replace")
+    except (OSError, PathTraversalSecurityError):
         return 0
     return merge_page_links_into_registry(graph_root, page_path, content)
 

@@ -14,10 +14,12 @@ from typing import Any
 
 from loguru import logger
 
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .alias_index import build_alias_index, iter_alias_source_paths, page_title_from_path
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import atomic_write_bytes
 from .markdown_io import MmapTextView, read_graph_page_text
+from .path_sandbox import read_graph_file_text
 
 CATALOG_FILENAME = "master_catalog.json"
 CATALOG_VERSION = 1
@@ -233,16 +235,15 @@ def _quarantine_corrupt_catalog(catalog_path: Path) -> Path:
 def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
     """Parse catalog JSON from disk; restore backup or quarantine on corruption."""
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        raise
-    try:
-        payload = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+        payload = read_bounded_json(path)
+    except BoundedJsonError as exc:
+        msg = str(exc)
+        if msg.startswith("Cannot stat") or msg.startswith("Cannot read"):
+            raise OSError(msg) from exc
         backup = _catalog_backup_path(path)
         if backup.is_file():
             try:
-                payload = json.loads(backup.read_text(encoding="utf-8", errors="replace"))
+                payload = read_bounded_json(backup)
                 logger.warning(
                     "[METADATA CORRUPTION DETECTED] Restored master catalog from backup at {}",
                     backup,
@@ -251,7 +252,7 @@ def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
                     catalog = MasterCatalog.from_json(root, payload)
                     catalog.persist_allowed = True
                     return catalog
-            except (OSError, json.JSONDecodeError, ValueError):
+            except BoundedJsonError:
                 pass
         try:
             quarantined = _quarantine_corrupt_catalog(path)
@@ -491,7 +492,7 @@ def is_bootstrap_catalog_complete(graph_root: Path) -> bool:
         if title in MATRYCA_GENERATED_INDEX_TITLES:
             continue
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            content = read_graph_file_text(path, root, errors="replace")
             mtime_ns = path.stat().st_mtime_ns
         except OSError:
             return False

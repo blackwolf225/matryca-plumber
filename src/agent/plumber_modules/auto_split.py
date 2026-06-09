@@ -18,6 +18,7 @@ from ...graph.markdown_blocks import (
 )
 from ...graph.page_properties import inject_page_property, stamp_plumber_authored_page
 from ...graph.page_write_lock import page_rmw_lock
+from ...graph.path_sandbox import read_graph_file_text
 from ._shared import ModuleOutcome, is_blank_page_content, sanitize_page_title
 
 _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
@@ -69,7 +70,7 @@ def run_auto_split(
     baseline_mtime = occ_snapshot(page_path)
 
     with page_rmw_lock(page_path):
-        text = page_path.read_text(encoding="utf-8", errors="replace")
+        text = read_graph_file_text(page_path, graph_root, errors="replace")
         if is_blank_page_content(text):
             return outcome
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):

@@ -8,7 +8,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
+from .config_paths import resolve_optional_path_under_allowed_roots
 from .json_repair import max_consecutive_literal_backslash_n
+from .secret_redaction import redact_for_log
 
 
 def _debug_enabled() -> bool:
@@ -23,7 +27,13 @@ def _debug_enabled() -> bool:
 def _debug_log_path() -> Path:
     custom = os.environ.get("MATRYCA_LLM_DEBUG_LOG_PATH", "").strip()
     if custom:
-        return Path(custom)
+        allowed = resolve_optional_path_under_allowed_roots(custom)
+        if allowed is not None:
+            return allowed
+        logger.warning(
+            "MATRYCA_LLM_DEBUG_LOG_PATH is outside allowed roots; "
+            "using default .cursor/debug-llm.jsonl",
+        )
     return Path(__file__).resolve().parents[2] / ".cursor" / "debug-llm.jsonl"
 
 
@@ -59,8 +69,9 @@ def agent_debug_log(
         }
         path = _debug_log_path()
         path.parent.mkdir(parents=True, exist_ok=True)
+        line = redact_for_log(json.dumps(payload, ensure_ascii=False)) + "\n"
         with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            handle.write(line)
     except OSError:
         pass
     # #endregion

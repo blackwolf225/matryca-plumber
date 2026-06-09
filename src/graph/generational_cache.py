@@ -18,6 +18,7 @@ from .alias_index import (
     remove_page_from_alias_index,
 )
 from .page_path import page_title_from_graph_relpath
+from .path_sandbox import read_graph_file_text
 
 _lock = threading.Lock()
 _alias_cache: dict[str, tuple[frozenset[tuple[str, int]], AliasIndex]] = {}
@@ -187,7 +188,7 @@ def patch_generational_caches_for_paths(
                     _remove_bm25_doc(corpus, rel)
                     continue
                 try:
-                    raw = path.read_text(encoding="utf-8", errors="replace")
+                    raw = read_graph_file_text(path, root, errors="replace")
                 except OSError:
                     _remove_bm25_doc(corpus, rel)
                     continue
@@ -269,7 +270,7 @@ def _build_bm25_corpus(root: Path) -> Bm25Corpus:
     doc_lens: list[int] = []
     for path in paths:
         try:
-            raw = path.read_text(encoding="utf-8", errors="replace")
+            raw = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         toks = tokenize(raw)

@@ -13,6 +13,7 @@ from typing import Any
 from loguru import logger
 
 from ..graph.json_flock import cross_process_json_flock
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 
 BLOCK_VECTORS_FILENAME = "block_vectors.json"
 BLOCK_VECTORS_VERSION = 1
@@ -214,10 +215,10 @@ def load_block_vector_store(
         if path.is_file():
             try:
                 with cross_process_json_flock(path):
-                    payload = json.loads(path.read_text(encoding="utf-8"))
+                    payload = read_bounded_json(path)
                 if isinstance(payload, dict):
                     store = BlockVectorStore.from_json(Path(key), payload)
-            except (OSError, json.JSONDecodeError) as exc:
+            except (BoundedJsonError, OSError) as exc:
                 logger.warning("Failed to load block_vectors.json: {}", exc)
         _loaded[key] = store
         _disk_mtimes[key] = disk_mtime

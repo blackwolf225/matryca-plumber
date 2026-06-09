@@ -16,6 +16,9 @@ lint: ## Run ruff to check for linting errors
 typecheck: ## Run mypy for strict type checking
 	uv run mypy src/ tests/
 
+sandbox-read-check: ## Ensure graph reads use read_graph_file_text (v1.9.9 security)
+	uv run python scripts/check_graph_read_sandbox.py
+
 test: ## Run the pytest suite (parallel via pytest-xdist)
 	uv run pytest -n auto -q
 
@@ -34,9 +37,9 @@ perf: ## Run slow performance/memory tests (no coverage gate)
 format-check: ## Verify formatting without modifying files
 	uv run ruff format --check .
 
-check: lint typecheck test ## Run linting, typechecking, and tests (no auto-format)
+check: lint typecheck sandbox-read-check test ## Run linting, typechecking, sandbox read gate, and tests
 
-ci: format-check lint typecheck test ## CI gate: format check + lint + types + tests
+ci: format-check lint typecheck sandbox-read-check test ## CI gate: format check + lint + types + sandbox + tests
 
 clean: ## Remove python caches, virtual envs, and build artifacts
 	rm -rf .venv/

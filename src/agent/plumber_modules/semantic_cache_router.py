@@ -18,6 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, ValidationError
 
 from ...graph.json_flock import cross_process_json_flock
+from ...utils.bounded_json import BoundedJsonError, read_bounded_json
 
 _CACHE_DIRNAME = ".matryca_semantic_cache"
 _DEFAULT_TTL_SECONDS = 86_400
@@ -130,8 +131,8 @@ def cache_get(graph_root: Path, namespace: str, cache_key: str) -> dict[str, Any
         return None
     try:
         with cross_process_json_flock(path):
-            raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+            raw = read_bounded_json(path)
+    except (BoundedJsonError, OSError):
         return None
     if not isinstance(raw, dict):
         return None
@@ -280,8 +281,8 @@ def purge_expired_semantic_cache(graph_root: Path) -> int:
         if path.name in _RESERVED_CACHE_JSON:
             continue
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            raw = read_bounded_json(path)
+        except BoundedJsonError:
             path.unlink(missing_ok=True)
             removed += 1
             continue

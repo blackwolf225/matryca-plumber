@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Literal
 
 from loguru import logger
 
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .alias_index import (
     is_scannable_graph_markdown,
     iter_alias_source_paths,
@@ -19,6 +19,7 @@ from .generational_cache import cached_build_alias_index
 from .link_tag_hop import _WIKILINK
 from .master_catalog import MATRYCA_GENERATED_INDEX_TITLES, load_master_catalog
 from .page_properties import is_plumber_authored_page
+from .path_sandbox import read_graph_file_text
 
 _CACHE_DIRNAME = ".matryca_semantic_cache"
 _DEFAULT_CONTEXT_ACCELERATION = 0.0
@@ -105,7 +106,7 @@ def _count_journal_metrics(graph_root: Path) -> tuple[int, int]:
             continue
         total += 1
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, graph_root, errors="replace")
         except OSError:
             continue
         if is_plumber_authored_page(text):
@@ -131,7 +132,7 @@ def _count_links_scanned(graph_root: Path) -> int:
     total = 0
     for path in iter_alias_source_paths(graph_root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, graph_root, errors="replace")
         except OSError:
             continue
         total += len(_WIKILINK.findall(text))
@@ -162,8 +163,8 @@ def _context_acceleration_rate(graph_root: Path, total_pages: int) -> float:
     valid_entries = 0
     for path in cache_dir.glob("*.json"):
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            raw = read_bounded_json(path)
+        except BoundedJsonError:
             continue
         if not isinstance(raw, dict):
             continue
@@ -185,7 +186,7 @@ def _count_blocks_scanned(graph_root: Path) -> int:
     total = 0
     for path in iter_alias_source_paths(graph_root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, graph_root, errors="replace")
         except OSError:
             continue
         for line in text.splitlines():
@@ -241,7 +242,7 @@ def _count_current_ai_pages(graph_root: Path) -> int:
     total = 0
     for path in iter_scannable_pages_markdown(graph_root):
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, graph_root, errors="replace")
         except OSError:
             continue
         if is_plumber_authored_page(text):

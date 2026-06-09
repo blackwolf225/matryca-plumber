@@ -30,9 +30,13 @@ def warn_if_ephemeral_ui_token() -> None:
     from loguru import logger
 
     logger.warning(
-        "MATRYCA_UI_TOKEN is unset: a random bearer token was generated for this process. "
-        "Any local process on loopback can obtain it via GET /api/auth/session. "
-        "Set MATRYCA_UI_TOKEN to a long random value on shared or multi-user hosts."
+        "SECURITY: MATRYCA_UI_TOKEN is unset — a random bearer token was "
+        "generated for this process. "
+        "Any local process on loopback can obtain it via GET /api/auth/session and call protected "
+        "endpoints (including /api/config with LLM credentials). "
+        "Set MATRYCA_UI_TOKEN to a long random value, or enable "
+        "MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true. "
+        "See SECURITY.md for shared-host guidance."
     )
 
 

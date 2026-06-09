@@ -11,6 +11,7 @@ from ...graph.alias_index import AliasIndex, resolve_canonical_page_title
 from ...graph.generational_cache import patch_generational_caches_for_paths
 from ...graph.markdown_blocks import atomic_write_bytes_if_unchanged, read_file_mtime
 from ...graph.page_write_lock import page_rmw_lock
+from ...graph.path_sandbox import read_graph_file_text
 from ._shared import ModuleOutcome, page_file_exists, resolve_page_path
 
 _BACKLINK_HEADING = "### Matryca Backlink Context"
@@ -226,7 +227,7 @@ def run_backlink_backpropagator(
             summary = _summary_from_correction(correction, source_title)
             modified = False
             with page_rmw_lock(target_path):
-                prev = target_path.read_text(encoding="utf-8", errors="replace")
+                prev = read_graph_file_text(target_path, graph_root, errors="replace")
                 if not prev.strip():
                     continue
                 baseline_mtime = read_file_mtime(target_path)

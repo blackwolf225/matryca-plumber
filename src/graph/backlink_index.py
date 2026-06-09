@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 from typing import Any, TypedDict
 
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .alias_index import (
     iter_alias_source_paths,
     iter_scannable_pages_markdown,
@@ -15,6 +16,7 @@ from .alias_index import (
 )
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import atomic_write_bytes
+from .path_sandbox import read_graph_file_text
 
 _INDEX_VERSION = 1
 _INDEX_FILENAME = "backlink_counts.json"
@@ -60,7 +62,7 @@ def _compute_incoming_full(graph_root: Path) -> dict[str, int]:
         title = page_title_from_path(root, path)
         incoming.setdefault(title, 0)
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         for match in _wikilink.finditer(text):
@@ -81,8 +83,8 @@ def _load_disk(graph_root: Path) -> dict[str, Any] | None:
         return None
     try:
         with cross_process_json_flock(path):
-            raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+            raw = read_bounded_json(path)
+    except (BoundedJsonError, OSError):
         return None
     return raw if isinstance(raw, dict) else None
 

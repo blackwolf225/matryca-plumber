@@ -9,6 +9,7 @@ from pathlib import Path
 from .global_fence_scanner import compute_page_protected_line_indices
 from .markdown_blocks import iter_graph_markdown_files
 from .page_path import filename_to_page_title
+from .path_sandbox import read_graph_file_text
 
 
 def _page_titles_from_graph(graph_root: Path) -> list[str]:
@@ -99,7 +100,7 @@ def resolve_unlinked_mentions(
     for path in iter_graph_markdown_files(root):
         files_scanned += 1
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         rel = path.relative_to(root).as_posix()

@@ -21,7 +21,7 @@ from .link_tag_hop import (
 from .markdown_blocks import atomic_write_bytes
 from .master_catalog import MasterCatalog, load_master_catalog
 from .page_path import filename_to_page_title
-from .path_sandbox import graph_safe_page_path
+from .path_sandbox import graph_safe_page_path, read_graph_file_text
 
 GRAPH_INSIGHTS_TITLE = "Matryca Graph Insights"
 _DENSE_WIKILINK_THRESHOLD = 25
@@ -86,7 +86,7 @@ def _incoming_backlink_counts(graph_root: Path) -> dict[str, int]:
         title = page_title_from_path(root, path)
         incoming.setdefault(title, 0)
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         for match in _WIKILINK.finditer(text):
@@ -105,7 +105,7 @@ def _outgoing_wikilink_counts(graph_root: Path) -> dict[str, int]:
     for path in iter_alias_source_paths(root):
         title = page_title_from_path(root, path)
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             outgoing[title] = 0
             continue
@@ -123,7 +123,7 @@ def _tag_signatures(graph_root: Path) -> dict[str, set[str]]:
     for path in iter_alias_source_paths(graph_root):
         title = page_title_from_path(graph_root, path)
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, graph_root, errors="replace")
         except OSError:
             signatures[title] = set()
             continue
@@ -203,7 +203,7 @@ def compute_topology_metrics(
     for path in iter_alias_source_paths(root):
         title = page_title_from_path(root, path)
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         block_count = _count_bullets(text)

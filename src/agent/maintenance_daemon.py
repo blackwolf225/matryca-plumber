@@ -85,11 +85,13 @@ from ..graph.page_write_lock import (
 from ..graph.path_sandbox import (
     graph_relative_path_key,
     normalize_daemon_file_key,
+    read_graph_file_text,
 )
 from ..graph.semantic_clustering import (
     format_cluster_neighborhood,
     load_or_compute_semantic_clusters,
 )
+from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.logging_config import configure_loguru
 from ..utils.runtime_bootstrap import prepare_matryca_runtime
@@ -742,16 +744,8 @@ def _read_daemon_state_payload(path: Path) -> dict[str, Any] | None:
     """Load JSON payload from disk, retrying once on transient empty or malformed reads."""
     for attempt in range(2):
         try:
-            raw = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return None
-        if not raw.strip():
-            if attempt == 0:
-                continue
-            return None
-        try:
-            payload = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
+            payload = read_bounded_json(path)
+        except BoundedJsonError:
             if attempt == 0:
                 continue
             return None
@@ -1367,7 +1361,7 @@ def append_structural_lint_warning(
                 page_path,
             )
             return False
-        text = page_path.read_text(encoding="utf-8", errors="replace")
+        text = read_graph_file_text(page_path, graph_root, errors="replace")
         if _structural_lint_section_present(text):
             return False
 
@@ -1425,7 +1419,7 @@ def apply_semantic_page_result(
 
     with page_rmw_lock(page_path):
         if page_path.is_file():
-            prev = page_path.read_text(encoding="utf-8", errors="replace")
+            prev = read_graph_file_text(page_path, graph_root, errors="replace")
             if baseline_mtime is None:
                 baseline_mtime = read_file_mtime(page_path)
         else:
@@ -1538,7 +1532,7 @@ def append_semantic_index(
 ) -> None:
     """Append a semantic index section without modifying existing user content."""
     if page_path.is_file():
-        prev = page_path.read_text(encoding="utf-8", errors="replace")
+        prev = read_graph_file_text(page_path, graph_root, errors="replace")
         if _semantic_index_section_present(prev):
             return
     apply_semantic_page_result(
@@ -1725,9 +1719,9 @@ def _mtime_matches(stored: float, current: float) -> bool:
     return math.isclose(stored, current, rel_tol=0.0, abs_tol=1e-6)
 
 
-def _read_page_content(path: Path) -> str:
+def _read_page_content(path: Path, graph_root: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="replace")
+        return read_graph_file_text(path, graph_root, errors="replace")
     except OSError:
         return ""
 
@@ -1752,7 +1746,7 @@ def page_needs_phase2_cognitive(
     if title in MATRYCA_GENERATED_PAGE_TITLES:
         return False
 
-    text = content if content is not None else _read_page_content(path)
+    text = content if content is not None else _read_page_content(path, graph_root)
     if _page_is_terminal_skip(text):
         return False
 
@@ -2276,7 +2270,7 @@ class MaintenanceDaemon:
     def _sync_catalog_after_page_write(self, path: Path, title: str) -> None:
         """Upsert catalog row from on-disk semantic index immediately after a page write."""
         try:
-            new_text = path.read_text(encoding="utf-8", errors="replace")
+            new_text = read_graph_file_text(path, self.graph_root, errors="replace")
             mtime = int(path.stat().st_mtime)
         except OSError as exc:
             self.token_logger.log_structural_lint_warning(
@@ -2463,7 +2457,7 @@ class MaintenanceDaemon:
 
         state.last_file = sanitize_for_console(key)
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            content = read_graph_file_text(path, self.graph_root, errors="replace")
         except OSError:
             return False
 
@@ -2532,7 +2526,7 @@ class MaintenanceDaemon:
         try:
             baseline_mtime = occ_snapshot(path) if path.is_file() else None
             if path.is_file():
-                content = path.read_text(encoding="utf-8", errors="replace")
+                content = read_graph_file_text(path, self.graph_root, errors="replace")
                 if link_verify_enabled():
                     with contextlib.suppress(OSError):
                         merge_page_links_into_registry(self.graph_root, path, content)
@@ -2561,7 +2555,7 @@ class MaintenanceDaemon:
                 )
                 self._save_cycle_checkpoint(state, path=path)
                 if path.is_file():
-                    content = path.read_text(encoding="utf-8", errors="replace")
+                    content = read_graph_file_text(path, self.graph_root, errors="replace")
                     refreshed_mtime = occ_snapshot(path)
                     if refreshed_mtime is not None:
                         baseline_mtime = refreshed_mtime

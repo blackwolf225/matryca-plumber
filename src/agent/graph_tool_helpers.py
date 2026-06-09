@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from ..graph.markdown_blocks import locate_block_by_uuid
-from ..graph.path_sandbox import graph_safe_page_path
+from ..graph.path_sandbox import graph_safe_page_path, read_graph_file_text
 from ..utils.json_repair import loads_repaired_json
 from ..utils.regex_policy import validate_regex_pattern
 from .page_input_normalizer import (
@@ -222,7 +222,7 @@ def read_subtree_markdown(graph_path: str, query: str) -> str:
         raise ValueError(msg)
 
     path = graph_safe_page_path(graph_path, page_ref)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_graph_file_text(path, graph_path, errors="replace")
     lines = text.splitlines(keepends=True)
     stripped = [ln.rstrip("\n") for ln in lines]
     loc = locate_block_by_uuid(stripped, block_uuid)
@@ -288,7 +288,7 @@ def read_block_ast_markdown(graph_path: str, query: str) -> str:
         raise ValueError(msg)
     page_ref, block_uuid = parts[0], parts[1]
     path = graph_safe_page_path(graph_path, page_ref)
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = read_graph_file_text(path, graph_path, errors="replace")
     lines = text.splitlines(keepends=True)
     stripped = [ln.rstrip("\n") for ln in lines]
     loc = locate_block_by_uuid(stripped, block_uuid)
@@ -327,7 +327,7 @@ def _scan_pages_for_regex(
         if not path.is_file() or not is_scannable_graph_markdown(path, root):
             continue
         try:
-            body = path.read_text(encoding="utf-8", errors="replace")
+            body = read_graph_file_text(path, root, errors="replace")
         except OSError:
             continue
         scanned_bytes += len(body.encode("utf-8", errors="replace"))

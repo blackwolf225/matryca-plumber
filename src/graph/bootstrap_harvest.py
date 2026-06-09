@@ -145,7 +145,7 @@ def _append_minimal_semantic_index(
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
             return
         if page_path.is_file():
-            prev = page_path.read_text(encoding="utf-8", errors="replace")
+            prev = read_graph_page_text(page_path, graph_root, errors="replace")
         else:
             prev = ""
             baseline_mtime = None
