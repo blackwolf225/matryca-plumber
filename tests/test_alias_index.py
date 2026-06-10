@@ -98,3 +98,15 @@ def test_is_scannable_graph_markdown_rejects_excluded_dirs(tmp_path: Path) -> No
 
     assert is_scannable_graph_markdown(live, tmp_path) is True
     assert is_scannable_graph_markdown(ghost, tmp_path) is False
+
+
+def test_build_alias_index_respects_wikilink_commas(tmp_path: Path) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    (pages / "Acme.md").write_text(
+        "type:: entity\nalias:: [[Acme, Inc]], Acme Corp\n",
+        encoding="utf-8",
+    )
+    idx = build_alias_index(tmp_path)
+    assert idx.resolve("Acme, Inc").canonical_page_title == "Acme"
+    assert idx.resolve("Acme Corp").canonical_page_title == "Acme"

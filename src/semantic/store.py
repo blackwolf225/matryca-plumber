@@ -218,7 +218,7 @@ def load_block_vector_store(
                     payload = read_bounded_json(path)
                 if isinstance(payload, dict):
                     store = BlockVectorStore.from_json(Path(key), payload)
-            except (BoundedJsonError, OSError) as exc:
+            except (BoundedJsonError, OSError, ValueError, TypeError) as exc:
                 logger.warning("Failed to load block_vectors.json: {}", exc)
         _loaded[key] = store
         _disk_mtimes[key] = disk_mtime

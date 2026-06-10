@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .mldoc_properties import split_logseq_property_list_values
 from .page_path import page_title_from_path as _page_title_from_path
 from .path_sandbox import (
     PathTraversalSecurityError,
@@ -31,13 +32,8 @@ def normalize_concept_key(value: str) -> str:
 
 
 def _split_alias_segments(raw: str) -> list[str]:
-    """Split ``alias::`` payload on commas (Logseq's common multi-alias form)."""
-    out: list[str] = []
-    for chunk in raw.split(","):
-        c = chunk.strip()
-        if c:
-            out.append(c)
-    return out
+    """Split ``alias::`` payload on commas, respecting quotes and ``[[wikilinks]]``."""
+    return split_logseq_property_list_values(raw)
 
 
 def _iter_markdown_files(graph_root: Path) -> list[Path]:

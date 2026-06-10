@@ -454,3 +454,41 @@ def test_index_page_blocks_skips_without_flag_enabled(
         embedding_client=MockEmbeddingClient(),
     )
     assert count == 0
+
+
+def test_load_block_vector_store_self_heals_corrupt_vectors(tmp_path: Path) -> None:
+    import json
+
+    clear_block_vector_store_cache()
+    cache_dir = tmp_path / ".matryca_semantic_cache"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "block_vectors.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "blocks": {
+                    "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee": {
+                        "page_title": "P",
+                        "block_text": "x",
+                        "applicability_text": "",
+                        "vec_content": None,
+                        "vec_applicability": [],
+                        "updated_at": "",
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    store = load_block_vector_store(tmp_path, force_reload=True)
+    assert store.blocks == {}
+
+
+def test_block_text_dedupes_identical_content_and_clean_text() -> None:
+    from types import SimpleNamespace
+    from typing import Any
+
+    from src.semantic.indexer import _block_text
+
+    node: Any = SimpleNamespace(content="Deploy checklist", clean_text="Deploy checklist")
+    assert _block_text(node) == "Deploy checklist"

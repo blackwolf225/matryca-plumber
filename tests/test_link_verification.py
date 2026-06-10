@@ -273,3 +273,23 @@ def test_flag_block_rejects_tampered_page_relpath(graph_with_page: tuple[Path, P
         BLOCK,
         "dead-link",
     )
+
+
+def test_extract_links_from_page_handles_star_bullet(tmp_path: Path) -> None:
+    root = tmp_path / "graph"
+    pages = root / "pages"
+    pages.mkdir(parents=True)
+    page = pages / "star.md"
+    page.write_text(
+        "\n".join(
+            [
+                "* Read https://example.com/star",
+                "  id:: cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "",
+            ],
+        ),
+        encoding="utf-8",
+    )
+    content = page.read_text(encoding="utf-8")
+    entries = extract_links_from_page(root, page, content)
+    assert any(e.kind == "url" and e.target == "https://example.com/star" for e in entries)

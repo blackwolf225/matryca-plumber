@@ -24,8 +24,12 @@ def _block_uuid(node: LogseqNode) -> str | None:
 
 
 def _block_text(node: LogseqNode) -> str:
-    parts = [node.content or "", node.clean_text or ""]
-    return " ".join(part.strip() for part in parts if part.strip()).strip()
+    parts: list[str] = []
+    for raw in (node.content or "", node.clean_text or ""):
+        text = raw.strip()
+        if text and text not in parts:
+            parts.append(text)
+    return " ".join(parts).strip()
 
 
 def _prune_page_vectors(graph_root: Path, page_title: str, keep_uuids: set[str]) -> int:

@@ -349,7 +349,7 @@ async def run_cli(args: argparse.Namespace) -> int:
         if plumber_action == "stop":
             stop_out = stop_daemon(graph_root)
             _emit_result(stop_out, as_json=as_json, command=command)
-            return 0
+            return 0 if stop_out.get("ok") is not False else 1
         if plumber_action == "audit":
             audit_out = run_plumber_audit(graph_root)
             _emit_result(audit_out, as_json=as_json, command=command)

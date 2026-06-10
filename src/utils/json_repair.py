@@ -110,13 +110,35 @@ def _find_balanced_array_end(text: str, start: int) -> int | None:
     return _scan_balanced_end(text, start, open_char="[", close_char="]")
 
 
+def _last_structural_close(text: str, start: int, *, close_char: str) -> int:
+    """Index of the last ``close_char`` outside any JSON string literal, or ``-1``."""
+    in_string = False
+    escape = False
+    last = -1
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == close_char:
+            last = index
+    return last
+
+
 def _recover_unbalanced_json_slice(text: str, *, open_char: str, close_char: str) -> str:
     """Salvage prefix when the model never closed braces (truncation or tail loop)."""
     collapsed = collapse_all_degenerate_llm_runs(text)
     start = collapsed.find(open_char)
     if start == -1:
         return collapsed
-    close_idx = collapsed.rfind(close_char)
+    close_idx = _last_structural_close(collapsed, start, close_char=close_char)
     if close_idx > start:
         return collapsed[start : close_idx + 1]
     if len(collapsed) - start > _FALLBACK_UNBALANCED_JSON_CHARS:
