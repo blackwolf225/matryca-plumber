@@ -370,7 +370,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     ui_only = args.command == "plumber" and args.plumber_action in {"status", "ui"}
-    if not ui_only:
+    skip_eager_bootstrap = args.command == "plumber" and args.plumber_action == "start"
+    if not ui_only and not skip_eager_bootstrap:
         try_prepare_matryca_runtime_from_env()
     if ui_only:
         try:
