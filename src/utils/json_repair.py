@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 from loguru import logger
@@ -156,13 +157,21 @@ def extract_json_array(raw: str) -> str:
 def extract_json_payload_regex(raw: str) -> str:
     """Extract the first JSON value using balanced delimiters (never greedy ``.*``)."""
     text = strip_code_fence(raw)
-    if "{" in text:
-        balanced = extract_json_object(text)
-        if balanced.startswith("{"):
-            return balanced
-    if "[" in text:
-        balanced = extract_json_array(text)
-        if balanced.startswith("["):
+    brace = text.find("{")
+    bracket = text.find("[")
+    # Try whichever delimiter appears first so array roots (e.g. ``[{...}, ...]``)
+    # are not collapsed to their leading object.
+    prefer_array = bracket != -1 and (brace == -1 or bracket < brace)
+    attempts: tuple[tuple[Callable[[str], str], str, int], ...] = (
+        ((extract_json_array, "[", bracket), (extract_json_object, "{", brace))
+        if prefer_array
+        else ((extract_json_object, "{", brace), (extract_json_array, "[", bracket))
+    )
+    for extractor, opener, pos in attempts:
+        if pos == -1:
+            continue
+        balanced = extractor(text)
+        if balanced.startswith(opener):
             return balanced
     return text
 
@@ -268,11 +277,32 @@ def strip_trailing_json_garbage(text: str) -> str:
 
 
 def balance_json_brackets(text: str) -> str:
-    """Append missing closing brackets/braces for truncated JSON payloads."""
-    open_braces = text.count("{") - text.count("}")
-    open_brackets = text.count("[") - text.count("]")
-    suffix = "]" * max(open_brackets, 0) + "}" * max(open_braces, 0)
-    return text + suffix
+    """Append missing closing brackets/braces for truncated JSON payloads.
+
+    Closers are emitted in reverse nesting order (tracked via a string-aware
+    stack) so interleaved structures like ``[{...`` are closed as ``}]``.
+    """
+    openers = {"}": "{", "]": "["}
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for char in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append(char)
+        elif char in openers and stack and stack[-1] == openers[char]:
+            stack.pop()
+    closers = "".join("}" if opener == "{" else "]" for opener in reversed(stack))
+    return text + closers
 
 
 def repair_llm_json(raw: str) -> str:
