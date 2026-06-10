@@ -158,3 +158,11 @@ def test_prepare_matryca_runtime_graph_and_logs(
     assert (graph / ".matryca_semantic_cache").is_dir()
     assert (graph / "templates").is_dir()
     assert (graph / "matryca-wiki.yml").is_file()
+
+
+def test_ensure_graph_runtime_directories_rejects_traversal(tmp_path: Path) -> None:
+    graph = tmp_path / "vault"
+    graph.mkdir()
+    ensure_graph_runtime_directories(graph, templates_subdir="../evil")
+    assert not (tmp_path / "evil").exists()
+    assert (graph / "templates").is_dir()

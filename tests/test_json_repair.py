@@ -168,3 +168,9 @@ def test_sanitize_llm_completion_text_trims_tail_and_parses_index() -> None:
     result = parse_llm_json(sanitized, SemanticIndexResult)
     assert result.summary == "Indice pagina."
     assert result.suggested_tags == ["#demo"]
+
+
+def test_recover_unbalanced_preserves_keys_after_brace_in_string() -> None:
+    raw = '{"note": "use } here", "score": 1'
+    parsed = loads_repaired_json(raw)
+    assert parsed == {"note": "use } here", "score": 1}

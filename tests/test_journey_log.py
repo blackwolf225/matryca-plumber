@@ -60,3 +60,12 @@ def test_journey_day_ledger_json_roundtrip() -> None:
     )
     restored = JourneyDayLedger.from_json(ledger.to_json())
     assert restored == ledger
+
+
+def test_journey_day_ledger_from_json_tolerates_corrupt_fields() -> None:
+    ledger = JourneyDayLedger.from_json(
+        {"day": "2026-06-10", "cycles": "many", "links_checked": None}
+    )
+    assert ledger.day == "2026-06-10"
+    assert ledger.cycles == 0
+    assert ledger.links_checked == 0

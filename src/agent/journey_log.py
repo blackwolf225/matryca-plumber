@@ -16,6 +16,14 @@ def journey_log_enabled() -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
+def _coerce_int(value: object, default: int = 0) -> int:
+    """Best-effort int coercion for persisted ledger fields (corrupt-state resilient)."""
+    try:
+        return int(value)  # type: ignore[call-overload, no-any-return]
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class JourneyCycleStats:
     """Aggregated metrics for one maintenance duty cycle."""
@@ -102,12 +110,12 @@ class JourneyDayLedger:
             return cls()
         return cls(
             day=str(payload.get("day", "")),
-            cycles=int(payload.get("cycles", 0)),
-            llm_files_processed=int(payload.get("llm_files_processed", 0)),
-            links_checked=int(payload.get("links_checked", 0)),
-            dead_links_flagged=int(payload.get("dead_links_flagged", 0)),
-            missing_assets_flagged=int(payload.get("missing_assets_flagged", 0)),
-            fast_track_files=int(payload.get("fast_track_files", 0)),
+            cycles=_coerce_int(payload.get("cycles", 0)),
+            llm_files_processed=_coerce_int(payload.get("llm_files_processed", 0)),
+            links_checked=_coerce_int(payload.get("links_checked", 0)),
+            dead_links_flagged=_coerce_int(payload.get("dead_links_flagged", 0)),
+            missing_assets_flagged=_coerce_int(payload.get("missing_assets_flagged", 0)),
+            fast_track_files=_coerce_int(payload.get("fast_track_files", 0)),
         )
 
 

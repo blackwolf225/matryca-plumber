@@ -69,8 +69,15 @@ def ensure_graph_runtime_directories(
     root = graph_root.expanduser().resolve(strict=False)
     (root / _SEMANTIC_CACHE_DIR).mkdir(parents=True, exist_ok=True)
     subdir = (templates_subdir or "templates").strip().strip("/\\")
-    if subdir:
-        (root / subdir).mkdir(parents=True, exist_ok=True)
+    parts = [segment for segment in re.split(r"[/\\]+", subdir) if segment]
+    if any(segment == ".." for segment in parts):
+        logger.warning(
+            "Ignoring unsafe templates_subdir {!r} (path traversal); using 'templates'",
+            templates_subdir,
+        )
+        parts = ["templates"]
+    if parts:
+        root.joinpath(*parts).mkdir(parents=True, exist_ok=True)
 
 
 def _patch_memory_path_in_wiki_yaml(text: str, l1_dir: Path) -> str:

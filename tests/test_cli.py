@@ -275,3 +275,16 @@ def test_subprocess_missing_subcommand_exits_nonzero(tmp_path: Path) -> None:
     )
     assert proc.returncode != 0
     assert "required" in proc.stderr.lower() or "usage" in proc.stderr.lower()
+
+
+@pytest.mark.asyncio
+async def test_plumber_stop_returns_nonzero_when_not_ok(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.cli as cli
+
+    monkeypatch.setattr(cli, "resolve_graph_root", lambda: Path("/tmp"))
+    monkeypatch.setattr(cli, "stop_daemon", lambda _root: {"ok": False, "reason": "no daemon"})
+    args = Namespace(command="plumber", plumber_action="stop", json=True)
+    code = await run_cli(args)
+    assert code == 1

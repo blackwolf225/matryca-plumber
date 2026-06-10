@@ -107,3 +107,17 @@ def test_clear_semantic_cache_preserves_block_vectors(graph_root: Path) -> None:
 
     assert vectors.is_file()
     assert not ephemeral.is_file()
+
+
+def test_semantic_cache_key_disambiguates_same_basename(tmp_path: Path) -> None:
+    import os
+
+    a = tmp_path / "ns1" / "Foo.md"
+    a.parent.mkdir(parents=True)
+    a.write_text("- x\n", encoding="utf-8")
+    b = tmp_path / "ns2" / "Foo.md"
+    b.parent.mkdir(parents=True)
+    b.write_text("- x\n", encoding="utf-8")
+    os.utime(a, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(b, ns=(1_000_000_000, 1_000_000_000))
+    assert semantic_cache_key(a, "op") != semantic_cache_key(b, "op")

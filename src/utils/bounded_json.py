@@ -35,17 +35,18 @@ def read_bounded_json(
     cap = max_bytes if max_bytes is not None else json_max_bytes()
     file_path = Path(path)
     try:
-        size = file_path.stat().st_size
-    except OSError as exc:
-        raise BoundedJsonError(f"Cannot stat JSON checkpoint: {file_path}") from exc
-    if size > cap:
-        raise BoundedJsonError(
-            f"JSON checkpoint exceeds {cap} bytes: {file_path} ({size} bytes)",
-        )
-    try:
-        text = file_path.read_text(encoding=encoding)
+        with file_path.open("rb") as handle:
+            data = handle.read(cap + 1)
     except OSError as exc:
         raise BoundedJsonError(f"Cannot read JSON checkpoint: {file_path}") from exc
+    if len(data) > cap:
+        raise BoundedJsonError(
+            f"JSON checkpoint exceeds {cap} bytes: {file_path}",
+        )
+    try:
+        text = data.decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise BoundedJsonError(f"Cannot decode JSON checkpoint: {file_path}") from exc
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:

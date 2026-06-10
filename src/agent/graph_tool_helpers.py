@@ -97,6 +97,8 @@ def bounded_int_from_options(
     if key not in opts or opts[key] is None:
         return max(minimum, min(default, maximum))
     raw = opts[key]
+    if isinstance(raw, bool):
+        return f"Invalid integer for `{key}`: {raw!r}"
     try:
         value = int(raw)
     except (TypeError, ValueError):
@@ -238,22 +240,22 @@ def read_subtree_markdown(graph_path: str, query: str) -> str:
         filtered: list[str] = []
         include = False
         bullet_match = re.compile(r"^(\s*)-\s+(.*)$")
-        root_indent: int | None = None
+        heading_indent: int | None = None
         for line in excerpt_lines:
             stripped_line = line.rstrip("\n")
             match = bullet_match.match(stripped_line)
             if match:
                 indent = len(match.group(1))
                 text_part = match.group(2).strip()
-                if root_indent is None:
-                    root_indent = indent
-                if text_part.lstrip("#").strip().lower() == heading_needle:
-                    include = True
-                    filtered = [line]
+                if not include:
+                    if text_part.lstrip("#").strip().lower() == heading_needle:
+                        include = True
+                        heading_indent = indent
+                        filtered = [line]
                     continue
-                if include and indent > (root_indent or 0):
+                if heading_indent is not None and indent > heading_indent:
                     filtered.append(line)
-                elif include and indent <= (root_indent or 0):
+                else:
                     break
             elif include:
                 filtered.append(line)

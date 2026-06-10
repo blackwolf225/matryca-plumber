@@ -154,14 +154,14 @@ def test_load_master_catalog_oserror_raises_without_cache(
     path.write_text('{"version": 1, "pages": {}}', encoding="utf-8")
     catalog_key = path.resolve()
 
-    real_read_text = Path.read_text
+    real_open = Path.open
 
-    def _patched_read_text(self: Path, *args: object, **kwargs: object) -> str:
+    def _patched_open(self: Path, *args: object, **kwargs: object) -> object:
         if self.resolve() == catalog_key:
             raise OSError("simulated read failure")
-        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_open(self, *args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(Path, "read_text", _patched_read_text)
+    monkeypatch.setattr(Path, "open", _patched_open)
     with pytest.raises(CatalogLoadError):
         load_master_catalog(graph_root, force_reload=True)
 
@@ -181,14 +181,14 @@ def test_load_master_catalog_oserror_returns_cached_instance(
 
     path = MasterCatalog.catalog_path(graph_root)
     catalog_key = path.resolve()
-    real_read_text = Path.read_text
+    real_open = Path.open
 
-    def _patched_read_text(self: Path, *args: object, **kwargs: object) -> str:
+    def _patched_open(self: Path, *args: object, **kwargs: object) -> object:
         if self.resolve() == catalog_key:
             raise OSError("simulated read failure")
-        return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_open(self, *args, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(Path, "read_text", _patched_read_text)
+    monkeypatch.setattr(Path, "open", _patched_open)
     reloaded = load_master_catalog(graph_root, force_reload=True)
     assert reloaded.pages["Cached"].summary == "cached"
 
