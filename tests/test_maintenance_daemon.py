@@ -45,6 +45,7 @@ from src.graph.bootstrap_harvest import run_bootstrap_harvest
 from src.graph.master_catalog import CatalogEntry, load_master_catalog, master_index_page_path
 from src.graph.page_write_lock import clear_page_write_locks, page_rmw_lock
 from src.graph.path_sandbox import graph_relative_path_key
+from src.graph.semantic_clustering import CLUSTER_IDS_WITHOUT_FOCUS, JOURNAL_CLUSTER_ID
 from src.utils.token_logger import TokenLogger, format_activity_summary, resolve_plumber_log_path
 
 BLOCK_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -1858,6 +1859,25 @@ def test_load_daemon_state_recovers_from_bak_when_primary_corrupt(graph_root: Pa
     assert loaded.session_completion_tokens == 7
     restored = json.loads(state_path(graph_root).read_text(encoding="utf-8"))
     assert restored["session_prompt_tokens"] == 42
+
+
+def test_group_pending_by_cluster_isolates_journals(graph_root: Path) -> None:
+    journal_dir = graph_root / "journals"
+    journal_dir.mkdir(parents=True)
+    journal_file = journal_dir / "2026_06_10.md"
+    journal_file.write_text("- daily note\n", encoding="utf-8")
+    page_path = _write_page(graph_root, "TopicA", "- topic page\n")
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    groups = daemon._group_pending_by_cluster([page_path, journal_file])
+    journal_group = next((paths for gid, paths in groups if gid == JOURNAL_CLUSTER_ID), None)
+    assert journal_group is not None
+    assert journal_file in journal_group
+    non_journal_paths = [
+        path for gid, paths in groups if gid != JOURNAL_CLUSTER_ID for path in paths
+    ]
+    assert journal_file not in non_journal_paths
+    assert JOURNAL_CLUSTER_ID in CLUSTER_IDS_WITHOUT_FOCUS
 
 
 def test_completion_messages_preserves_cluster_history_without_compression() -> None:

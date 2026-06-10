@@ -137,6 +137,44 @@ def test_empty_catalog_returns_empty_clusters() -> None:
     assert compute_semantic_clusters({"pages": {}}) == {}
 
 
+def test_compute_semantic_clusters_excludes_journal_titles(tmp_path: Path) -> None:
+    clear_master_catalog_cache(tmp_path)
+    pages_dir = tmp_path / "pages"
+    journals_dir = tmp_path / "journals"
+    pages_dir.mkdir(parents=True)
+    journals_dir.mkdir(parents=True)
+    (pages_dir / "Redis.md").write_text("- redis note\n", encoding="utf-8")
+    (pages_dir / "Caching.md").write_text("- cache note\n", encoding="utf-8")
+    (journals_dir / "2026_06_05.md").write_text("- daily\n", encoding="utf-8")
+    (journals_dir / "2026_06_06.md").write_text("- daily\n", encoding="utf-8")
+
+    catalog: dict[str, object] = {
+        "pages": {
+            "Redis": {
+                "summary": "Redis architecture overview",
+                "tags": ["redis", "cache"],
+            },
+            "Caching": {
+                "summary": "Redis cache eviction policy",
+                "tags": ["redis", "cache"],
+            },
+            "2026_06_05": {
+                "summary": "Daily journal for June 5",
+                "tags": ["journal"],
+            },
+            "2026_06_06": {
+                "summary": "Daily journal for June 6",
+                "tags": ["journal"],
+            },
+        },
+    }
+    clusters = compute_semantic_clusters(catalog, graph_root=tmp_path, min_cluster_size=2)
+    clustered_titles = {title for titles in clusters.values() for title in titles}
+    assert "2026_06_05" not in clustered_titles
+    assert "2026_06_06" not in clustered_titles
+    assert clustered_titles <= {"Redis", "Caching"}
+
+
 def test_tokenize_filters_structural_stopwords() -> None:
     tokens = _tokenize("Questa pagina Logseq descrive Redis caching")
     assert "questa" not in tokens

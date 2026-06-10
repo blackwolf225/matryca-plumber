@@ -88,6 +88,8 @@ from ..graph.path_sandbox import (
     read_graph_file_text,
 )
 from ..graph.semantic_clustering import (
+    CLUSTER_IDS_WITHOUT_FOCUS,
+    JOURNAL_CLUSTER_ID,
     format_cluster_neighborhood,
     load_or_compute_semantic_clusters,
 )
@@ -134,6 +136,7 @@ from .plumber_llm import (
     GraphInsightsLLMResult,
 )
 from .plumber_modules import CognitiveLintOutcome, run_cognitive_lint_pipeline
+from .plumber_modules._shared import is_journal_page_path
 from .plumber_modules.backlink_backpropagator import BacklinkCorrection, run_backlink_backpropagator
 from .plumber_modules.semantic_cache_router import (
     cache_get,
@@ -2319,9 +2322,13 @@ class MaintenanceDaemon:
             for title in titles:
                 title_to_cluster[title] = cluster_id
 
+        journal_paths: list[Path] = []
         by_cluster: dict[str, list[Path]] = {}
         unclustered: list[Path] = []
         for path in pending:
+            if is_journal_page_path(self.graph_root, path):
+                journal_paths.append(path)
+                continue
             title = _page_title_from_path(self.graph_root, path)
             mapped_cluster = title_to_cluster.get(title)
             if mapped_cluster is None:
@@ -2334,6 +2341,8 @@ class MaintenanceDaemon:
         ]
         if unclustered:
             groups.append(("unclustered", unclustered))
+        if journal_paths:
+            groups.append((JOURNAL_CLUSTER_ID, journal_paths))
         return groups
 
     def _begin_cluster_context(self, cluster_id: str, cluster_paths: list[Path]) -> None:
@@ -2903,8 +2912,18 @@ class MaintenanceDaemon:
                 break
             if llm_turns_this_cycle >= cycle_budget:
                 break
-            if cluster_cycle:
+            uses_cluster_focus = (
+                cluster_cycle and cluster_id not in CLUSTER_IDS_WITHOUT_FOCUS
+            )
+            if uses_cluster_focus:
                 self._begin_cluster_context(cluster_id, cluster_paths)
+                state.current_cluster_files_total = len(cluster_paths)
+                state.current_cluster_files_done = 0
+                state.phase2_cluster_file_in_flight = False
+                self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
+                self._save_cycle_checkpoint(state)
+            elif cluster_cycle:
+                state.current_cluster = cluster_id
                 state.current_cluster_files_total = len(cluster_paths)
                 state.current_cluster_files_done = 0
                 state.phase2_cluster_file_in_flight = False
@@ -2925,8 +2944,9 @@ class MaintenanceDaemon:
                     path,
                     state,
                     lint_config,
-                    reset_history_after=not cluster_cycle,
-                    cluster_id=cluster_id if cluster_cycle else None,
+                    reset_history_after=not cluster_cycle
+                    or cluster_id in CLUSTER_IDS_WITHOUT_FOCUS,
+                    cluster_id=cluster_id if uses_cluster_focus else None,
                 )
                 if cluster_cycle:
                     state.current_cluster_files_done += 1

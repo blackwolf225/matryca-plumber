@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Phase 2 semantic clustering** — Daily journal pages under `journals/` are excluded from Louvain neighborhood clustering and from `[CLUSTER FOCUS]` LLM context injection; they process in a flat `[journals]` group instead of bloating `[unclustered]` (`src/graph/semantic_clustering.py`, `src/agent/maintenance_daemon.py`).
+
 ## [1.9.13] - 2026-06-10
 
 **Enterprise Resilience Update — 12 architectural hardening fixes**

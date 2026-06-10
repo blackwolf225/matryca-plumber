@@ -23,6 +23,8 @@ from .markdown_blocks import atomic_write_bytes
 
 CLUSTERS_FILENAME = "semantic_clusters.json"
 CLUSTERS_VERSION = 1
+JOURNAL_CLUSTER_ID = "journals"
+CLUSTER_IDS_WITHOUT_FOCUS = frozenset({JOURNAL_CLUSTER_ID})
 MIN_CLUSTER_SIZE = 5
 DEFAULT_MAX_CLUSTER_SIZE = 35
 LOUVAIN_MAX_ITERATIONS = 20
@@ -433,9 +435,27 @@ def _communities_to_clusters(
     return [sorted(members) for members in grouped.values()]
 
 
+def _clusterable_catalog_titles(
+    catalog_data: dict[str, Any],
+    *,
+    graph_root: Path | None,
+) -> list[str]:
+    """Return catalog titles eligible for Louvain clustering (excludes daily journals)."""
+    raw_pages = catalog_data.get("pages", {})
+    if not isinstance(raw_pages, dict) or not raw_pages:
+        return []
+    titles = sorted(str(title) for title in raw_pages)
+    if graph_root is None:
+        return titles
+    from .alias_index import is_journal_page_title
+
+    return [title for title in titles if not is_journal_page_title(graph_root, title)]
+
+
 def compute_semantic_clusters(
     catalog_data: dict[str, Any],
     *,
+    graph_root: Path | None = None,
     max_cluster_size: int = DEFAULT_MAX_CLUSTER_SIZE,
     min_cluster_size: int = MIN_CLUSTER_SIZE,
 ) -> dict[str, list[str]]:
@@ -443,13 +463,16 @@ def compute_semantic_clusters(
 
     Reads one-sentence summaries and tags from ``catalog_data["pages"]``,
     builds a TF-IDF + tag Jaccard similarity graph, runs Louvain community
-    detection, then splits/merges to enforce size bounds.
+    detection, then splits/merges to enforce size bounds. Daily journal pages
+    under ``journals/`` are excluded when *graph_root* is provided.
     """
     raw_pages = catalog_data.get("pages", {})
     if not isinstance(raw_pages, dict) or not raw_pages:
         return {}
 
-    titles = sorted(str(title) for title in raw_pages)
+    titles = _clusterable_catalog_titles(catalog_data, graph_root=graph_root)
+    if not titles:
+        return {}
     summaries: dict[str, str] = {}
     tag_sets: dict[str, set[str]] = {}
     block_keys: dict[str, str] = {}
@@ -592,6 +615,7 @@ def load_or_compute_semantic_clusters(
 
     clusters = compute_semantic_clusters(
         catalog_json,
+        graph_root=graph_root,
         max_cluster_size=max_cluster_size,
     )
     save_semantic_clusters(
@@ -690,7 +714,9 @@ def format_cluster_neighborhood(
 
 __all__ = [
     "CLUSTERS_FILENAME",
+    "CLUSTER_IDS_WITHOUT_FOCUS",
     "DEFAULT_MAX_CLUSTER_SIZE",
+    "JOURNAL_CLUSTER_ID",
     "LOUVAIN_MAX_ITERATIONS",
     "MIN_CLUSTER_SIZE",
     "compute_semantic_clusters",

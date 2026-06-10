@@ -89,6 +89,17 @@ def page_title_from_path(graph_root: Path, path: Path) -> str:
     return _page_title_from_path(graph_root, path)
 
 
+def is_journal_page_title(graph_root: str | Path, title: str) -> bool:
+    """Return whether *title* maps to a file under the graph ``journals/`` tree."""
+    from .generational_cache import cached_build_alias_index
+
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    relpath = cached_build_alias_index(root).page_to_relpath.get(title)
+    if not relpath:
+        return False
+    return relpath.replace("\\", "/").startswith("journals/")
+
+
 @dataclass
 class AliasIndex:
     """In-memory alias map built from a single graph scan."""
@@ -373,6 +384,7 @@ __all__ = [
     "is_scannable_graph_markdown",
     "iter_scannable_pages_markdown",
     "iter_alias_source_paths",
+    "is_journal_page_title",
     "normalize_concept_key",
     "page_title_from_path",
     "purge_stale_alias_entries",
