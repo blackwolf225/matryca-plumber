@@ -105,7 +105,8 @@ def semantic_cache_key(page_path: Path, operation: str) -> str:
         mtime_ns = page_path.stat().st_mtime_ns
     except OSError:
         mtime_ns = 0
-    rel = page_path.name
+    parent = page_path.parent.name
+    rel = f"{parent}/{page_path.name}" if parent else page_path.name
     return f"{operation}:{rel}:{mtime_ns}"
 
 

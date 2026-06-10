@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MCP tool options (`bounded_int_from_options`)** — JSON booleans (`true`/`false`) are rejected instead of silently coercing to `0`/`1` via `int()`.
+- **Subtree heading filter** — `read_subtree_markdown` stops at the matched heading's indent so sibling sections are not leaked into the excerpt.
+- **`templates_subdir` path traversal** — `ensure_graph_runtime_directories` rejects `..` segments in wiki YAML `templates_subdir` and falls back to `templates`.
+- **Semantic cache key collision** — `semantic_cache_key` prefixes the parent directory name so pages with the same basename in different namespaces no longer share a cache entry.
 - **Bounded JSON read (TOCTOU)** — `read_bounded_json` reads at most `cap + 1` bytes in a single `open("rb")` call, closing the stat-then-read race that could bypass the memory-DoS cap.
 - **Block vector store self-heal** — `load_block_vector_store` catches corrupt vector records (`ValueError`/`TypeError`) and falls back to an empty store instead of hard-crashing hybrid search.
 - **Dual embedding text dedup** — `_block_text` skips identical `content`/`clean_text` pairs so plain blocks are not embedded twice.
