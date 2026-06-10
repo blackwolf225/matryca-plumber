@@ -87,7 +87,7 @@ async def test_mcp_lifespan_calls_prepare_before_yield(
     assert calls[0]["eager_graph"] is False
 
 
-def test_start_daemon_foreground_calls_prepare(
+def test_start_daemon_foreground_defers_prepare_to_run_forever(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -105,11 +105,15 @@ def test_start_daemon_foreground_calls_prepare(
         "src.agent.maintenance_daemon._try_acquire_daemon_process_lock",
         lambda _r: 42,
     )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon._register_bootstrap_shutdown_handlers",
+        lambda _r: None,
+    )
     monkeypatch.setattr("src.agent.maintenance_daemon.MaintenanceDaemon", lambda root, **kw: daemon)
 
     start_daemon_foreground(graph)
 
-    assert prepared == [graph.resolve()]
+    assert prepared == []
     daemon.run_forever.assert_called_once()
 
 

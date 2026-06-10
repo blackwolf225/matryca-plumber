@@ -31,6 +31,8 @@ from src.agent.maintenance_daemon import (
     prune_stale_daemon_file_entries,
     read_pid_file,
     save_daemon_state,
+    start_daemon_detached,
+    start_daemon_foreground,
     state_path,
     stop_daemon,
     write_pid_file,
@@ -485,6 +487,101 @@ def test_pid_file_write_and_read(graph_root: Path) -> None:
     write_pid_file(graph_root)
     pid = read_pid_file(graph_root)
     assert pid == os.getpid()
+
+
+def test_start_daemon_detached_accepts_live_pid_when_worker_exited(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read_n = {"n": 0}
+
+    def _read_pid(_root: Path) -> int | None:
+        read_n["n"] += 1
+        return None if read_n["n"] == 1 else 5151
+
+    class FakeProc:
+        pid = 88888
+
+        def poll(self) -> int:
+            return 1
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.subprocess.Popen",
+        lambda *args, **kwargs: FakeProc(),
+    )
+    monkeypatch.setattr("src.agent.maintenance_daemon.read_pid_file", _read_pid)
+    monkeypatch.setattr("src.agent.maintenance_daemon.is_plumber_process", lambda _pid: True)
+
+    out = start_daemon_detached(graph_root)
+    assert out["ok"] is True
+    assert out["code"] == "started"
+    assert out["pid"] == 5151
+
+
+def test_start_daemon_detached_accepts_live_pid_after_launcher_timeout(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    read_n = {"n": 0}
+
+    def _read_pid(_root: Path) -> int | None:
+        read_n["n"] += 1
+        if read_n["n"] <= 100:
+            return None
+        return 6060
+
+    class FakeProc:
+        pid = 88888
+
+        def poll(self) -> int | None:
+            return None
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, *, timeout: float = 0) -> int:
+            return 0
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.subprocess.Popen",
+        lambda *args, **kwargs: FakeProc(),
+    )
+    monkeypatch.setattr("src.agent.maintenance_daemon.read_pid_file", _read_pid)
+    monkeypatch.setattr("src.agent.maintenance_daemon.is_plumber_process", lambda _pid: True)
+    monkeypatch.setattr("src.agent.maintenance_daemon.time.monotonic", lambda: 0.0)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.time.sleep",
+        lambda _seconds: read_n.__setitem__("n", 101),
+    )
+
+    out = start_daemon_detached(graph_root)
+    assert out["ok"] is True
+    assert out["pid"] == 6060
+
+
+def test_start_daemon_foreground_removes_pid_on_bootstrap_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon._try_acquire_daemon_process_lock",
+        lambda _r: 42,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon._register_bootstrap_shutdown_handlers",
+        lambda _r: None,
+    )
+
+    class _BoomDaemon:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("bootstrap boom")
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.MaintenanceDaemon", _BoomDaemon)
+
+    with pytest.raises(RuntimeError, match="bootstrap boom"):
+        start_daemon_foreground(graph_root)
+
+    assert read_pid_file(graph_root) is None
 
 
 def test_stop_daemon_removes_stale_pid(graph_root: Path) -> None:

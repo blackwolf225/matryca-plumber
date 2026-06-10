@@ -697,6 +697,45 @@ def test_daemon_start_reports_already_running(
     assert payload["pid"] == 9001
 
 
+def test_daemon_start_reports_foreign_pid(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: 4242)
+    monkeypatch.setattr("src.cli.ui_server.is_plumber_process", lambda _pid: False)
+    monkeypatch.setattr("src.cli.ui_server.is_process_alive", lambda _pid: True)
+
+    with TestClient(app) as client:
+        response = client.post("/api/daemon/start", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["code"] == "foreign_pid"
+    assert payload["pid"] == 4242
+
+
+def test_verify_daemon_launch_accepts_live_pid_when_launcher_exited(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProc:
+        def poll(self) -> int:
+            return 1
+
+    monkeypatch.setattr("src.cli.ui_server.read_pid_file", lambda _root: 5151)
+    monkeypatch.setattr("src.cli.ui_server.is_plumber_process", lambda _pid: True)
+
+    ok, message = _verify_daemon_launch(
+        graph_root,
+        cast(subprocess.Popen[bytes], FakeProc()),
+        settle_s=0.0,
+    )
+    assert ok is True
+    assert message is None
+
+
 def test_daemon_start_reports_launch_failure(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,

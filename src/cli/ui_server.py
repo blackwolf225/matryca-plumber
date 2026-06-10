@@ -37,8 +37,10 @@ from ..agent.maintenance_daemon import (
     DaemonState,
     heal_daemon_state_ledger,
     is_plumber_process,
+    is_process_alive,
     load_daemon_state,
     read_pid_file,
+    remove_pid_file,
     resolve_graph_root,
     stop_daemon,
 )
@@ -902,11 +904,11 @@ def _daemon_control_response(result: dict[str, Any]) -> DaemonControlResponse:
 
 
 def _spawn_plumber_daemon_cli(graph_root: Path) -> subprocess.Popen[bytes]:
-    """Launch ``plumber start`` in a fresh interpreter (never fork from Uvicorn threads)."""
+    """Launch the foreground daemon worker in a fresh interpreter."""
     env = os.environ.copy()
     env["LOGSEQ_GRAPH_PATH"] = str(graph_root)
     return subprocess.Popen(
-        [sys.executable, "-m", "src.cli", "plumber", "start"],
+        [sys.executable, "-m", "src.cli", "plumber", "start", "--foreground"],
         cwd=str(_REPO_ROOT),
         env=env,
         stdout=subprocess.DEVNULL,
@@ -927,10 +929,10 @@ def _verify_daemon_launch(
     time.sleep(settle_s)
     exit_code = proc.poll()
     if exit_code is not None:
+        pid = read_pid_file(graph_root)
+        if pid is not None and is_plumber_process(pid):
+            return True, None
         if exit_code == 0:
-            pid = read_pid_file(graph_root)
-            if pid is not None and is_plumber_process(pid):
-                return True, None
             return False, "Daemon launcher exited but no live PID was published"
         return (
             False,
@@ -941,12 +943,11 @@ def _verify_daemon_launch(
         pid = read_pid_file(graph_root)
         if pid is not None and is_plumber_process(pid):
             return True, None
-        if proc.poll() is not None:
-            exit_code = proc.poll()
-            if exit_code == 0:
-                pid = read_pid_file(graph_root)
-                if pid is not None and is_plumber_process(pid):
-                    return True, None
+        exit_code = proc.poll()
+        if exit_code is not None:
+            pid = read_pid_file(graph_root)
+            if pid is not None and is_plumber_process(pid):
+                return True, None
             return (
                 False,
                 f"Daemon launcher exited with code {exit_code} before publishing a PID",
@@ -969,6 +970,15 @@ def _start_daemon_blocking(graph_root: Path) -> DaemonControlResponse:
             message=f"Matryca Plumber daemon already running (pid {existing})",
             pid=existing,
         )
+    if existing is not None and is_process_alive(existing):
+        return DaemonControlResponse(
+            ok=False,
+            code="foreign_pid",
+            message=f"PID file references a live non-plumber process (pid {existing})",
+            pid=existing,
+        )
+    if existing is not None:
+        remove_pid_file(graph_root)
     proc = _spawn_plumber_daemon_cli(graph_root)
     ok, failure_message = _verify_daemon_launch(graph_root, proc)
     if not ok:

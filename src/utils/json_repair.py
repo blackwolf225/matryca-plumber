@@ -16,7 +16,8 @@ _LEAKED_JSON_KEY_IN_STRING_RE = re.compile(
     r'(?<=\\"),\s*\\"(?=[a-zA-Z_][a-zA-Z0-9_]*\\"\s*:)',
 )
 _TRAILING_GARBAGE_RE = re.compile(r"\}\s*[\{\[\"].*$", re.DOTALL)
-_DEGENERATE_LITERAL_BACKSLASH_N_RUN_RE = re.compile(r"(?:\\n){16,}")
+# Gemma often emits ``\n \n \n`` (literal backslash-n plus spaces); allow optional whitespace.
+_DEGENERATE_LITERAL_BACKSLASH_N_RUN_RE = re.compile(r"(?:\\n\s*){12,}")
 _DEGENERATE_LITERAL_BACKSLASH_T_RUN_RE = re.compile(r"(?:\\t){16,}")
 _DEGENERATE_LITERAL_BACKSLASH_QUOTE_RUN_RE = re.compile(r'(?:\\"){32,}')
 _GEMMA_LEAKED_LITERAL_NL_BEFORE_KEY_RE = re.compile(r"([{,]\s*)\\n\s*\\\"")
@@ -27,19 +28,39 @@ _FALLBACK_UNBALANCED_JSON_CHARS = 8192
 
 
 def max_consecutive_literal_backslash_n(text: str) -> int:
-    """Longest run of the two-char sequence backslash + n in ``text``."""
+    """Longest run of literal ``\\n`` tokens (optional whitespace between each)."""
     best = 0
     current = 0
     index = 0
-    while index < len(text):
+    length = len(text)
+    while index < length:
         if text.startswith("\\n", index):
             current += 1
             index += 2
+            while index < length and text[index] in " \t":
+                index += 1
         else:
             best = max(best, current)
             current = 0
             index += 1
     return max(best, current)
+
+
+def strip_leading_degenerate_llm_runs(text: str) -> str:
+    """Drop Gemma prefix loops before the first JSON delimiter."""
+    index = 0
+    length = len(text)
+    while index < length:
+        if text.startswith("\\n", index):
+            index += 2
+            while index < length and text[index] in " \t":
+                index += 1
+            continue
+        if text[index] in " \t\r\n":
+            index += 1
+            continue
+        break
+    return text[index:]
 
 
 def strip_code_fence(raw: str) -> str:
@@ -212,7 +233,9 @@ def sanitize_prose_llm_completion(raw: str, *, max_chars: int | None = None) -> 
 
 def sanitize_llm_completion_text(raw: str) -> str:
     """Trim post-JSON tail and apply Gemma-specific repairs before validation."""
-    text = extract_json_object(raw)
+    text = strip_leading_degenerate_llm_runs(strip_code_fence(raw.strip()))
+    text = collapse_all_degenerate_llm_runs(text)
+    text = extract_json_object(text)
     text = collapse_degenerate_literal_backslash_n_runs(text)
     text = collapse_degenerate_literal_backslash_t_runs(text)
     text = collapse_degenerate_literal_backslash_quote_runs(text)
@@ -254,7 +277,9 @@ def balance_json_brackets(text: str) -> str:
 
 def repair_llm_json(raw: str) -> str:
     """Apply aggressive sanitization before ``json.loads``."""
-    text = extract_json_payload_regex(raw)
+    text = strip_leading_degenerate_llm_runs(strip_code_fence(raw.strip()))
+    text = collapse_all_degenerate_llm_runs(text)
+    text = extract_json_payload_regex(text)
     text = collapse_degenerate_literal_backslash_n_runs(text)
     text = collapse_degenerate_literal_backslash_t_runs(text)
     text = collapse_degenerate_literal_backslash_quote_runs(text)
@@ -327,6 +352,7 @@ __all__ = [
     "loads_repaired_json",
     "max_consecutive_literal_backslash_n",
     "parse_llm_json",
+    "strip_leading_degenerate_llm_runs",
     "repair_llm_json",
     "safe_parse_llm_json_dict",
     "sanitize_llm_completion_text",

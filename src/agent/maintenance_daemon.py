@@ -188,6 +188,18 @@ except ImportError:  # pragma: no cover - non-Windows platforms
 _daemon_process_lock_fd: int | None = None
 
 
+def _register_bootstrap_shutdown_handlers(graph_root: Path) -> None:
+    """Ensure PID/lock cleanup when the worker is interrupted during bootstrap."""
+
+    def _handler(signum: int, _frame: object) -> None:
+        remove_pid_file(graph_root)
+        _release_daemon_process_lock(graph_root)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _handler)
+    signal.signal(signal.SIGINT, _handler)
+
+
 def _semantic_index_section_present(content: str) -> bool:
     return SEMANTIC_INDEX_HEADING in content
 
@@ -2949,7 +2961,6 @@ class MaintenanceDaemon:
             graph_root=self.graph_root,
             wiki_config=load_matryca_wiki_config(),
         )
-        write_pid_file(self.graph_root)
         state = self._sync_runtime_config(load_daemon_state(self.graph_root))
         llm_config = load_plumber_lint_config()
         logger.info(
@@ -3073,11 +3084,16 @@ def start_daemon_foreground(graph_root: Path | None = None) -> None:
     global _daemon_process_lock_fd
     _daemon_process_lock_fd = lock_fd
     write_pid_file(root)
-    prepare_matryca_runtime(graph_root=root, wiki_config=load_matryca_wiki_config())
-    daemon = MaintenanceDaemon(root)
-    if isinstance(daemon.llm_client, InstructorLLMClient):
-        daemon.llm_client.probe_backend()
-    daemon.run_forever()
+    _register_bootstrap_shutdown_handlers(root)
+    try:
+        daemon = MaintenanceDaemon(root)
+        if isinstance(daemon.llm_client, InstructorLLMClient):
+            daemon.llm_client.probe_backend()
+        daemon.run_forever()
+    except BaseException:
+        remove_pid_file(root)
+        _release_daemon_process_lock(root)
+        raise
 
 
 def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
@@ -3116,6 +3132,9 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
 
     deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
+        pid = read_pid_file(root)
+        if pid is not None and is_plumber_process(pid):
+            return {"ok": True, "code": "started", "pid": pid, "graph_root": str(root)}
         exit_code = proc.poll()
         if exit_code is not None:
             return {
@@ -3123,11 +3142,14 @@ def start_daemon_detached(graph_root: Path | None = None) -> dict[str, Any]:
                 "code": "startup_failed",
                 "message": f"Daemon worker exited immediately with code {exit_code}",
             }
-        pid = read_pid_file(root)
-        if pid is not None and is_plumber_process(pid):
-            return {"ok": True, "code": "started", "pid": pid, "graph_root": str(root)}
         time.sleep(0.15)
 
+    pid = read_pid_file(root)
+    if pid is not None and is_plumber_process(pid):
+        return {"ok": True, "code": "started", "pid": pid, "graph_root": str(root)}
+    with contextlib.suppress(OSError):
+        proc.terminate()
+        proc.wait(timeout=5.0)
     return {
         "ok": False,
         "code": "startup_timeout",

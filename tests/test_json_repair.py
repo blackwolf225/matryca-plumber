@@ -84,6 +84,19 @@ def test_fix_double_escaped_quote_runs_helper() -> None:
     assert fix_double_escaped_quote_runs('foo\\"", \\"bar') == 'foo\\", \\"bar'
 
 
+def test_repair_strips_spaced_literal_backslash_n_prefix_and_tail() -> None:
+    core = (
+        '{"summary": "VirginioLuigi page.", "cross_references": '
+        '[{"concept": "VirginioLuigi", "relation": "Page Title", "target": "[[VirginioLuigi]]"}], '
+        '"suggested_tags": [], "moc_pointers": [], "semantic_corrections": []}'
+    )
+    raw = ("\\n " * 500) + core + ("\\n " * 500)
+    sanitized = sanitize_llm_completion_text(raw)
+    result = parse_llm_json(sanitized, SemanticIndexResult)
+    assert result.summary == "VirginioLuigi page."
+    assert len(sanitized) < len(raw) // 10
+
+
 def test_repair_strips_degenerate_literal_backslash_n_tail() -> None:
     core = (
         '{"summary": "Francesco Panizzo e collaboratori.", '
