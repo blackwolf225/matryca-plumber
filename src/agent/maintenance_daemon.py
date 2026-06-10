@@ -150,7 +150,6 @@ STATE_FILENAME = ".matryca_daemon_state.json"
 STATE_TMP_FILENAME = f"{STATE_FILENAME}.tmp"
 STATE_BAK_FILENAME = f"{STATE_FILENAME}.bak"
 PID_FILENAME = ".matryca_plumber_daemon.pid"
-_AGENT_DEBUG_LOG = Path(__file__).resolve().parents[2] / ".cursor/debug-12dd26.log"
 DAEMON_LOCK_FILENAME = ".matryca_plumber_daemon.lock"
 PLUMBER_PID_MARKER = "matryca-plumber-daemon"
 DEFAULT_STOP_GRACE_SECONDS = 130.0
@@ -874,29 +873,6 @@ def write_pid_file(graph_root: Path) -> None:
         graph_root=graph_root,
         validate_block_refs=False,
     )
-    # #region agent log
-    try:
-        with _AGENT_DEBUG_LOG.open("a", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps(
-                    {
-                        "sessionId": "12dd26",
-                        "hypothesisId": "A,B",
-                        "location": "maintenance_daemon.py:write_pid_file",
-                        "message": "pid file published",
-                        "data": {
-                            "pid": os.getpid(),
-                            "graph_root": str(graph_root),
-                            "path": str(path),
-                        },
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-                + "\n",
-            )
-    except OSError:
-        pass
-    # #endregion
 
 
 def read_pid_file(graph_root: Path) -> int | None:
@@ -3089,25 +3065,6 @@ def start_daemon_foreground(graph_root: Path | None = None) -> None:
         apply_plumber_priority(config)
     lock_fd = _try_acquire_daemon_process_lock(root)
     if lock_fd is None:
-        # #region agent log
-        try:
-            with _AGENT_DEBUG_LOG.open("a", encoding="utf-8") as handle:
-                handle.write(
-                    json.dumps(
-                        {
-                            "sessionId": "12dd26",
-                            "hypothesisId": "E",
-                            "location": "maintenance_daemon.py:start_daemon_foreground:lock",
-                            "message": "daemon lock not acquired",
-                            "data": {"graph_root": str(root), "pid": os.getpid()},
-                            "timestamp": int(time.time() * 1000),
-                        },
-                    )
-                    + "\n",
-                )
-        except OSError:
-            pass
-        # #endregion
         logger.error(
             "Matryca Plumber daemon already running (lock held) for graph_root={!r}",
             root,
@@ -3116,25 +3073,6 @@ def start_daemon_foreground(graph_root: Path | None = None) -> None:
     global _daemon_process_lock_fd
     _daemon_process_lock_fd = lock_fd
     write_pid_file(root)
-    # #region agent log
-    try:
-        with _AGENT_DEBUG_LOG.open("a", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps(
-                    {
-                        "sessionId": "12dd26",
-                        "hypothesisId": "B",
-                        "location": "maintenance_daemon.py:start_daemon_foreground:lock_acquired",
-                        "message": "daemon lock acquired and pid published before worker init",
-                        "data": {"graph_root": str(root), "pid": os.getpid()},
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-                + "\n",
-            )
-    except OSError:
-        pass
-    # #endregion
     prepare_matryca_runtime(graph_root=root, wiki_config=load_matryca_wiki_config())
     daemon = MaintenanceDaemon(root)
     if isinstance(daemon.llm_client, InstructorLLMClient):

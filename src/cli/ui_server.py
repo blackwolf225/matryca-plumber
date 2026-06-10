@@ -916,32 +916,6 @@ def _spawn_plumber_daemon_cli(graph_root: Path) -> subprocess.Popen[bytes]:
     )
 
 
-def _debug_agent_log(
-    *,
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, Any],
-) -> None:
-    # #region agent log
-    try:
-        payload = {
-            "sessionId": "12dd26",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with (
-            Path(__file__).resolve().parents[2] / ".cursor/debug-12dd26.log"
-        ).open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload) + "\n")
-    except OSError:
-        pass
-    # #endregion
-
-
 def _verify_daemon_launch(
     graph_root: Path,
     proc: subprocess.Popen[bytes],
@@ -950,34 +924,12 @@ def _verify_daemon_launch(
     verify_timeout_s: float = 15.0,
 ) -> tuple[bool, str | None]:
     """Wait briefly and confirm the daemon published a live PID (or failed fast)."""
-    # #region agent log
-    _debug_agent_log(
-        hypothesis_id="A",
-        location="ui_server.py:_verify_daemon_launch:entry",
-        message="daemon launch verify started",
-        data={
-            "graph_root": str(graph_root),
-            "launcher_pid": getattr(proc, "pid", None),
-            "settle_s": settle_s,
-            "verify_timeout_s": verify_timeout_s,
-        },
-    )
-    # #endregion
     time.sleep(settle_s)
     exit_code = proc.poll()
     if exit_code is not None:
-        pid = read_pid_file(graph_root)
-        plumber_alive = is_plumber_process(pid) if pid is not None else False
-        # #region agent log
-        _debug_agent_log(
-            hypothesis_id="E",
-            location="ui_server.py:_verify_daemon_launch:early_exit",
-            message="launcher exited during settle",
-            data={"exit_code": exit_code, "pid": pid, "plumber_alive": plumber_alive},
-        )
-        # #endregion
         if exit_code == 0:
-            if pid is not None and plumber_alive:
+            pid = read_pid_file(graph_root)
+            if pid is not None and is_plumber_process(pid):
                 return True, None
             return False, "Daemon launcher exited but no live PID was published"
         return (
@@ -985,31 +937,9 @@ def _verify_daemon_launch(
             f"Daemon exited immediately with code {exit_code} (lock contention or startup error)",
         )
     deadline = time.monotonic() + verify_timeout_s
-    started = time.monotonic()
     while time.monotonic() < deadline:
         pid = read_pid_file(graph_root)
-        plumber_alive = is_plumber_process(pid) if pid is not None else False
-        cmd = ""
-        if pid is not None:
-            from src.agent.maintenance_daemon import _process_command_line
-
-            cmd = _process_command_line(pid)[:200]
-        # #region agent log
-        _debug_agent_log(
-            hypothesis_id="A,C,D",
-            location="ui_server.py:_verify_daemon_launch:poll",
-            message="daemon launch poll",
-            data={
-                "elapsed_s": round(time.monotonic() - started, 2),
-                "pid": pid,
-                "plumber_alive": plumber_alive,
-                "cmd_preview": cmd,
-                "launcher_exit": proc.poll(),
-                "pid_path": str(graph_root / ".matryca_plumber_daemon.pid"),
-            },
-        )
-        # #endregion
-        if pid is not None and plumber_alive:
+        if pid is not None and is_plumber_process(pid):
             return True, None
         if proc.poll() is not None:
             exit_code = proc.poll()
@@ -1022,18 +952,6 @@ def _verify_daemon_launch(
                 f"Daemon launcher exited with code {exit_code} before publishing a PID",
             )
         time.sleep(0.15)
-    # #region agent log
-    _debug_agent_log(
-        hypothesis_id="A",
-        location="ui_server.py:_verify_daemon_launch:timeout",
-        message="daemon launch verify timed out",
-        data={
-            "elapsed_s": round(time.monotonic() - started, 2),
-            "final_pid": read_pid_file(graph_root),
-            "launcher_exit": proc.poll(),
-        },
-    )
-    # #endregion
     return False, "Daemon did not publish a live PID after launch"
 
 
