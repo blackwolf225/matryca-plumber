@@ -64,9 +64,7 @@ def test_read_subtree_heading_excludes_sibling_sections(tmp_path: Path) -> None:
     pages = tmp_path / "pages"
     pages.mkdir(parents=True)
     (pages / "Demo.md").write_text(
-        f"- Root\n  id:: {block_id}\n"
-        "  - Section B\n    - b1\n"
-        "  - Section C\n    - c1\n",
+        f"- Root\n  id:: {block_id}\n  - Section B\n    - b1\n  - Section C\n    - c1\n",
         encoding="utf-8",
     )
     query = json.dumps({"page": "Demo", "block_uuid": block_id, "heading": "Section B"})
