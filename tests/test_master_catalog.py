@@ -159,7 +159,7 @@ def test_load_master_catalog_oserror_raises_without_cache(
     def _patched_open(self: Path, *args: object, **kwargs: object) -> object:
         if self.resolve() == catalog_key:
             raise OSError("simulated read failure")
-        return real_open(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_open(self, *args, **kwargs)  # type: ignore[call-overload]
 
     monkeypatch.setattr(Path, "open", _patched_open)
     with pytest.raises(CatalogLoadError):
@@ -186,7 +186,7 @@ def test_load_master_catalog_oserror_returns_cached_instance(
     def _patched_open(self: Path, *args: object, **kwargs: object) -> object:
         if self.resolve() == catalog_key:
             raise OSError("simulated read failure")
-        return real_open(self, *args, **kwargs)  # type: ignore[arg-type]
+        return real_open(self, *args, **kwargs)  # type: ignore[call-overload]
 
     monkeypatch.setattr(Path, "open", _patched_open)
     reloaded = load_master_catalog(graph_root, force_reload=True)
