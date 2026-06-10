@@ -62,8 +62,17 @@ sequenceDiagram
 - During Phase 1 on large vaults, expect pill updates about every **5 pages** and percent updates at heartbeat + catalog checkpoints.
 - Phase 2 vault progress increments per processed file; full vault rescans remain at cycle boundaries (every 10 cycles) to avoid O(pages) scans on every tick.
 
+## v1.9.11 graph analytics polling
+
+| Change | Detail |
+|--------|--------|
+| Server cache TTL | `_ANALYTICS_TTL_SECONDS` raised to **18s** (aligned with ~20s UI poll cadence) |
+| Client timeout | `MATRYCA_GRAPH_ANALYTICS_TIMEOUT_MS` = **60s** for `/api/graph-analytics` |
+| Poll failure | UI merges `graph_analytics.status: offline` instead of silent no-op |
+
 ## Related specs
 
 - [`llm-performance.md`](llm-performance.md) — bootstrap yield/checkpoint cadence  
 - [`agent-onboarding.md`](agent-onboarding.md) — PyPI / `uvx` contract  
+- [`runtime-bootstrap.md`](runtime-bootstrap.md) — lazy vs eager `prepare_matryca_runtime`  
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — Sovereign UI topology

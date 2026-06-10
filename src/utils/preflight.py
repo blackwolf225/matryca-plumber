@@ -171,7 +171,11 @@ def _check_l1_memory(graph_root: Path | None) -> PreflightCheck:
         )
 
     wiki_config = load_matryca_wiki_config()
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=wiki_config)
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=wiki_config,
+        eager_graph=False,
+    )
     l1_dir = ensure_matryca_l1_dir(
         logseq_graph_path=str(graph_root),
         memory_path_from_yaml=wiki_config.memory_path,
@@ -313,7 +317,8 @@ def run_preflight_checks(*, repo_root: Path | None = None) -> PreflightReport:
     checks.append(_check_concurrency())
     checks.append(_check_llm_endpoint())
 
-    ready = all(check.status == "pass" for check in checks)
+    # ``warn`` is advisory (degraded locks, model not listed); only ``fail`` blocks Start Engine.
+    ready = all(check.status != "fail" for check in checks)
     return PreflightReport(
         ready=ready,
         checks=tuple(checks),

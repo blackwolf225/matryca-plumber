@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.11] - 2026-06-10
+
+**Sovereign UI reliability — large vault operator fixes**
+
+### Fixed
+
+- **Sovereign UI reliability** — lazy runtime bootstrap (`eager_graph=False`) on settings save, graph-path save, L1 provision, and **Start Engine** so large vaults no longer hit the 10s fetch timeout; `GET /api/config` reads `LOGSEQ_GRAPH_PATH` from `.env` file values; Settings drawer blocks save until config loads, confirms discard on close, and shows API errors (not `engineError`); pre-flight treats `warn` as non-blocking; modal auto-dismisses when checks pass; graph-path pre-flight surfaces post-save verification failures; graph analytics uses 18s server cache, 60s client timeout, and marks telemetry offline on poll failure.
+
 ## [1.9.10] - 2026-06-09
 
 **Sovereign UI fast startup — operator command clarity**

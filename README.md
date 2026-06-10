@@ -7,7 +7,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
 
-[![Tests](https://img.shields.io/badge/tests-683%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-685%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/mypy-strict-2b6cb0)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/CONTRIBUTING.md)
@@ -23,11 +23,13 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.10** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.11** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
-> **Current: v1.9.10** — **Sovereign UI fast startup** — `matryca plumber status` / `ui` bind `:8500` in seconds (lazy AST); docs clarify **`status`/`ui` vs `start`**. **v1.9.9** — **Security & Sandbox** — path sandbox on link verification reads, bounded JSON checkpoints (`MATRYCA_JSON_MAX_BYTES`), `read_graph_file_text()` migration, CI `sandbox-read-check`, debug-log allowlist + redaction, `.env.example` templates explicit UI token. **v1.9.8** — **Documentation harmonization** — `llms.txt`, OpenSpec, `SYSTEM_PROMPT.md`, and `ARCHITECTURE.md` aligned with v1.9.7 AX code (lenient page resolution, safe fallback append). **v1.9.7** — **Agent Experience (AX) robustness** — lenient page namespace resolution (`/` ↔ `___`, case-insensitive) and safe fallback append for invalid LLM write targets. **v1.9.6** — **Hermes Agent** MCP integration and **lazy AST handshake** (stdio `tools/list` in seconds on large vaults; cold parse on first graph tool). **v1.9.5** — **LLM OS** — two-tier Gardener vs Cognitive Agent contract, Master Index **Soft Gate**, and `read bootstrap_status` Phase 1 semaphore for MCP/CLI agents. **v1.9.4** — Journey Log hygiene (one cumulative journal bullet per day). **v1.9.3** — Live Telemetry for the Sovereign UI. **v1.9.2** — agent-zero-friction (`llms.txt`). **v1.9 line** — structural graph hygiene + agent DX: Agentic Knowledge Management for Logseq OG: **enterprise-grade, local-first background AI** with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API). **v1.9** adds **zero-LLM link rot checks** (`dead-link::` / `missing-asset::`), **Journey Log** on today's journal, CLI **`--json`**, **`matryca context load`**, and **`read subtree`** for token-efficient agent reads — on top of v1.8 **Zero-Prefill** prompts, bounded RAM, and cooperative bootstrap I/O for **16 GB CPU-only laptops**. Optional FastMCP stdio reuses the same `graph_dispatch` contract. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **100% native Logseq AST parity**, OCC, versioned AI authorship stamping.
+> **Current: v1.9.11** — **Sovereign UI reliability** on large vaults: settings save, **Start Engine**, and L1 provision use lazy bootstrap (no 10s timeout); pre-flight `warn` is advisory; settings drawer waits for live config before save.
+>
+> **v1.9.x highlights** (full notes in [`CHANGELOG.md`](CHANGELOG.md)): **1.9.10** UI fast startup (`status`/`ui` vs `start`); **1.9.9** Security & Sandbox; **1.9.7** AX lenient page resolution; **1.9.6** Hermes lazy MCP; **1.9.5** LLM OS / `bootstrap_status`; **1.9.3** live UI telemetry; **1.9.0** structural link hygiene + agent CLI `--json`. The **1.9 line** is Agentic Knowledge Management for Logseq OG — local-first background AI with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API), on top of v1.8 edge performance for **16 GB CPU-only** laptops. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog).
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -127,7 +129,7 @@ uv tool install matryca-plumber
 matryca plumber status
 # same as: matryca-plumber status
 ```
-The browser opens the **Sovereign UI**. On **every** fresh visit, a **Pre-flight checklist** modal appears first (even if you already ran `matryca plumber start` in a terminal). Dismiss it with **Continue to dashboard** once the live checks are green, then click **Start Engine** in the header to launch the maintenance daemon from the UI.
+The browser opens the **Sovereign UI**. A **Pre-flight checklist** modal appears when checks are not yet green (it auto-dismisses once they pass). Use **Continue to dashboard** or reopen **Pre-flight** from the header anytime, then click **Start Engine** to launch the maintenance daemon from the UI.
 
 **Optional — headless daemon before opening the UI:**
 ```bash
@@ -197,7 +199,7 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 
 Matryca Plumber is 100% headless, but it ships with a **Sovereign UI Cockpit** (`matryca plumber status` or `uvx … matryca-plumber status`). 
 It's a local React dashboard running on `http://127.0.0.1:8500` that provides:
-- **Pre-flight checklist** (modal on each UI open): operator guidance plus automated readiness checks before **Start Engine** is enabled.
+- **Pre-flight checklist** (modal when checks fail; auto-dismiss when green): operator guidance plus automated readiness checks — only **`fail`** blocks **Start Engine**; **`warn`** is advisory (e.g. degraded file locks, model not listed).
 - **Live Graph Telemetry (v1.9.3)**: Progress bar, Phase 1/2 pills, and token counters refresh about every **5 seconds** while the engine runs — including during long LLM turns ([`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md)).
 - **Dynamic Impact**: Mathematically separates *Organic Human Mind* (your notes) from *Agent Cognition* (AI enhancements).
 - **Zero-Trust Security**: Every REST call requires a Bearer token (`X-Matryca-Token`). Set `MATRYCA_UI_TOKEN` on shared hosts; new installs from [`.env.example`](.env.example) template `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`. Session bootstrap is loopback-only; split rate limits for authenticated vs anonymous API traffic.
@@ -230,7 +232,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 | L1 session memory | Sibling `matryca-l1/` (or configured `MATRYCA_L1_PATH` / wiki `memory_path`) is ready. |
 | Local LLM endpoint | `LLM_BASE_URL` passes SSRF policy and `GET /v1/models` responds; warns if the configured model id is not listed. |
 
-**Start Engine** stays disabled until every live check is green. If you started the daemon earlier with `matryca plumber start`, the UI may already show **IDLE** or **RUNNING** and **Start Engine** may be disabled — the pre-flight modal still opens so you can review settings; use **Pre-flight** in the header to reopen it later.
+**Start Engine** stays disabled while any live check is **`fail`** (yellow **`warn`** rows are OK). If you started the daemon earlier with `matryca plumber start`, the UI may already show **IDLE** or **RUNNING** — use **Pre-flight** in the header to review settings. On large vaults, settings save and **Start Engine** return in seconds (lazy bootstrap; no full AST load in the UI process).
 
 ---
 
@@ -248,6 +250,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 📋 **Agent onboarding (v1.9.2):** [`llms.txt`](llms.txt) — canonical `uvx` commands for Cursor, Claude Code, and other hosts; no `git clone` required.
 * 🧠 **LLM OS (v1.9.5):** Two-tier agent discipline, `bootstrap_status` semaphore, Master Index Soft Gate — [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 * ⚡ **Live telemetry (v1.9.3):** 5s Sovereign UI updates, thread-safe daemon heartbeat, API token overlay from ops log — [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md).
+* 🖥️ **Sovereign UI reliability (v1.9.11):** Settings save and **Start Engine** stay responsive on large vaults (lazy bootstrap); pre-flight `warn` is advisory — [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md).
 
 ---
 
@@ -322,7 +325,7 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (683+ passing, Mypy strict)
+# Run tests (685+ passing, Mypy strict)
 make check
 
 # Optional: slow memory / harvest soak tests

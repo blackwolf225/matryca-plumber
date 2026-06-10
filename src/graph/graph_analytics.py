@@ -23,7 +23,8 @@ from .path_sandbox import read_graph_file_text
 
 _CACHE_DIRNAME = ".matryca_semantic_cache"
 _DEFAULT_CONTEXT_ACCELERATION = 0.0
-_ANALYTICS_TTL_SECONDS = 2.0
+# Align with Sovereign UI graph-analytics poll cadence (~20s at 4×5s cycles).
+_ANALYTICS_TTL_SECONDS = 18.0
 GraphAnalyticsStatus = Literal["online", "offline"]
 
 

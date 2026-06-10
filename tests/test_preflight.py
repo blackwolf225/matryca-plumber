@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from src.cli.ui_auth import reset_ui_token_for_tests
 from src.cli.ui_server import app
 from src.config import MatrycaWikiConfig
-from src.utils.preflight import run_preflight_checks
+from src.utils.preflight import PreflightCheck, run_preflight_checks
 
 
 def _empty_wiki_config() -> MatrycaWikiConfig:
@@ -157,3 +157,49 @@ def test_run_preflight_l1_passes_when_matryca_l1_path_is_template(
     assert l1_check.status == "pass"
     assert l1_check.detail is not None
     assert Path(l1_check.detail) == tmp_path / "matryca-l1"
+
+
+def test_run_preflight_ready_when_only_warn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``warn`` checks are advisory; only ``fail`` blocks Start Engine."""
+    graph = tmp_path / "vault"
+    (graph / "pages").mkdir(parents=True)
+    env_example = tmp_path / ".env.example"
+    env_example.write_text(
+        f'LOGSEQ_GRAPH_PATH="{graph}"\n'
+        "MATRYCA_LM_BASE_URL=http://localhost:1234/v1\n"
+        "MATRYCA_LM_MODEL=test-model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "src.agent.plumber_config.resolve_repo_dotenv_path",
+        lambda: tmp_path / ".env",
+    )
+    monkeypatch.setattr("src.utils.preflight.reload_plumber_dotenv", lambda **_kw: None)
+    monkeypatch.setattr("src.config.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setattr("src.utils.preflight.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setattr("src.utils.runtime_bootstrap.load_matryca_wiki_config", _empty_wiki_config)
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(graph))
+    monkeypatch.setenv("MATRYCA_LM_BASE_URL", "http://localhost:1234/v1")
+    monkeypatch.setenv("MATRYCA_LM_MODEL", "test-model")
+
+    warn_check = PreflightCheck(
+        id="concurrency",
+        title="Cross-process file locks",
+        status="warn",
+        message="Degraded lock mode enabled",
+    )
+
+    with (
+        patch("src.utils.preflight._check_concurrency", return_value=warn_check),
+        patch(
+            "src.utils.preflight._probe_openai_models",
+            return_value=(True, "ok", ["test-model"]),
+        ),
+    ):
+        report = run_preflight_checks(repo_root=tmp_path)
+
+    assert report.ready is True
+    assert any(check.status == "warn" for check in report.checks)

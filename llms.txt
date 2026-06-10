@@ -1,4 +1,4 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.10)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.11)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
@@ -9,7 +9,7 @@ Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as thi
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.9.10 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.9.11 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +47,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.9.10)
+## 2. Core CLI (verified v1.9.11)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -61,7 +61,7 @@ Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`
 | `plumber start --foreground` | foreground daemon (terminal logs) | browser / UI server |
 | `plumber stop` | — | stops daemon |
 
-**Lazy UI bootstrap:** `status` / `ui` bind `:8500` in seconds; the in-memory graph index loads on the first analytics request (large vaults). Use **Start Engine** in the UI or `plumber start` to run Phase 1/2 maintenance.
+**Lazy UI bootstrap (v1.9.10+):** `status` / `ui` bind `:8500` in seconds; the in-memory graph index loads on the first analytics request. **v1.9.11:** settings save, graph-path save, L1 provision, and **Start Engine** also use lazy bootstrap so large vaults do not hit the 10s UI fetch timeout. Use **Start Engine** in the UI or `plumber start` to run Phase 1/2 maintenance (the daemon subprocess loads the AST eagerly).
 
 **Common mistake:** `plumber start` alone does **not** open the dashboard — run `status` in another terminal or use **Start Engine** after opening the UI.
 

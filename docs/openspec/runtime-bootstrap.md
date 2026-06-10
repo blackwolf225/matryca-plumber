@@ -15,11 +15,11 @@ Matryca Plumber provisions **directories and optional config files** before harv
 | **Maintenance daemon** | `start_daemon_foreground` and `MaintenanceDaemon.run_forever` (before bootstrap harvest) — **eager** AST |
 | **MCP stdio** | `app_lifespan` in `src/main.py` — **light** bootstrap (`eager_graph=False`); AST on first graph tool call |
 | **Agent CLI** (`read`, `search`, …) | `cli.main` via `try_prepare_matryca_runtime_from_env()` — **eager** AST |
-| **Sovereign UI** | `matryca plumber status` / `ui` → FastAPI lifespan (`eager_graph=False`); also `POST /api/config`, `POST /api/daemon/start`, `GET /api/preflight` |
+| **Sovereign UI** | `matryca plumber status` / `ui` → FastAPI lifespan (`eager_graph=False`); also `POST /api/config`, graph-path save, `POST /api/provision-l1`, `POST /api/daemon/start`, and L1 pre-flight check — all **lazy** (`eager_graph=False`, v1.9.11) |
 
 `matryca plumber status` / `ui` does **not** run eager bootstrap in `cli.main` (UI lifespan handles light provisioning). `matryca plumber start` does **not** start the UI.
 
-When a valid graph is configured, **daemon and agent CLI** **bootstrap the in-memory `LogseqGraph` cache** eagerly and load **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)). **MCP stdio** and the **Sovereign UI** defer AST parsing until the first graph read (lazy load) so handshakes and `:8500` bind in seconds on large vaults; see [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md).
+When a valid graph is configured, **daemon and agent CLI** **bootstrap the in-memory `LogseqGraph` cache** eagerly and load **Telos / AI Constraints** from the identity config page if present ([`identity-config.md`](identity-config.md)). **MCP stdio** and the **Sovereign UI** defer AST parsing until the first graph read (lazy load) so handshakes, `:8500` bind, settings save, and **Start Engine** return in seconds on large vaults (v1.9.11); the spawned daemon subprocess still bootstraps eagerly. See [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md).
 
 If `LOGSEQ_GRAPH_PATH` is unset or invalid, only **log directories** are ensured.
 

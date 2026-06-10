@@ -96,7 +96,11 @@ def provision_matryca_l1_sibling(*, graph_root: Path, repo_root: Path | None = N
 
     sync_wiki_memory_path_to_l1(graph_root, l1_dir)
     ensure_graph_runtime_directories(graph_root, templates_subdir=wiki_config.templates_subdir)
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
     return l1_dir
 
 

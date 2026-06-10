@@ -192,8 +192,16 @@ class PlumberConfigResponse(BaseModel):
     auto_split: bool
 
     @classmethod
-    def from_lint_config(cls, config: PlumberLintConfig) -> PlumberConfigResponse:
-        graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+    def from_lint_config(
+        cls,
+        config: PlumberLintConfig,
+        *,
+        logseq_graph_path: str | None = None,
+    ) -> PlumberConfigResponse:
+        if isinstance(logseq_graph_path, str):
+            graph_path = logseq_graph_path.strip()
+        else:
+            graph_path = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
         return cls(
             logseq_graph_path=graph_path,
             lm_studio_url=config.lm_base_url,
@@ -796,8 +804,11 @@ def _load_config_response() -> PlumberConfigResponse:
         merged: dict[str, str] = {
             key: value for key, value in file_vars.items() if value is not None
         }
+        lint_config = load_plumber_lint_config_from_environ(merged)
+        graph_path = (merged.get("LOGSEQ_GRAPH_PATH") or "").strip()
         return PlumberConfigResponse.from_lint_config(
-            load_plumber_lint_config_from_environ(merged),
+            lint_config,
+            logseq_graph_path=graph_path,
         )
     return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
 
@@ -845,7 +856,11 @@ def save_graph_path(
         raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
     reload_plumber_dotenv(override=True)
     graph_root = validate_logseq_graph_path_for_config(validated_path)
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
     return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
 
 
@@ -869,7 +884,11 @@ def post_config(
             graph_root = resolve_graph_root()
         except ValueError:
             graph_root = None
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
     return PlumberConfigResponse.from_lint_config(config)
 
 
@@ -937,7 +956,11 @@ def _verify_daemon_launch(
 
 
 def _start_daemon_blocking(graph_root: Path) -> DaemonControlResponse:
-    prepare_matryca_runtime(graph_root=graph_root, wiki_config=load_matryca_wiki_config())
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
     existing = read_pid_file(graph_root)
     if existing is not None and is_plumber_process(existing):
         return DaemonControlResponse(

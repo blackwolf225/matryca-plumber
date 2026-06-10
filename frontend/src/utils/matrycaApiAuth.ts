@@ -19,6 +19,9 @@ export const MATRYCA_API_BASE = resolveApiBase()
 /** Default timeout for Matryca API ``fetch`` calls (milliseconds). */
 export const MATRYCA_FETCH_TIMEOUT_MS = 10_000
 
+/** Longer timeout for full-vault graph analytics scans (milliseconds). */
+export const MATRYCA_GRAPH_ANALYTICS_TIMEOUT_MS = 60_000
+
 let cachedAuthToken: string | null = null
 
 export function invalidateMatrycaAuthToken(): void {
@@ -114,18 +117,27 @@ async function readMatrycaApiErrorMessage(response: Response): Promise<string> {
   return fallback
 }
 
+export interface MatrycaFetchJsonOptions {
+  timeoutMs?: number
+}
+
 /** JSON GET/POST with ``X-Matryca-Token``; on 401, refresh session once and retry. */
-export async function matrycaFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+export async function matrycaFetchJson<T>(
+  url: string,
+  init?: RequestInit,
+  options?: MatrycaFetchJsonOptions,
+): Promise<T> {
+  const timeoutMs = options?.timeoutMs ?? MATRYCA_FETCH_TIMEOUT_MS
   const token = await resolveMatrycaAuthToken()
   let response = await fetch(url, {
-    ...fetchInitWithTimeout(init, MATRYCA_FETCH_TIMEOUT_MS),
+    ...fetchInitWithTimeout(init, timeoutMs),
     headers: buildAuthenticatedHeaders(init, token),
   })
   if (response.status === 401) {
     invalidateMatrycaAuthToken()
     const refreshed = await resolveMatrycaAuthToken()
     response = await fetch(url, {
-      ...fetchInitWithTimeout(init, MATRYCA_FETCH_TIMEOUT_MS),
+      ...fetchInitWithTimeout(init, timeoutMs),
       headers: buildAuthenticatedHeaders(init, refreshed),
     })
   }

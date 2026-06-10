@@ -223,7 +223,7 @@ That means, in order:
 1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
 2. **Mypy** — strict type-check on `src/` and `tests/`
 3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag)
-4. **Pytest** — full suite (**683+** targets on `main`; slow tests excluded unless you run `make perf`)
+4. **Pytest** — full suite (**685+** targets on `main`; slow tests excluded unless you run `make perf`)
 
 GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 

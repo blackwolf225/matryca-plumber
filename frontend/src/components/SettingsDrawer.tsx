@@ -542,6 +542,15 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
     }
   }, [open])
 
+  const configLoaded = config !== null
+
+  const requestClose = () => {
+    if (isDirty && !window.confirm('Discard unsaved settings changes?')) {
+      return
+    }
+    onClose()
+  }
+
   const updateField = <K extends keyof PlumberConfig>(key: K, raw: PlumberConfig[K]) => {
     setDraft((prev) => ({ ...prev, [key]: raw }))
     setIsDirty(true)
@@ -573,21 +582,34 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
   }
 
   const handleSave = async () => {
+    if (!configLoaded) {
+      setSaveError('Configuration is still loading. Wait a moment and try again.')
+      return
+    }
     if (!validateDraft()) {
       setSaveError('Fix invalid numeric fields before saving.')
       return
     }
     setSaving(true)
     setSaveError(null)
-    const result = await onSave(draft)
-    setSaving(false)
-    if (result) {
-      setSaved(true)
-      setIsDirty(false)
-      setSaveError(null)
-      return
+    try {
+      const result = await onSave(draft)
+      setSaving(false)
+      if (result) {
+        setSaved(true)
+        setIsDirty(false)
+        setSaveError(null)
+        return
+      }
+      setSaveError('Could not save settings. Check the API connection and try again.')
+    } catch (error) {
+      setSaving(false)
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'Could not save settings. Check the API connection and try again.'
+      setSaveError(message)
     }
-    setSaveError('Could not save settings. Check the API connection and try again.')
   }
 
   const toggleSection = (id: string) => {
@@ -600,7 +622,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
         className={`fixed inset-0 z-40 bg-theme-base/60 backdrop-blur-sm transition-opacity duration-300 ${
           open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
         }`}
-        onClick={onClose}
+        onClick={requestClose}
         aria-hidden={!open}
       />
       <aside
@@ -624,7 +646,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               aria-label="Close settings"
               className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-theme-text px-4 text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-theme-accent/50 dark:text-theme-accent-foreground"
             >
@@ -702,6 +724,9 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
           </form>
 
           <footer className="space-y-2 border-t border-theme-border/50 px-5 py-4">
+            {!configLoaded ? (
+              <p className="text-[11px] text-theme-muted">Loading configuration from the API…</p>
+            ) : null}
             {saveError ? (
               <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-500" role="alert">
                 {saveError}
@@ -709,7 +734,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
             ) : null}
             <button
               type="button"
-              disabled={saving}
+              disabled={saving || !configLoaded}
               onClick={() => void handleSave()}
               className="w-full rounded-xl border border-theme-accent/80 bg-theme-accent px-4 py-2.5 text-sm font-medium text-theme-accent-foreground transition hover:bg-theme-accent/90 disabled:opacity-50"
             >

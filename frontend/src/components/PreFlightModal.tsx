@@ -172,11 +172,9 @@ export function PreFlightModal({
         setGraphSaveError(null)
         return
       }
-      if (!updated) {
-        setGraphSaveError(
-          graphCheck?.message ?? 'Could not save graph path. Check the path and try again.',
-        )
-      }
+      setGraphSaveError(
+        graphCheck?.message ?? 'Could not save graph path. Check the path and try again.',
+      )
     } catch (err) {
       setGraphSaveError(err instanceof Error ? err.message : 'Failed to save graph path')
     } finally {

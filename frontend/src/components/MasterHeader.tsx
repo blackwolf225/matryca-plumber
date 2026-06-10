@@ -111,6 +111,12 @@ export function MasterHeader({
       setUpdateModalOpen(false)
     }
   }, [updateInfo, updateModalOpen])
+
+  useEffect(() => {
+    if (preflightReady && !preflightLoading) {
+      setPreflightOpen(false)
+    }
+  }, [preflightReady, preflightLoading])
   const link = connectionBadge(connectionStatus)
   const daemonStatus = state?.status ?? 'stopped'
   const engineRunning = isEngineActive(daemonStatus) && !frozen
@@ -326,7 +332,7 @@ export function MasterHeader({
         }}
         onSave={async (payload) => {
           const updated = await onSaveConfig(payload)
-          await refreshPreflight()
+          void refreshPreflight()
           return updated
         }}
       />

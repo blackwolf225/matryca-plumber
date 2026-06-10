@@ -9,13 +9,17 @@ import type {
   PlumberPollSnapshot,
 } from '../types/daemon'
 import { normalizeDaemonState, normalizeGraphAnalytics } from '../types/daemon'
-import { MATRYCA_API_BASE, matrycaFetchJson } from '../utils/matrycaApiAuth'
+import {
+  MATRYCA_API_BASE,
+  MATRYCA_GRAPH_ANALYTICS_TIMEOUT_MS,
+  matrycaFetchJson,
+} from '../utils/matrycaApiAuth'
 
 /** Base interval between telemetry poll cycles (distributed requests within each cycle). */
 const POLL_CYCLE_MS = 5000
 /** Delay between sequential API calls inside one cycle to avoid request bursts. */
 const POLL_STAGGER_MS = 1200
-/** Fetch graph analytics every N cycles (~16s at 4s/cycle). */
+/** Fetch graph analytics every N cycles (~20s at 5s/cycle). */
 const GRAPH_ANALYTICS_EVERY_N_CYCLES = 4
 
 function sleep(ms: number): Promise<void> {
@@ -120,7 +124,11 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
   const pollGraphAnalytics = useCallback(async (): Promise<boolean> => {
     try {
       const graphAnalytics = normalizeGraphAnalytics(
-        await matrycaFetchJson<GraphAnalytics>(`${MATRYCA_API_BASE}/api/graph-analytics`),
+        await matrycaFetchJson<GraphAnalytics>(
+          `${MATRYCA_API_BASE}/api/graph-analytics`,
+          undefined,
+          { timeoutMs: MATRYCA_GRAPH_ANALYTICS_TIMEOUT_MS },
+        ),
       )
       if (!mountedRef.current) return false
       graphAnalyticsRef.current = graphAnalytics
@@ -136,7 +144,17 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
       return true
     } catch (error) {
       if (!mountedRef.current) return false
-      console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', error)
+      const message = error instanceof Error ? error.message : 'graph analytics request failed'
+      console.warn('[Matryca Plumber] poll: /api/graph-analytics failed', message)
+      if (stateRef.current) {
+        const offline = normalizeGraphAnalytics({ status: 'offline' })
+        const merged = normalizeDaemonState({
+          ...stateRef.current,
+          graph_analytics: offline,
+        })
+        stateRef.current = merged
+        setState(merged)
+      }
       return false
     }
   }, [])
@@ -359,10 +377,8 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
       }
       return updated
     } catch (error) {
-      if (mountedRef.current) {
-        setEngineError(error instanceof Error ? error.message : 'Failed to save config')
-      }
-      return null
+      const message = error instanceof Error ? error.message : 'Failed to save config'
+      throw error instanceof Error ? error : new Error(message)
     }
   }, [])
 
