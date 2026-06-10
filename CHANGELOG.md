@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **README onboarding** — Narrative hook, Karpathy positioning, non-technical “What it does for you” list, comparison table vs Logseq AI / Obsidian plugins, PyPI Downloads badge; Architecture section moved below Quick Install.
+- **Roadmap** — New root [`ROADMAP.md`](ROADMAP.md) (v1.9.x perfection track → v2.0 Shadow DB & Safe-Sync); linked from README Documentation Map.
 - **Phase 2 semantic clustering** — Daily journal pages under `journals/` are excluded from Louvain neighborhood clustering and from `[CLUSTER FOCUS]` LLM context injection; they process in a flat `[journals]` group instead of bloating `[unclustered]` (`src/graph/semantic_clustering.py`, `src/agent/maintenance_daemon.py`).
 - **Entity consolidation** — Skip `assess_entity_overlap` LLM calls when either title is a `journals/` page or a Logseq daily date string (e.g. `Tue, 22-10-2024`, `2024_10_22`); fixes wasted person-vs-date token spend (#68).
 

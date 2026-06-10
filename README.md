@@ -1,17 +1,22 @@
 # Matryca Plumber
 
-![Views](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/views-badge.json)
-![Clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/clones-badge.json)
+> I gave my AI access to my notes. It corrupted them.  
+> I built Matryca Plumber so that never happens again.
+
+**Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog), Matryca Plumber** is a local background assistant that keeps your Logseq notes organized, linked, and safe while you (or your AI) work — no cloud, no Logseq API, no silent overwrites.
+
+**Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — the product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
+
 [![CI](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
-
 [![Tests](https://img.shields.io/badge/tests-704%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
+
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![mypy](https://img.shields.io/badge/mypy-strict-2b6cb0)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/CONTRIBUTING.md)
-
 [![License](https://img.shields.io/github/license/MarcoPorcellato/matryca-plumber)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#-key-features--differentiators)
 [![Local-first](https://img.shields.io/badge/local--first-100%25%20offline-2ea44f)](#-key-features--differentiators)
@@ -20,71 +25,40 @@
 [![Security](https://img.shields.io/badge/security-policy-important)](SECURITY.md)
 [![Contributing](https://img.shields.io/badge/contributing-guide-blue)](CONTRIBUTING.md)
 [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant-4baaaa)](CODE_OF_CONDUCT.md)
+![Views](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/views-badge.json)
+![Clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/clones-badge.json)
+
+## What it does for you
+
+- Runs in the background on your laptop and reads your note files locally
+- Summarizes pages, suggests tags, and fixes broken `[[links]]` while you sleep
+- Lets Cursor / Claude connect via MCP to query and update notes safely
+- Aborts AI edits if you changed the same page — your typing always wins
+- Works offline with LM Studio or Ollama (no OpenAI/Anthropic subscription required)
+- Ships a local dashboard (`matryca plumber status`) to start/stop and tune safety modes
+
+## How it compares
+
+| Feature | Matryca Plumber | Official Logseq AI Plugin | Obsidian LLM Plugins |
+|---------|-----------------|----------------------------|----------------------|
+| Local-only | Yes — vault stays on disk | Typically cloud-backed | Mixed (local + cloud options) |
+| No API Key required | Yes — local LLM endpoint | Usually requires provider API key | Often requires API key |
+| OCC Safety (no corruption) | Yes — `st_mtime` + page locks | No comparable write guard | No standard OCC layer |
+| MCP Support | Yes — FastMCP stdio tools | No | Varies by plugin |
+
+*Matryca Plumber targets Logseq OG (Markdown on disk); Obsidian comparisons refer to common community plugins, not a single product.*
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
 > Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.13** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, Enterprise Resilience fixes, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-**Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — open-source local-first maintenance daemon for Logseq OG. The product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
-
-> **Current: v1.9.13** — **Enterprise Resilience Update.** Twelve high-impact architectural fixes close latent security, RAG precision, and automation gaps discovered during a full-codebase resilience sprint — **704 passing tests**, zero regressions. The Vault Sandbox cannot be bypassed via `templates_subdir` traversal; semantic cache keys no longer collide across namespaces; subtree reads stop at the matched heading (fewer tokens, no leaked sibling sections); corrupt vector stores and daemon ledgers self-heal instead of hard-crashing; `plumber stop` returns a truthful exit code for CI/CD. Upgrade with `uvx matryca-plumber` and read [`CHANGELOG.md`](CHANGELOG.md) for the full matrix.
->
-> **v1.9.x highlights** (full notes in [`CHANGELOG.md`](CHANGELOG.md)): **1.9.13** Enterprise Resilience (sandbox, RAG, automation); **1.9.11** Sovereign UI reliability on large vaults; **1.9.10** UI fast startup (`status`/`ui` vs `start`); **1.9.9** Security & Sandbox; **1.9.7** AX lenient page resolution; **1.9.6** Hermes lazy MCP; **1.9.5** LLM OS / `bootstrap_status`; **1.9.3** live UI telemetry; **1.9.0** structural link hygiene + agent CLI `--json`. The **1.9 line** is Agentic Knowledge Management for Logseq OG — local-first background AI with Sovereign UI, typed CLI, and direct Markdown AST mutation (no Logseq HTTP API), on top of v1.8 edge performance for **16 GB CPU-only** laptops. Inspired by [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog).
+> **Current: v1.9.13** — **Enterprise Resilience Update:** twelve hardening fixes for sandbox, RAG precision, and automation reliability — **704+ passing tests**, zero regressions. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
 > "Logseq is building the best local outliner database. But AI Agent memory is at the very bottom of their roadmap. Matryca Plumber gives you that future today, safely bridging your local agents to your Logseq graph without waiting years." - Marco Porcellato - Matryca.ai chief architect and co-founder
 
-Matryca Plumber is a **100% headless, sandboxed** **standalone daemon + CLI** that turns your local Logseq graph into a high token-density agentic workspace — **no network APIs and no Logseq desktop JSON-RPC**. It treats your vault as a **tree of blocks**, not a flat document store. Logseq OG remains optional: humans and the daemon co-edit the **same** `.md` trees on disk.
-
-**Matryca Plumber** is not a one-shot script — it is an **enterprise-grade, local-first background AI daemon for Logseq**. It polls your graph on a duty cycle, calls a local LLM (LM Studio or Ollama), appends semantic indexes, runs optional cognitive lint modules, and logs every token transaction — **while you edit the same `.md` files in Logseq or leave the vault idle**. Optional **MCP-attached** sessions reuse the identical mutation plane for interactive queries; they are **not** required for background operation. Every write path mirrors Logseq's on-disk AST contract: page frontmatter at line 0, block properties contiguous to their parent bullet, namespace filenames encoded exactly like Logseq's Clojure Datalog layer, and **optimistic concurrency control** that aborts stale writes when you type during inference.
-
-**Matryca Plumber** turns your local graph into a high token-density agentic workspace by continuously polling your notes, running local LLMs (like LM Studio or Ollama), appending semantic indexes, and healing broken links—all completely offline, while you work or sleep.
-
-**Zero Cloud. Zero Data Leaks. 100% Native Logseq AST.**
-
-## 🏗️ Architecture at a glance
-
-Matryca Plumber is a **three-surface runtime** — background daemon, Sovereign UI, and optional CLI/MCP — that converges on **one headless mutation plane**. Every surface reads and writes the same Logseq OG vault on disk (`LOGSEQ_GRAPH_PATH`): no Logseq HTTP API, no cloud database, no split-brain datastore. Humans co-edit the same `.md` trees while the daemon runs Phase 1 catalog harvest and Phase 2 cognitive lint against a **local LLM** (LM Studio or Ollama).
-
-```mermaid
-flowchart TB
-  subgraph operators [Operators and agents]
-    Human[Human · Logseq optional]
-    UI[Sovereign UI :8500]
-    Daemon[Maintenance daemon]
-    CLI[matryca CLI --json]
-    MCP[FastMCP stdio optional]
-  end
-
-  subgraph plane [Shared headless mutation plane]
-    GD[graph_dispatch]
-    Lock[OCC + page_rmw_lock]
-    Parser[logseq-matryca-parser]
-    GD --> Lock
-    GD --> Parser
-  end
-
-  subgraph local [Local inference — 100% offline]
-    LLM[LM Studio / Ollama]
-  end
-
-  subgraph vault [LOGSEQ_GRAPH_PATH — single source of truth]
-    Pages[pages/ · journals/ · templates/]
-    Meta[.matryca_* cache & ledgers\nmatryca-l1/ session rules]
-  end
-
-  Human <-->|co-edit Markdown| Pages
-  UI -->|start · stop · config · telemetry| Daemon
-  Daemon -->|Phase 1 harvest · Phase 2 lint| GD
-  Daemon <-->|structured JSON| LLM
-  CLI --> GD
-  MCP --> GD
-  Lock -->|atomic UTF-8 writes| Pages
-  Meta -.-> GD
-```
-
-Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Phase 1→2 lifecycle, Trust & Safety tiers, LLM OS contract).
+Under the hood it is a headless daemon + CLI that edits your Logseq `.md` files directly — see [**Architecture**](#-architecture-at-a-glance) and [**What does it actually do?**](#-what-does-it-actually-do) below.
 
 ---
 
@@ -192,6 +166,51 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Agent onboarding (v1.9.2+)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
 - **Security & Sandbox (v1.9.9)**: Sandbox-validated graph reads (`read_graph_file_text`), bounded JSON checkpoints, link-registry path validation, CI `sandbox-read-check` ([`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md), [`SECURITY.md`](SECURITY.md)).
 - **LLM OS contract (v1.9.5)**: Tier-2 agents check `bootstrap_status` and `[[Matryca Master Index]]` before blind vault search; Soft Gate offers Local Daemon / Blind Search / Cloud Indexing ([`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md), [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) § "LLM OS").
+
+---
+
+## 🏗️ Architecture at a glance
+
+Matryca Plumber is a **three-surface runtime** — background daemon, Sovereign UI, and optional CLI/MCP — that converges on **one headless mutation plane**. Every surface reads and writes the same Logseq OG vault on disk (`LOGSEQ_GRAPH_PATH`): no Logseq HTTP API, no cloud database, no split-brain datastore. Humans co-edit the same `.md` trees while the daemon runs Phase 1 catalog harvest and Phase 2 cognitive lint against a **local LLM** (LM Studio or Ollama).
+
+```mermaid
+flowchart TB
+  subgraph operators [Operators and agents]
+    Human[Human · Logseq optional]
+    UI[Sovereign UI :8500]
+    Daemon[Maintenance daemon]
+    CLI[matryca CLI --json]
+    MCP[FastMCP stdio optional]
+  end
+
+  subgraph plane [Shared headless mutation plane]
+    GD[graph_dispatch]
+    Lock[OCC + page_rmw_lock]
+    Parser[logseq-matryca-parser]
+    GD --> Lock
+    GD --> Parser
+  end
+
+  subgraph local [Local inference — 100% offline]
+    LLM[LM Studio / Ollama]
+  end
+
+  subgraph vault [LOGSEQ_GRAPH_PATH — single source of truth]
+    Pages[pages/ · journals/ · templates/]
+    Meta[.matryca_* cache & ledgers\nmatryca-l1/ session rules]
+  end
+
+  Human <-->|co-edit Markdown| Pages
+  UI -->|start · stop · config · telemetry| Daemon
+  Daemon -->|Phase 1 harvest · Phase 2 lint| GD
+  Daemon <-->|structured JSON| LLM
+  CLI --> GD
+  MCP --> GD
+  Lock -->|atomic UTF-8 writes| Pages
+  Meta -.-> GD
+```
+
+Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (Phase 1→2 lifecycle, Trust & Safety tiers, LLM OS contract).
 
 ---
 
@@ -339,6 +358,7 @@ make perf
 
 | Document | Description |
 |----------|-------------|
+| [`ROADMAP.md`](ROADMAP.md) | Short/medium/long-term path to v2.0 Shadow DB & Safe-Sync; links open milestones and issues. |
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9.9 Security & Sandbox + LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
