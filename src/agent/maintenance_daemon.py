@@ -832,7 +832,8 @@ def _read_lock_holder_pid(lock_path: Path) -> int | None:
     if not lock_path.is_file():
         return None
     try:
-        first_line = lock_path.read_text(encoding="utf-8", errors="replace").splitlines()[0].strip()
+        raw = lock_path.read_text(encoding="utf-8", errors="replace")  # sandbox-read-ok
+        first_line = raw.splitlines()[0].strip()
         return int(first_line)
     except (OSError, ValueError, IndexError):
         return None
@@ -892,7 +893,7 @@ def read_pid_file(graph_root: Path) -> int | None:
     if not path.is_file():
         return None
     try:
-        raw = path.read_text(encoding="utf-8", errors="replace").strip()
+        raw = path.read_text(encoding="utf-8", errors="replace").strip()  # sandbox-read-ok
     except OSError:
         return None
     if not raw:

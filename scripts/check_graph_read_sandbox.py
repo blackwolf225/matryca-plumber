@@ -31,8 +31,10 @@ ALLOWLIST = frozenset(
     },
 )
 
-# maintenance_daemon.py: only pid/lock reads are allowlisted inline.
-_DAEMON_ALLOWLINES = frozenset({823, 883})
+# maintenance_daemon.py: only reads tagged with this inline marker are allowlisted.
+# Using a marker (instead of hardcoded line numbers) keeps the check stable when
+# the daemon module is edited and lines shift.
+_DAEMON_ALLOW_MARKER = "sandbox-read-ok"
 
 _READ_TEXT_RE = re.compile(r"\.read_text\s*\(")
 
@@ -52,7 +54,7 @@ def main() -> int:
                 if rel == "src/agent/maintenance_daemon.py":
                     lines = path.read_text(encoding="utf-8").splitlines()
                     for lineno, line in enumerate(lines, start=1):
-                        if lineno in _DAEMON_ALLOWLINES:
+                        if _DAEMON_ALLOW_MARKER in line:
                             continue
                         if _READ_TEXT_RE.search(line):
                             violations.append(f"{rel}:{lineno}: {line.strip()}")
