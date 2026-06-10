@@ -69,9 +69,11 @@ flowchart LR
 
 A regex like `(\{.*\})` with `DOTALL` tells the engine: *“Match from the first `{` to the last `}` in the entire completion.”* If the model appended kilobytes of `\n` noise **before** a spurious trailing `}`, the extractor swallowed it all — slow, fragile, and wrong.
 
-**Balanced-brace extraction** counts `{` / `}` outside JSON strings and **stops at the first well-formed root object**. Everything after that closing brace is **out of scope** for the graph pipeline. This is **O(n)**, deterministic, and independent of model politeness.
+**Balanced extraction** counts `{` / `}` / `[` / `]` outside JSON strings and **stops at the first well-formed root value** (object or array). Everything after that closing delimiter is **out of scope** for the graph pipeline. This is **O(n)**, deterministic, and independent of model politeness.
 
-Implementation: `extract_json_object()` / `extract_json_payload_regex()` in [`json_repair.py`](../src/utils/json_repair.py).
+`extract_json_payload_regex()` tries whichever of `{` or `[` appears **first** in the completion, so array roots such as `[{...}, {...}]` (e.g. **reparent** group lists) are not collapsed to their leading object.
+
+Implementation: `extract_json_object()` / `extract_json_array()` / `extract_json_payload_regex()` in [`json_repair.py`](../src/utils/json_repair.py).
 
 ---
 
@@ -83,9 +85,9 @@ Implementation: `extract_json_object()` / `extract_json_payload_regex()` in [`js
 | **2. Spatial trim** | `sanitize_llm_completion_text()` before validation | — | Drop post-JSON tail; log trim size when significant |
 | **3. Gemma grammar repair** | `fix_gemma_leaked_literal_newline_before_keys()` | — | Normalize `\n  \"key` leakage into valid `"key` openings |
 | **4. Degenerate run collapse** | `collapse_degenerate_literal_backslash_n_runs()` (+ `\t`, `\"` runs) | — | Remove 16+/32+ literal escape loops |
-| **5. Legacy repair** | `fix_double_escaped_quote_runs()`, trailing garbage strip, bracket balance | — | Existing Gemma quote-leak fixes (v1.7+) |
+| **5. Legacy repair** | `fix_double_escaped_quote_runs()`, `strip_trailing_json_garbage()`, `balance_json_brackets()` | — | String-aware trailing trim + stack-ordered bracket close for truncated payloads (post-v1.9.11) |
 | **6. Schema gate** | Pydantic `SemanticIndexResult` + safe correction rules | — | No destructive graph writes from malformed proposals |
-| **7. Array roots** | `extract_json_array()` balanced `[` `]` | — | Same tail-trim contract for rare array-shaped payloads |
+| **7. Array roots** | `extract_json_array()` + first-delimiter `extract_json_payload_regex()` | — | Full array-of-objects payloads (reparent, rare array JSON) preserved end-to-end |
 | **8. Prose / compression** | `sanitize_prose_llm_completion()` + `MATRYCA_LLM_MAX_COMPRESSION_TOKENS` | `MATRYCA_LLM_PROSE_COMPLETION_MAX_CHARS` | Stops newline walls in Ermes history condensation; applied in `_compress_history_via_llm` **and** `condense_messages` before consolidated history is stored |
 | **9. History hygiene** | `sanitize_llm_history_turn()` on `_append_execution_turn` | — | Prevents one bad turn from poisoning the next page |
 
@@ -115,9 +117,13 @@ Foreground daemon: `probe_backend()` once at start; per-page `index_page`, boots
 | Newline wall in **compression** markdown | `_compress_history_via_llm`, `condense_messages` | Token cap + `sanitize_prose_llm_completion` **before** history inject |
 | Degenerate turn **amplified** on next page | `_append_execution_turn` | History hygiene before Ermes stores assistant JSON/markdown |
 | Greedy ingest of array JSON + tail | `extract_json_array` | Same balanced scanner as objects; greedy `.*` regex removed |
+| Array root collapsed to first object | `extract_json_payload_regex()` first-delimiter order | `[{...}, {...}]` stays an array through `loads_repaired_json` (fixes **reparent** payloads) |
+| `}` inside JSON string values | `strip_trailing_json_garbage()` balanced scan | Code/markdown strings with `} {` or `} [` no longer truncated mid-value |
+| Truncated `[{...` (wrong `]}` close) | `balance_json_brackets()` nesting stack | Interleaved arrays/objects close as `}]` in reverse open order |
 | `\t` / `\"` repetition loops | `collapse_degenerate_literal_*` | Parameter change: treat other escape tokens like `\n` |
 | **Truncated JSON** (no closing `}`) | `_recover_unbalanced_json_slice()` | When `max_tokens` cuts mid-object, salvage prefix + last `}` |
 | **MCP agent JSON** | `parse_json_object` → `loads_repaired_json` | Same repair for Cursor/Claude tool payloads |
+| **Reparent array payload** | `graph_dispatch` → `loads_repaired_json` | `refactor_blocks` / CLI reparent accepts JSON array of group objects |
 | **Path B retry pollution** | `append_correction_turn` collapses error tail | Self-correction prompts stay bounded |
 | **Huge cluster context** | `MATRYCA_CLUSTER_FOCUS_MAX_CHARS` | Louvain clusters cannot blow the stable prefix |
 | **Poisoned semantic cache** | `validate_cached_model` + `cache_evict` | Pre-fix degenerate JSON in `.matryca_semantic_cache` is dropped, not replayed |
@@ -151,6 +157,8 @@ Off by default. Production visibility remains `logs/matryca_plumber_ops.log` and
 | Sanitize + `SemanticIndexResult` | `test_sanitize_llm_completion_text_trims_tail_and_parses_index` |
 | Path B salvage | `tests/test_maintenance_daemon.py::test_completion_with_structured_output_uses_lenient_json_repair` |
 | JSON array + `\n` tail | `test_extract_json_array_ignores_degenerate_tail` |
+| Trailing garbage after object | `test_strip_trailing_garbage_block` |
+| Truncated array bracket balance | `test_balance_truncated_closing_brackets` |
 | Prose newline loop | `test_sanitize_prose_collapses_newline_loop` |
 | Compression `max_tokens` | `tests/test_llm_client_adaptive.py::test_compress_history_uses_max_tokens` |
 | Compression summary sanitize | `tests/test_context_compressor.py::test_condense_messages_sanitizes_compression_summary` |

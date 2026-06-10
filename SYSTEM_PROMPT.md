@@ -420,7 +420,7 @@ Splits wall-of-text bullets into children; parent keeps its `id::`. Empty `targe
 }
 ```
 
-Groups flat siblings under named section headers (same indent, non-overlapping UUIDs). **Always** `dry_run: true` first. Applying (`dry_run: false`) may git-snapshot when snapshots are enabled.
+Groups flat siblings under named section headers (same indent, non-overlapping UUIDs). `payload` must be a JSON **array** of group objects (not a single object); Matryca repairs common LLM JSON defects before parse. **Always** `dry_run: true` first. Applying (`dry_run: false`) may git-snapshot when snapshots are enabled.
 
 ```json
 {

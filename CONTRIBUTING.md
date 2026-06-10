@@ -42,7 +42,7 @@ These rules are enforced in code and in CI. **Violating them in a PR will be rej
 ### Phase 0 — Paradigm lock
 
 - Operate only on files inside the designated graph root (`path_sandbox.assert_path_within_graph`).
-- Read graph Markdown and sidecars with **`read_graph_file_text()`** (or bounded JSON helpers) — not raw `Path.read_text()` under `src/graph`, `src/agent`, or `src/rag`. CI **`make sandbox-read-check`** enforces this (v1.9.9).
+- Read graph Markdown and sidecars with **`read_graph_file_text()`** (or bounded JSON helpers) — not raw `Path.read_text()` under `src/graph`, `src/agent`, or `src/rag`. CI **`make sandbox-read-check`** enforces this (v1.9.9). The only daemon exception is pid/lock sidecar reads in `maintenance_daemon.py` tagged `# sandbox-read-ok` on the same line — see [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md).
 - Never introduce a central database, ORM, or external state store for graph content.
 - Prefer direct file I/O over the Logseq HTTP API for background linting, indexing, and analysis.
 
@@ -222,8 +222,8 @@ That means, in order:
 
 1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
 2. **Mypy** — strict type-check on `src/` and `tests/`
-3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag)
-4. **Pytest** — full suite (**685+** targets on `main`; slow tests excluded unless you run `make perf`)
+3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag; daemon pid/lock reads need `# sandbox-read-ok`)
+4. **Pytest** — full suite (**691+** targets on `main`; slow tests excluded unless you run `make perf`)
 
 GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 

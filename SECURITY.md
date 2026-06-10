@@ -39,7 +39,7 @@ Matryca Plumber ships several **defense-in-depth** controls you should configure
 
 **Dependency updates:** Transitive security fixes land via `uv.lock` (for example `aiohttp` ≥3.14.0 in v1.9.2). Dependabot PRs may trigger [`.github/workflows/dependabot-uv-fix.yml`](.github/workflows/dependabot-uv-fix.yml) to regenerate the lockfile on the PR branch.
 
-**Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (new installs from [`.env.example`](.env.example) template `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host ([Hermes Agent](docs/integrations/hermes-agent.md), Cursor, Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`. Graph code must read vault bytes through `read_graph_file_text()` — see [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md).
+**Recommended local setup:** loopback UI only, set `MATRYCA_UI_TOKEN` on shared machines (new installs from [`.env.example`](.env.example) template `MATRYCA_UI_REQUIRE_EXPLICIT_TOKEN=true`), enable `MATRYCA_MCP_ENABLED=true` only on machines where you trust the MCP host ([Hermes Agent](docs/integrations/hermes-agent.md), Cursor, Claude Desktop — full graph read/write, no stdio authentication), test graphs via `LOGSEQ_GRAPH_PATH` clones, and never commit `.env`. Graph code must read vault bytes through `read_graph_file_text()` — see [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md). CI `sandbox-read-check` allowlists only daemon pid/lock sidecar reads tagged `# sandbox-read-ok` in `maintenance_daemon.py`.
 
 ### MCP trust boundary
 

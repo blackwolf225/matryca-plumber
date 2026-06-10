@@ -175,6 +175,8 @@ A **monolithic** Uvicorn process serves:
 
 The UI never becomes a second source of truth: it reads daemon checkpoints and live graph scans; configuration writes go to the repo **`.env`** atomically and are picked up by `reload_plumber_dotenv()` on the next daemon sync cycle.
 
+**Daemon launch (post-v1.9.11):** `POST /api/daemon/start` spawns `plumber start --foreground` in a fresh interpreter (`start_new_session=True`). Success is verified by a **live PID** in `.matryca_plumber_daemon.pid` (`is_plumber_process`), not by the launcher subprocess staying alive. Stale PID files referencing a live non-Plumber process return `foreign_pid`; dead PIDs are removed before retry. The foreground worker publishes its PID immediately after acquiring `.matryca_plumber_daemon.lock`, registers bootstrap `SIGINT`/`SIGTERM` cleanup handlers, and removes PID/lock files on startup failure.
+
 ### 3. MCP server sidecar (FastMCP stdio)
 
 **Entry:** `matryca-plumber` with **no** CLI-shaped argv → `src/main.py` (lazy-imported from `plumber_entry.py`)
@@ -524,7 +526,7 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | UI abuse / probing | Split rate limits (`MATRYCA_UI_RATE_LIMIT_*`); session route loopback-only |
 | MCP stdio exposure | `MATRYCA_MCP_ENABLED` gate in `plumber_entry.py` (default off) |
 | MCP error leakage | `mcp_tool_guard._public_tool_error_message` unless `MATRYCA_DEBUG` |
-| Daemon exclusivity | `.matryca_plumber_daemon.lock` (POSIX flock / Windows `msvcrt`) |
+| Daemon exclusivity | `.matryca_plumber_daemon.lock` (POSIX flock / Windows `msvcrt`); PID sidecar published at lock acquisition; CI `# sandbox-read-ok` allowlist for pid/lock reads only |
 | Ledger durability | `save_daemon_state` tmp + fsync + replace + `.bak` + `json_flock` |
 
 ---
@@ -603,7 +605,7 @@ After Phase 1 completes, `run_bootstrap_pipeline` calls `release_phase1_memory()
 |-----------|--------|----------|
 | **Frozen KV prefix** | `page_prompt_session.py`, `prompt_layout.py` | `FrozenPromptPrefix` + SHA-256 `verify_unchanged()`; ops JSONL `kv_prefix_hash` |
 | **Adaptive structured output** | `llm_client.py` | `probe_backend()` → Path A (strict `json_schema`) or Path B (3-try self-correction); `StructuredOutputExhaustedError` on failure |
-| **Resilient JSON (TRIZ)** | `json_repair.py`, `llm_client.py` | `max_tokens` cap + balanced-brace extract + Gemma tail sanitizer — see [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md) |
+| **Resilient JSON (TRIZ)** | `json_repair.py`, `llm_client.py` | `max_tokens` cap + first-delimiter balanced extract + string-aware trailing trim + stack-ordered bracket close + Gemma tail sanitizer — see [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md) |
 | **mmap Phase 1 reads** | `markdown_io.py`, `master_catalog.py` | `mmap_graph_page()` + `extract_catalog_fields_from_mmap()` when `MATRYCA_GRAPH_READ_MMAP=true` |
 | **CPU sandbox** | `process_priority.py` | `apply_cpu_sandbox()` — affinity + idle I/O when `MATRYCA_CPU_SANDBOX=true` and `psutil` installed (`[edge]` extra) |
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **LLM JSON repair (array roots)** — `extract_json_payload_regex()` prefers whichever of `{` or `[` appears first, so array-shaped payloads (e.g. `refactor_blocks` **reparent** groups) are no longer collapsed to their leading object; `balance_json_brackets()` closes truncated interleaved structures in correct nesting order (`}]` not `]}`).
+- **LLM JSON repair (string-aware trim)** — `strip_trailing_json_garbage()` uses balanced object/array scanning instead of a regex, so `}` / `[` inside string values (code snippets, markdown) are not mistaken for trailing garbage.
+- **Daemon launch reliability** — PID file is published at foreground worker lock acquisition (before heavy bootstrap); bootstrap `SIGINT`/`SIGTERM` handlers and startup failure paths remove stale PID/lock files; Sovereign UI **Start Engine** spawns `plumber start --foreground` and treats a live published PID as success even when the launcher subprocess exits; stale PID files pointing at live non-Plumber processes return `foreign_pid` instead of being overwritten.
+- **CI sandbox-read gate** — `scripts/check_graph_read_sandbox.py` allowlists daemon pid/lock sidecar reads via inline `# sandbox-read-ok` markers instead of brittle hardcoded line numbers.
+
+### Changed
+
+- **Docs** — [`docs/resilience-llm-json-triz.md`](docs/resilience-llm-json-triz.md), [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`docs/PROJECT_DIARY.md`](docs/PROJECT_DIARY.md) harmonized with the JSON-repair and daemon-launch fixes above.
+
 ## [1.9.11] - 2026-06-10
 
 **Sovereign UI reliability — large vault operator fixes**

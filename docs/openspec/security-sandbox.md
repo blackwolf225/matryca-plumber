@@ -53,6 +53,16 @@ make ci                   # format-check + lint + typecheck + sandbox-read-check
 
 New graph reads in `src/graph/`, `src/agent/`, `src/rag/`, or `src/semantic/` must go through `read_graph_file_text()` / `read_graph_page_text()` unless allowlisted in the check script.
 
+**Allowlisted exceptions (not graph markdown):**
+
+| File | Rule |
+|------|------|
+| `src/graph/path_sandbox.py`, `src/graph/markdown_io.py` | Sandbox primitives |
+| `src/agent/maintenance_daemon.py` | Only pid/lock sidecar reads tagged `# sandbox-read-ok` on the same line as `.read_text()` |
+| `src/utils/bounded_json.py`, `src/utils/config_paths.py`, … | Non-vault config I/O (see script `ALLOWLIST`) |
+
+Do **not** add new `# sandbox-read-ok` markers for graph `pages/` or `journals/` markdown — use `read_graph_file_text()` instead.
+
 ---
 
 ## Related specs

@@ -1,12 +1,37 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.9**).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.11**, with post-release fixes tracked under `CHANGELOG.md` `[Unreleased]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-10] Post-v1.9.11 — JSON repair hardening & daemon launch reliability
+
+### Context
+
+Runtime probes after v1.9.11 found three latent defects in the LLM JSON salvage path and one in daemon/UI startup coordination.
+
+### Defects crushed
+
+1. **Array root collapsed to first object** — `extract_json_payload_regex()` always preferred `{` before `[`, so `[{...}, {...}]` reparent payloads parsed as a single dict and failed `isinstance(..., list)` in `graph_dispatch`.
+2. **Trailing garbage regex inside strings** — `strip_trailing_json_garbage()` matched `}` followed by `{`/`[`/`"` even inside JSON string values (common in code-snippet fields), truncating valid completions.
+3. **Wrong bracket close order** — `balance_json_brackets()` appended all `]` then all `}`, producing invalid `]}` for truncated `[{...` slices.
+4. **Start Engine false negatives** — PID was published too late in bootstrap; UI launcher subprocess exit was misread as failure; stale foreign PIDs could be overwritten.
+
+### Milestones shipped
+
+1. **String-aware JSON repair** — first-delimiter extract, balanced trailing trim, nesting-stack bracket balance (`json_repair.py`).
+2. **Daemon PID contract** — publish at lock acquisition; bootstrap signal handlers; `foreign_pid` guard; UI spawns `plumber start --foreground`.
+3. **CI allowlist stability** — `# sandbox-read-ok` inline markers replace hardcoded line numbers in `check_graph_read_sandbox.py`.
+
+### Architectural outcome
+
+The LLM resilience stack now treats **array roots** and **string interiors** as first-class cases — not edge cases discovered only in production reparent calls. Daemon launch success is defined by a **live published PID**, matching the contract documented since v1.9.3 live telemetry.
 
 ---
 

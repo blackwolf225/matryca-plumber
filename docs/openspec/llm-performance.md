@@ -97,8 +97,9 @@ Small models (e.g. **Gemma 4-E4b**) may omit `<eos>` under strict JSON and enter
 | Layer | Mechanism |
 |-------|-----------|
 | Brake | `MATRYCA_LLM_MAX_COMPLETION_TOKENS` (default 2048) on all structured completions |
-| Scalpel | Brace-balanced extraction — **not** greedy `{.*}` regex |
+| Scalpel | First-delimiter balanced extract (`{` or `[`) — **not** greedy `{.*}` regex |
 | Filter | `sanitize_llm_completion_text()` + Gemma key/run repair in [`json_repair.py`](../../src/utils/json_repair.py) |
+| Salvage | `strip_trailing_json_garbage()` + `balance_json_brackets()` — string-aware trim and nesting-order close for truncated payloads |
 
 Full TRIZ framing, failure anatomy, and verification: **[`resilience-llm-json-triz.md`](../resilience-llm-json-triz.md)**.
 
