@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
-from ...graph.alias_index import normalize_concept_key
+from ...graph.alias_index import normalize_concept_key, should_skip_entity_overlap_pair
 from ...graph.generational_cache import patch_generational_caches_for_paths
 from ...graph.markdown_blocks import graph_safe_page_path, occ_snapshot
 from ...graph.property_line_edit import append_page_alias_line
@@ -44,6 +44,8 @@ def run_entity_consolidation(
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
+        if should_skip_entity_overlap_pair(graph_root, page_title, target):
+            continue
 
         baselines: dict[str, float | None] = {}
         for candidate in (page_title, target):

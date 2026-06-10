@@ -22,6 +22,7 @@ from src.agent.plumber_llm import (
 from src.agent.plumber_modules import run_cognitive_lint_pipeline
 from src.agent.plumber_modules.auto_split import run_auto_split
 from src.agent.plumber_modules.dangling_healer import run_dangling_healer
+from src.agent.plumber_modules.entity_consolidation import run_entity_consolidation
 from src.agent.plumber_modules.marpa_framework import run_marpa_framework
 from src.agent.plumber_modules.property_hygiene import run_property_hygiene
 from src.agent.semantic_lint_prompts import build_semantic_lint_system_prompt
@@ -378,6 +379,74 @@ def test_marpa_disabled_by_default_leaves_file_untouched(graph_root: Path) -> No
     )
     assert "marpa_framework" not in outcome.modules_run
     assert path.read_text(encoding="utf-8") == original
+
+
+class CountingOverlapLLM(StubPlumberLLM):
+    def __init__(self) -> None:
+        self.overlap_calls: list[tuple[str, str]] = []
+
+    def assess_entity_overlap(
+        self,
+        *,
+        title_a: str,
+        title_b: str,
+        context: str,
+    ) -> EntityOverlapResult:
+        _ = context
+        self.overlap_calls.append((title_a, title_b))
+        return EntityOverlapResult(
+            overlap_score=0.9,
+            canonical_title=title_a,
+            alias_title=title_b,
+            should_merge_alias=True,
+            reason="stub",
+        )
+
+
+def test_entity_consolidation_skips_journal_wikilink_target(graph_root: Path) -> None:
+    journals = graph_root / "journals"
+    journals.mkdir(parents=True)
+    journal_title = "Tue, 22-10-2024"
+    (journals / f"{journal_title}.md").write_text("- daily note\n", encoding="utf-8")
+    path = _write_page(
+        graph_root,
+        "Francesco Panizzo",
+        f"- Meeting with [[{journal_title}]] and [[Other Topic]]\n",
+    )
+    _write_page(graph_root, "Other Topic", "- related note\n")
+    llm = CountingOverlapLLM()
+    outcome = run_entity_consolidation(
+        graph_root,
+        path,
+        "Francesco Panizzo",
+        path.read_text(encoding="utf-8"),
+        llm=llm,
+        threshold=0.5,
+    )
+    assert llm.overlap_calls == [("Francesco Panizzo", "Other Topic")]
+    assert outcome.pages_modified == ["Francesco Panizzo"]
+
+
+def test_entity_consolidation_skips_date_shaped_title_without_journal_path(
+    graph_root: Path,
+) -> None:
+    path = _write_page(
+        graph_root,
+        "Francesco Panizzo",
+        "- See [[Tue, 22-10-2024]] for context\n",
+    )
+    date_page = graph_root / "pages" / "Tue, 22-10-2024.md"
+    date_page.write_text("- misfiled date page\n", encoding="utf-8")
+    llm = CountingOverlapLLM()
+    run_entity_consolidation(
+        graph_root,
+        path,
+        "Francesco Panizzo",
+        path.read_text(encoding="utf-8"),
+        llm=llm,
+        threshold=0.5,
+    )
+    assert llm.overlap_calls == []
 
 
 def test_marpa_validation_section_is_replaced_on_rerun(graph_root: Path) -> None:

@@ -110,3 +110,22 @@ def test_build_alias_index_respects_wikilink_commas(tmp_path: Path) -> None:
     idx = build_alias_index(tmp_path)
     assert idx.resolve("Acme, Inc").canonical_page_title == "Acme"
     assert idx.resolve("Acme Corp").canonical_page_title == "Acme"
+
+
+def test_is_likely_journal_date_title_matches_logseq_formats() -> None:
+    from src.graph.alias_index import is_likely_journal_date_title
+
+    assert is_likely_journal_date_title("2026_06_05") is True
+    assert is_likely_journal_date_title("Tue, 22-10-2024") is True
+    assert is_likely_journal_date_title("Francesco Panizzo") is False
+
+
+def test_should_skip_entity_overlap_pair_for_journal_title(tmp_path: Path) -> None:
+    from src.graph.alias_index import build_alias_index, should_skip_entity_overlap_pair
+
+    journals = tmp_path / "journals"
+    journals.mkdir(parents=True)
+    (journals / "2026_06_05.md").write_text("- daily\n", encoding="utf-8")
+    build_alias_index(tmp_path)
+    assert should_skip_entity_overlap_pair(tmp_path, "Person", "2026_06_05") is True
+    assert should_skip_entity_overlap_pair(tmp_path, "Person", "Machine Learning") is False

@@ -100,6 +100,37 @@ def is_journal_page_title(graph_root: str | Path, title: str) -> bool:
     return relpath.replace("\\", "/").startswith("journals/")
 
 
+_JOURNAL_DATE_TITLE = re.compile(
+    r"^("
+    r"\d{4}[_/.\-]\d{1,2}[_/.\-]\d{1,2}"
+    r"|"
+    r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|"
+    r"Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)"
+    r"[a-z]*,?\s+\d"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def is_likely_journal_date_title(title: str) -> bool:
+    """Heuristic for Logseq daily journal page titles (locale date strings, ``YYYY_MM_DD``)."""
+    stripped = title.strip()
+    if not stripped:
+        return False
+    return bool(_JOURNAL_DATE_TITLE.match(stripped))
+
+
+def should_skip_entity_overlap_pair(
+    graph_root: str | Path,
+    title_a: str,
+    title_b: str,
+) -> bool:
+    """Return whether entity consolidation should skip an LLM overlap check."""
+    if is_journal_page_title(graph_root, title_a) or is_journal_page_title(graph_root, title_b):
+        return True
+    return is_likely_journal_date_title(title_a) or is_likely_journal_date_title(title_b)
+
+
 @dataclass
 class AliasIndex:
     """In-memory alias map built from a single graph scan."""
@@ -385,7 +416,9 @@ __all__ = [
     "iter_scannable_pages_markdown",
     "iter_alias_source_paths",
     "is_journal_page_title",
+    "is_likely_journal_date_title",
     "normalize_concept_key",
+    "should_skip_entity_overlap_pair",
     "page_title_from_path",
     "purge_stale_alias_entries",
     "remove_page_from_alias_index",
