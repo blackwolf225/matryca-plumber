@@ -16,7 +16,6 @@ _DOUBLE_ESCAPED_QUOTE_RUN_RE = re.compile(r'\\""\s*,\s*\\"')
 _LEAKED_JSON_KEY_IN_STRING_RE = re.compile(
     r'(?<=\\"),\s*\\"(?=[a-zA-Z_][a-zA-Z0-9_]*\\"\s*:)',
 )
-_TRAILING_GARBAGE_RE = re.compile(r"\}\s*[\{\[\"].*$", re.DOTALL)
 # Gemma often emits ``\n \n \n`` (literal backslash-n plus spaces); allow optional whitespace.
 _DEGENERATE_LITERAL_BACKSLASH_N_RUN_RE = re.compile(r"(?:\\n\s*){12,}")
 _DEGENERATE_LITERAL_BACKSLASH_T_RUN_RE = re.compile(r"(?:\\t){16,}")
@@ -266,14 +265,23 @@ def sanitize_llm_history_turn(content: str) -> str:
 
 
 def strip_trailing_json_garbage(text: str) -> str:
-    """Remove trailing tokens such as ``} { "`` after the root object."""
-    trimmed = text.rstrip()
-    while True:
-        match = _TRAILING_GARBAGE_RE.search(trimmed)
-        if match is None:
-            break
-        trimmed = trimmed[: match.start()] + "}"
-    return trimmed.rstrip()
+    """Remove trailing tokens such as ``} { "`` after the first JSON value.
+
+    Uses a string-aware balanced scan so braces/brackets inside string
+    literals are never mistaken for the end of the payload.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+    if stripped[0] == "{":
+        end = _find_balanced_object_end(stripped, 0)
+    elif stripped[0] == "[":
+        end = _find_balanced_array_end(stripped, 0)
+    else:
+        return stripped
+    if end is None:
+        return stripped
+    return stripped[: end + 1]
 
 
 def balance_json_brackets(text: str) -> str:
