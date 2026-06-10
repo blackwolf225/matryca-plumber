@@ -7,22 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.12] - 2026-06-10
+
+**Enterprise Resilience Update — 12 architectural hardening fixes**
+
 ### Fixed
 
-- **MCP tool options (`bounded_int_from_options`)** — JSON booleans (`true`/`false`) are rejected instead of silently coercing to `0`/`1` via `int()`.
-- **Subtree heading filter** — `read_subtree_markdown` stops at the matched heading's indent so sibling sections are not leaked into the excerpt.
-- **`templates_subdir` path traversal** — `ensure_graph_runtime_directories` rejects `..` segments in wiki YAML `templates_subdir` and falls back to `templates`.
-- **Semantic cache key collision** — `semantic_cache_key` prefixes the parent directory name so pages with the same basename in different namespaces no longer share a cache entry.
+#### Security & Sandbox
+
+- **`templates_subdir` path traversal** — `ensure_graph_runtime_directories` rejects `..` segments in wiki YAML `templates_subdir` and falls back to `templates`, so the Vault Sandbox cannot be bypassed via wiki config.
 - **Bounded JSON read (TOCTOU)** — `read_bounded_json` reads at most `cap + 1` bytes in a single `open("rb")` call, closing the stat-then-read race that could bypass the memory-DoS cap.
-- **Block vector store self-heal** — `load_block_vector_store` catches corrupt vector records (`ValueError`/`TypeError`) and falls back to an empty store instead of hard-crashing hybrid search.
-- **Dual embedding text dedup** — `_block_text` skips identical `content`/`clean_text` pairs so plain blocks are not embedded twice.
-- **`plumber stop` exit code** — CLI returns non-zero when `stop_daemon` reports `ok: false`, matching `start`/`audit`/`cluster` behavior for automation.
-- **Alias index (comma in wikilink)** — `_split_alias_segments` reuses `split_logseq_property_list_values` so `alias:: [[Acme, Inc]], Acme Corp` no longer splits on commas inside `[[wikilinks]]`.
+
+#### RAG & AI Precision
+
+- **Semantic cache key collision** — `semantic_cache_key` prefixes the parent directory name so pages with the same basename in different namespaces no longer share a cache entry.
+- **Dual embedding text dedup** — `_block_text` skips identical `content`/`clean_text` pairs so plain blocks are not embedded twice (prevents cosine-score skewing).
+- **Subtree heading filter** — `read_subtree_markdown` stops at the matched heading's indent so sibling sections are not leaked into the excerpt (saves tokens, prevents hallucinated context).
 - **LLM JSON repair (unbalanced slice)** — `_recover_unbalanced_json_slice` finds the last structural `}`/`]` outside string literals, so truncated payloads with `}` inside values are not silently truncated.
-- **Journey ledger restore** — `JourneyDayLedger.from_json` coerces corrupt numeric fields via `_coerce_int`, so hand-edited daemon state no longer blocks restart.
-- **Link verification (`*`/`+` bullets)** — `_BULLET_RE` matches `[-*+]` bullets like the rest of `src/graph/`, so URLs/assets on star/plus blocks are extracted and verified.
 - **LLM JSON repair (array roots)** — `extract_json_payload_regex()` prefers whichever of `{` or `[` appears first, so array-shaped payloads (e.g. `refactor_blocks` **reparent** groups) are no longer collapsed to their leading object; `balance_json_brackets()` closes truncated interleaved structures in correct nesting order (`}]` not `]}`).
 - **LLM JSON repair (string-aware trim)** — `strip_trailing_json_garbage()` uses balanced object/array scanning instead of a regex, so `}` / `[` inside string values (code snippets, markdown) are not mistaken for trailing garbage.
+
+#### Core Stability & Automation
+
+- **Block vector store self-heal** — `load_block_vector_store` catches corrupt vector records (`ValueError`/`TypeError`) and falls back to an empty store instead of hard-crashing hybrid search.
+- **Journey ledger restore** — `JourneyDayLedger.from_json` coerces corrupt numeric fields via `_coerce_int`, so hand-edited daemon state no longer blocks restart.
+- **MCP tool options (`bounded_int_from_options`)** — JSON booleans (`true`/`false`) are rejected instead of silently coercing to `0`/`1` via `int()`.
+- **`plumber stop` exit code** — CLI returns non-zero when `stop_daemon` reports `ok: false`, matching `start`/`audit`/`cluster` behavior for automation.
+- **Alias index (comma in wikilink)** — `_split_alias_segments` reuses `split_logseq_property_list_values` so `alias:: [[Acme, Inc]], Acme Corp` no longer splits on commas inside `[[wikilinks]]`.
+- **Link verification (`*`/`+` bullets)** — `_BULLET_RE` matches `[-*+]` bullets like the rest of `src/graph/`, so URLs/assets on star/plus blocks are extracted and verified.
 - **Daemon launch reliability** — PID file is published at foreground worker lock acquisition (before heavy bootstrap); bootstrap `SIGINT`/`SIGTERM` handlers and startup failure paths remove stale PID/lock files; Sovereign UI **Start Engine** spawns `plumber start --foreground` and treats a live published PID as success even when the launcher subprocess exits; stale PID files pointing at live non-Plumber processes return `foreign_pid` instead of being overwritten.
 - **CI sandbox-read gate** — `scripts/check_graph_read_sandbox.py` allowlists daemon pid/lock sidecar reads via inline `# sandbox-read-ok` markers instead of brittle hardcoded line numbers.
 
