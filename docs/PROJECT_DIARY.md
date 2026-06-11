@@ -1,12 +1,31 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.11**, with post-release fixes tracked under `CHANGELOG.md` `[Unreleased]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.14** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.9.14]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-10] v1.9.14 — Contributor readiness & scoped tech debt
+
+### Context
+
+Pre-v2.0 OSS onboarding sprint: document the open-issue backlog for external contributors, land low-risk DRY fixes, and improve Phase 2 token economics on journal-heavy vaults without a `logseq-matryca-parser` semver bump.
+
+### Shipped
+
+1. **`good_first_issues_blueprints.md`** — six curated audit issues with copy-paste GitHub welcome comments (#45, #53, #56, #69, #71, `#62` Literal slice).
+2. **#64 (scoped)** — `safe_update_alias` / `safe_alias_items` in `alias_state.py` centralize upstream `SessionAliasRegistry` private dict access; full public parser API deferred to v2.0 Shadow DB.
+3. **#62 (NoRedirect slice)** — shared `NoRedirect` in `src/utils/network.py` for preflight and Sovereign UI `/v1/models` probes.
+4. **Journal-aware Phase 2** — daily `journals/` pages excluded from Louvain neighborhood clustering and `[CLUSTER FOCUS]` injection; flat `[journals]` group.
+5. **Entity consolidation (#68)** — skip `assess_entity_overlap` when either wikilink is a journal page or Logseq date string.
+6. **Docs** — README narrative refresh, root `ROADMAP.md`, `llms.txt` v1.9.14, release notes in `docs/releases/v1.9.14-GITHUB.md`.
+
+**Suite:** 710+ tests green · mypy strict · ruff clean.
 
 ---
 

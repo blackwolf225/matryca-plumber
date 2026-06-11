@@ -1,4 +1,4 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.13)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.9.14)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
@@ -9,7 +9,7 @@ Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as thi
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.9.13 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.9.14 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +47,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.9.13)
+## 2. Core CLI (verified v1.9.14)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -180,7 +180,7 @@ Spec: `docs/openspec/agent-ax-robustness.md`
 
 ### 2.4 Security & Sandbox (v1.9.9+)
 
-Graph reads and writes stay inside **`LOGSEQ_GRAPH_PATH`**. v1.9.9 adds defense-in-depth beyond MCP title normalization; **v1.9.13 (Enterprise Resilience)** hardens parsing and RAG boundaries — TOCTOU-safe bounded JSON reads, `templates_subdir` traversal rejection, namespace-aware semantic cache keys, subtree heading fences (token-efficient excerpts), and string-aware LLM JSON recovery so braces inside string values do not truncate payloads.
+Graph reads and writes stay inside **`LOGSEQ_GRAPH_PATH`**. v1.9.9 adds defense-in-depth beyond MCP title normalization; **v1.9.13 (Enterprise Resilience)** hardens parsing and RAG boundaries — TOCTOU-safe bounded JSON reads, `templates_subdir` traversal rejection, namespace-aware semantic cache keys, subtree heading fences (token-efficient excerpts), and string-aware LLM JSON recovery so braces inside string values do not truncate payloads. **v1.9.14** adds journal-aware Phase 2 clustering (daily notes no longer inflate `[unclustered]` or cluster-focus prompts) and skips entity-consolidation LLM turns for journal/date wikilink pairs.
 
 | Control | Operator note |
 |---------|----------------|

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.14] - 2026-06-10
+
+**Contributor Readiness & Tech Debt Cleanup**
+
+### Added
+
+- **Good First Issues blueprints** — Root [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) with six curated v1.9.x audit issues and copy-paste GitHub contributor guide comments for external onboarding.
+
 ### Fixed
 
 - **SessionAliasRegistry SLF001** — Centralized upstream private dict access in `safe_update_alias` / `safe_alias_items` helpers (`src/agent/alias_state.py`); `graph_tool_helpers.py` no longer mutates `_alias_to_uuid` directly (#64).

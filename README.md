@@ -12,7 +12,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
-[![Tests](https://img.shields.io/badge/tests-704%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-710%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
 
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -50,9 +50,9 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.13** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, Enterprise Resilience fixes, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.14** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, journal-aware Phase 2 clustering, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-> **Current: v1.9.13** — **Enterprise Resilience Update:** twelve hardening fixes for sandbox, RAG precision, and automation reliability — **704+ passing tests**, zero regressions. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
+> **Current: v1.9.14** — **Contributor Readiness & Tech Debt Cleanup:** OSS onboarding blueprints, journal-aware Phase 2 clustering, entity-consolidation token savings, and scoped tech-debt fixes (#62, #64) — **710+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -270,6 +270,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 🧠 **LLM OS (v1.9.5):** Two-tier agent discipline, `bootstrap_status` semaphore, Master Index Soft Gate — [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 * ⚡ **Live telemetry (v1.9.3):** 5s Sovereign UI updates, thread-safe daemon heartbeat, API token overlay from ops log — [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md).
 * 🛡️ **Enterprise Resilience (v1.9.13):** Vault Sandbox traversal blocked; TOCTOU-safe bounded JSON; namespace-aware semantic cache; exact embedding dedup; subtree heading fences; string-aware LLM JSON recovery; self-healing vector store and daemon state; truthful `plumber stop` exit codes — [`CHANGELOG.md`](CHANGELOG.md) · [`docs/resilience-llm-json-triz.md`](docs/resilience-llm-json-triz.md).
+* 🧹 **Contributor readiness (v1.9.14):** [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) for external contributors; journal pages isolated in Phase 2 clustering; entity-consolidation skips journal/date wikilink pairs; shared `NoRedirect` HTTP helper and alias-registry compatibility helpers — [`CHANGELOG.md`](CHANGELOG.md) · [`ROADMAP.md`](ROADMAP.md).
 * 🖥️ **Sovereign UI reliability (v1.9.11):** Settings save and **Start Engine** stay responsive on large vaults (lazy bootstrap); pre-flight `warn` is advisory — [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md).
 
 ---
@@ -345,7 +346,7 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (704+ passing, Mypy strict)
+# Run tests (710+ passing, Mypy strict)
 make check
 
 # Optional: slow memory / harvest soak tests
@@ -359,6 +360,7 @@ make perf
 | Document | Description |
 |----------|-------------|
 | [`ROADMAP.md`](ROADMAP.md) | Short/medium/long-term path to v2.0 Shadow DB & Safe-Sync; links open milestones and issues. |
+| [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) | Six curated good-first issues with copy-paste GitHub contributor comments (v1.9.14). |
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.9.9 Security & Sandbox + LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |

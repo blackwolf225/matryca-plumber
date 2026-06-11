@@ -1,6 +1,6 @@
 # Good First Issues — Contributor Blueprints
 
-Six open issues selected from the v1.9.x perfection audit backlog as the easiest, most self-contained entry points for external contributors. Each section includes a ready-to-paste GitHub comment.
+**Shipped in v1.9.14** — six open issues selected from the v1.9.x perfection audit backlog as the easiest, most self-contained entry points for external contributors. Each section includes a ready-to-paste GitHub comment.
 
 **Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `fix(link): use file_mtime_drifted in link_verification (#45)`).
 

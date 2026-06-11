@@ -6,7 +6,7 @@ Matryca Plumber is local data infrastructure for headless AI agents working with
 
 Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](https://github.com/MarcoPorcellato/matryca-plumber/discussions/19).
 
-*Status as of v1.9.13 — issue numbers link to GitHub; scope may shift as milestones close.*
+*Status as of v1.9.14 — issue numbers link to GitHub; scope may shift as milestones close.*
 
 ---
 
@@ -18,6 +18,7 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - Agent surface: [`llms.txt`](llms.txt), [`.well-known/llms.txt`](.well-known/llms.txt), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)
 - Operator workflow in [CONTRIBUTING.md](CONTRIBUTING.md) — Discussions for RFCs, issues for trackable work
 - “Test vault first” guidance in README (clone graph before pointing at production)
+- Good-first issue blueprints — [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) (six curated audit issues with contributor comments)
 
 ### Tech debt & integrity (prerequisite for v2.0)
 
@@ -37,7 +38,8 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 
 - Split `maintenance_daemon.py`; handler registry for `graph_dispatch.py`
 - Centralize env parsing; eliminate `type: ignore` suppressions
-- Public API on `SessionAliasRegistry`; journal page detection in graph layer
+- ~~Public API on `SessionAliasRegistry`~~ — scoped v1.9.14 helpers in `alias_state.py` (#64 partial); full upstream API deferred to v2.0
+- Journal page detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
 
 ---
 
@@ -87,6 +89,7 @@ Not backlog — context for where we are today:
 | v1.9.5 | LLM OS Soft Gate, `bootstrap_status`, Safe-Sync OG write path |
 | v1.9.9 | Security & Sandbox milestone |
 | v1.9.13 | Enterprise Resilience (704+ tests, sandbox/RAG/automation hardening) |
+| v1.9.14 | Contributor readiness (#62/#64 tech debt), journal-aware Phase 2 clustering, good-first issue blueprints (710+ tests) |
 
 ---
 
@@ -94,4 +97,4 @@ Not backlog — context for where we are today:
 
 - **RFCs & architecture:** [GitHub Discussions](https://github.com/MarcoPorcellato/matryca-plumber/discussions)
 - **Trackable work:** open [Issues](https://github.com/MarcoPorcellato/matryca-plumber/issues) — link PRs with `Fixes #N`
-- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) · `make check` before opening a PR
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) · [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) · `make check` before opening a PR

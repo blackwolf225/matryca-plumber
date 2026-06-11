@@ -310,6 +310,8 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 
 **Templates:** [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) — `feature_request.yml`, `bug_report.yml`, `epic.yml`, `question.yml`.
 
+**Good first issues (v1.9.14):** [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) lists six curated audit issues (#45, #53, #56, #69, #71, and a `#62` Literal dedup slice) with copy-paste welcome comments — paste onto the GitHub issue when inviting external contributors.
+
 ---
 
 ## Reporting bugs
