@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **SessionAliasRegistry SLF001** — Centralized upstream private dict access in `safe_update_alias` / `safe_alias_items` helpers (`src/agent/alias_state.py`); `graph_tool_helpers.py` no longer mutates `_alias_to_uuid` directly (#64).
+- **HTTP NoRedirect DRY** — Shared `NoRedirect` handler in `src/utils/network.py` replaces duplicate classes in `preflight.py` and `ui_server.py` (#62).
+
 ### Changed
 
 - **README onboarding** — Narrative hook, Karpathy positioning, non-technical “What it does for you” list, comparison table vs Logseq AI / Obsidian plugins, PyPI Downloads badge; Architecture section moved below Quick Install.

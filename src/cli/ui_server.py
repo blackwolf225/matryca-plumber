@@ -59,6 +59,7 @@ from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.env_placeholders import is_template_env_path
 from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
+from ..utils.network import NoRedirect
 from ..utils.preflight import run_preflight_checks
 from ..utils.provision_l1 import provision_matryca_l1_sibling
 from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
@@ -327,19 +328,7 @@ def _fetch_lm_studio_models(base_url: str) -> LmModelsResponse:
     """Query ``GET /v1/models`` on an OpenAI-compatible local inference server."""
     models_url = f"{resolve_llm_base_url(override=base_url).rstrip('/')}/models"
 
-    class _NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(
-            self,
-            req: urllib.request.Request,
-            fp: Any,
-            code: int,
-            msg: str,
-            headers: Any,
-            newurl: str,
-        ) -> None:
-            return None
-
-    opener = urllib.request.build_opener(_NoRedirect())
+    opener = urllib.request.build_opener(NoRedirect())
     try:
         request = urllib.request.Request(models_url, headers={"Accept": "application/json"})
         with opener.open(request, timeout=5.0) as response:

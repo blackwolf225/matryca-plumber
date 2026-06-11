@@ -2912,9 +2912,7 @@ class MaintenanceDaemon:
                 break
             if llm_turns_this_cycle >= cycle_budget:
                 break
-            uses_cluster_focus = (
-                cluster_cycle and cluster_id not in CLUSTER_IDS_WITHOUT_FOCUS
-            )
+            uses_cluster_focus = cluster_cycle and cluster_id not in CLUSTER_IDS_WITHOUT_FOCUS
             if uses_cluster_focus:
                 self._begin_cluster_context(cluster_id, cluster_paths)
                 state.current_cluster_files_total = len(cluster_paths)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import ItemsView
 from pathlib import Path
+from typing import cast
 
 from logseq_matryca_parser.agent_press import XRAY_STATE_FILENAME, SessionAliasRegistry
 
@@ -51,7 +53,7 @@ def save_alias_registry(graph_root: str | Path, registry: SessionAliasRegistry) 
     """Persist ``SessionAliasRegistry`` atomically under an exclusive file lock."""
     path = alias_file_path(graph_root)
     root = _graph_root_path(graph_root)
-    payload = {str(alias): block_uuid for alias, block_uuid in registry._alias_to_uuid.items()}  # noqa: SLF001
+    payload = {str(alias): block_uuid for alias, block_uuid in safe_alias_items(registry)}
     data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
     with page_rmw_lock(path):
         atomic_write_bytes(path, data, graph_root=root)
@@ -83,6 +85,17 @@ def resolve_pipe_target(graph_root: str | Path, target: str) -> str:
     if len(parts) == 2 and parts[0] and parts[1]:
         return f"{parts[0]}|{resolve_target(graph_root, parts[1])}"
     return resolve_target(graph_root, target)
+
+
+def safe_update_alias(registry: SessionAliasRegistry, alias: int, target_uuid: str) -> None:
+    """Scoped v1.9.x compatibility helper to update the upstream registry."""
+    registry._alias_to_uuid[alias] = target_uuid  # noqa: SLF001
+    registry._uuid_to_alias[target_uuid] = alias  # noqa: SLF001
+
+
+def safe_alias_items(registry: SessionAliasRegistry) -> ItemsView[int, str]:
+    """Iterate alias→UUID pairs for persistence without leaking private access."""
+    return cast(ItemsView[int, str], registry._alias_to_uuid.items())  # noqa: SLF001
 
 
 __all__ = [

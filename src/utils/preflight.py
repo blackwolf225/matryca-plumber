@@ -24,6 +24,7 @@ from ..config import load_matryca_wiki_config
 from ..graph.concurrency_probe import probe_concurrency_capability
 from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
 from .llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
+from .network import NoRedirect
 from .runtime_bootstrap import ensure_repo_dotenv_from_example, prepare_matryca_runtime
 
 PreflightStatus = Literal["pass", "fail", "warn"]
@@ -69,19 +70,7 @@ def _probe_openai_models(base_url: str, *, timeout_s: float = 3.0) -> tuple[bool
     """Return ``(ok, message, model_ids)`` from ``GET /v1/models``."""
     models_url = f"{resolve_llm_base_url(override=base_url).rstrip('/')}/models"
 
-    class _NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(
-            self,
-            req: urllib.request.Request,
-            fp: Any,
-            code: int,
-            msg: str,
-            headers: Any,
-            newurl: str,
-        ) -> None:
-            return None
-
-    opener = urllib.request.build_opener(_NoRedirect())
+    opener = urllib.request.build_opener(NoRedirect())
     try:
         request = urllib.request.Request(models_url, headers={"Accept": "application/json"})
         with opener.open(request, timeout=timeout_s) as response:

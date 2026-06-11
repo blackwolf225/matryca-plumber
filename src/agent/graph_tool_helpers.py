@@ -149,7 +149,7 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
     from logseq_matryca_parser.agent_press import SessionAliasRegistry, to_xray_markdown
 
     from ..rag.matryca_hooks import get_spatial_context, resolve_logseq_page_md
-    from .alias_state import alias_file_path, save_alias_registry
+    from .alias_state import alias_file_path, safe_update_alias, save_alias_registry
 
     title = page_name.strip()
     if not title:
@@ -174,8 +174,7 @@ def read_xray_page_markdown(graph_path: str, page_name: str) -> str:
     persistable = _persistable_alias_map(roots, parser_alias_map)
     persist_registry = SessionAliasRegistry()
     for alias, block_uuid in persistable.items():
-        persist_registry._alias_to_uuid[alias] = block_uuid  # noqa: SLF001
-        persist_registry._uuid_to_alias[block_uuid] = alias  # noqa: SLF001
+        safe_update_alias(persist_registry, alias, block_uuid)
     save_alias_registry(graph_path, persist_registry)
     alias_count = len(persistable)
     state_name = alias_file_path(graph_path).name
