@@ -3,7 +3,7 @@
 > I gave my AI access to my notes. It corrupted them.  
 > I built Matryca Plumber so that never happens again.
 
-**Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog), Matryca Plumber** is a local background assistant that keeps your Logseq notes organized, linked, and safe while you (or your AI) work — no cloud, no Logseq API, no silent overwrites.
+**Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog), Matryca Plumber** is a local background assistant that keeps your Logseq notes organized, linked, and safe while you (or your AI) work — no cloud, no Logseq API, no silent overwrites. It has also CLI/MCP for your AI agents to directly read/write on your notes. It's a promising new architecture for agentic memory with graph architecture and markdown based.
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — the product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
