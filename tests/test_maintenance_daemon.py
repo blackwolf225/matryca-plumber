@@ -1872,6 +1872,11 @@ def test_run_cycle_journal_phase1_only_skips_semantic_indexing(
 ) -> None:
     """``journals/`` pages get AST/OCC settle; ``pages/`` still run Phase-2 semantic indexing."""
     monkeypatch.setenv("MATRYCA_THERMAL_DELAY_COGNITIVE", "0")
+    monkeypatch.setattr("src.agent.maintenance_daemon.reload_plumber_dotenv", lambda **_kw: None)
+    monkeypatch.setenv("MATRYCA_LINT_SEMANTIC_ROUTING", "false")
+    monkeypatch.setenv("MATRYCA_LINT_BACKPROPAGATE_LINKS", "false")
+    # Enable one cognitive module so the spy runs without a local operator ``.env``.
+    monkeypatch.setenv("MATRYCA_LINT_MARPA_FRAMEWORK", "true")
 
     journal_dir = graph_root / "journals"
     journal_dir.mkdir(parents=True)
@@ -1969,14 +1974,15 @@ def test_run_cycle_journal_phase1_only_skips_semantic_indexing(
     )
     monkeypatch.setattr(GraphAstCache, "apply_file_event", _spy_apply)
 
-    run_bootstrap_harvest(graph_root, llm=StubLLM(), incremental=False, phase1_strict=True)
+    phase2_state = DaemonState(bootstrap_complete=True)
+    save_daemon_state(graph_root, phase2_state)
     daemon = MaintenanceDaemon(
         graph_root,
         llm_client=SemanticProbeLLM(),
-        max_files_per_cycle=2,
+        max_files_per_cycle=5,
     )
     daemon.bootstrap_complete = True
-    state = daemon.run_cycle()
+    state = daemon.run_cycle(phase2_state)
 
     journal_key = graph_relative_path_key(journal_path, graph_root)
     page_key = graph_relative_path_key(page_path, graph_root)

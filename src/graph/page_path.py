@@ -45,7 +45,11 @@ def page_title_from_graph_relpath(relpath: str) -> str:
 
 def page_title_from_path(graph_root: Path, path: Path) -> str:
     """Derive Logseq-style page title from an absolute path under the graph root."""
-    rel = path.relative_to(graph_root).as_posix()
+    from .path_sandbox import assert_path_within_graph, resolved_graph_root
+
+    root = resolved_graph_root(graph_root)
+    resolved = assert_path_within_graph(path, graph_root)
+    rel = resolved.relative_to(root).as_posix()
     return page_title_from_graph_relpath(rel)
 
 
