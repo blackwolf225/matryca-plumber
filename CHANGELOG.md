@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [1.9.15] - 2026-06-12
 
-- **Journal Phase-2 skip** — Daily notes under `journals/` receive Phase-1 structural indexing only (AST cache refresh, link registry, OCC `mtime` ledger); semantic LLM indexing and dual embeddings are bypassed (`src/agent/maintenance_daemon.py`).
+**Strict Mypy Compliance & Journal Phase-2 Bypass**
 
 ### Fixed
 
 - **Mypy strictness (#60)** — Removed all 11 `# type: ignore` suppressions under `src/`; replaced with `cast()`, `isinstance()` narrowing, `Path()` coercion, a `_FilesystemObserver` Protocol, and lambda key functions so strict mypy passes without cheats.
+
+### Changed
+
+- **Journal Phase-2 skip** — Daily notes under `journals/` receive Phase-1 structural indexing only (AST cache refresh, link registry, OCC `mtime` ledger); semantic LLM indexing and dual embeddings are bypassed (`src/agent/maintenance_daemon.py`).
 
 ## [1.9.14] - 2026-06-10
 
