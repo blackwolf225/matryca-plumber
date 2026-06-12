@@ -221,9 +221,9 @@ npm run build
 That means, in order:
 
 1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
-2. **Mypy** — strict type-check on `src/` and `tests/`
+2. **Mypy** — strict type-check on `src/` and `tests/` (**zero `# type: ignore` in `src/`** — see [Strict typing](#strict-typing-zero-mypy-suppressions-in-src))
 3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag; daemon pid/lock reads need `# sandbox-read-ok`)
-4. **Pytest** — full suite (**691+** targets on `main`; slow tests excluded unless you run `make perf`)
+4. **Pytest** — full suite (**712+** targets on `main`; slow tests excluded unless you run `make perf`)
 
 GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 
@@ -273,6 +273,22 @@ Most regressions are caught by exercising **`MaintenanceDaemon`**, **`plumber_mo
 - **`src/`** must satisfy **strict mypy**; tests may relax annotations per Ruff `per-file-ignores` for `tests/**`.
 
 When you add or change behavior on the **Agentic OS** path, **extend or add tests under [`tests/`](tests/)** so Ironclad invariants stay pinned before review.
+
+### Strict typing: zero mypy suppressions in `src/`
+
+Matryca Plumber enforces **`[tool.mypy] strict = true`** on `src/` and `tests/` ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)). Production code must **not** use `# type: ignore` to silence the checker.
+
+| Situation | Preferred fix |
+|-----------|----------------|
+| JSON / disk literals deserialized into `Literal` unions | `typing.cast()` **after** a runtime membership check |
+| Third-party types without stubs (e.g. `watchdog.Observer`) | Define a minimal `typing.Protocol` for the methods you call |
+| `dict.get` / `max()` key callbacks | Lambda or explicit loop — avoid passing partially-typed bound methods |
+| `PathLike` vs `Path` at API boundaries | `Path(graph_root)` at the call site when the callee expects `Path` |
+| `int()` on `object` from JSON | `isinstance()` branches for `bool`, `int`, `float`, `str`; default for unknown types |
+
+**Forbidden in `src/`:** new `# type: ignore`, `# mypy: ignore-errors`, or `@no_type_check` on modules. If mypy reports an error you cannot resolve without a suppression, refactor the types or open an issue — do not merge a ignore comment.
+
+Verification: `uv run mypy src tests` (also run via `make typecheck` / `make check`).
 
 ---
 

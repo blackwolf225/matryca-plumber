@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -448,7 +448,7 @@ class DaemonState:
                 files[str(path)] = FileState(
                     mtime=float(rec.get("mtime", 0.0)),
                     processed_at=str(rec.get("processed_at", "")),
-                    status=str(rec.get("status", "processed")),  # type: ignore[arg-type]
+                    status=cast(FileStatus, str(rec.get("status", "processed"))),
                     error=rec.get("error") if rec.get("error") is not None else None,
                     lock_backoff_until=(
                         float(backoff_until) if backoff_until is not None else None
@@ -460,7 +460,7 @@ class DaemonState:
         return cls(
             version=int(payload.get("version", 1)),
             files=files,
-            status=str(payload.get("status", "idle")),  # type: ignore[arg-type]
+            status=cast(DaemonStatus, str(payload.get("status", "idle"))),
             model=str(payload.get("model", DEFAULT_LM_MODEL)),
             bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
             bootstrap_failed=bool(payload.get("bootstrap_failed", False)),
@@ -511,7 +511,7 @@ def _bootstrap_recent_from_json(
         if harvest not in ("regex", "llm", "skipped", "error"):
             continue
         recent[str(path)] = BootstrapRecentEntry(
-            harvest=harvest,  # type: ignore[arg-type]
+            harvest=cast(BootstrapHarvestStatus, harvest),
             processed_at=str(rec.get("processed_at", "")),
         )
     return recent
@@ -1766,6 +1766,19 @@ def page_needs_phase2_cognitive(
     if _page_is_terminal_skip(text):
         return False
 
+    if is_journal_page_path(graph_root, path):
+        _key, rec = _lookup_file_state(graph_root, state, path)
+        mtime = path.stat().st_mtime
+        if rec is None:
+            return True
+        if not _mtime_matches(rec.mtime, mtime):
+            return True
+        if rec.status == "error":
+            return False
+        if _lock_backoff_active(rec):
+            return False
+        return False
+
     _key, rec = _lookup_file_state(graph_root, state, path)
     mtime = path.stat().st_mtime
     if rec is None:
@@ -1795,6 +1808,8 @@ def compute_phase2_progress_metrics(
     for path in iter_alias_source_paths(graph_root):
         title = _page_title_from_path(graph_root, path)
         if title in MATRYCA_GENERATED_PAGE_TITLES:
+            continue
+        if is_journal_page_path(graph_root, path):
             continue
         total += 1
         _key, rec = _lookup_file_state(graph_root, state, path)
@@ -2517,6 +2532,47 @@ class MaintenanceDaemon:
                 merge_page_links_into_registry(self.graph_root, path, content)
         return False
 
+    def _settle_journal_structural_cycle_file(
+        self,
+        path: Path,
+        state: DaemonState,
+        *,
+        cluster_id: str | None = None,
+    ) -> bool:
+        """Phase-1 structural settle for ``journals/`` pages (no semantic LLM or embeddings)."""
+        key = _daemon_file_key(self.graph_root, path)
+        mtime = path.stat().st_mtime
+        state.last_file = sanitize_for_console(key)
+        if cluster_id is not None:
+            state.phase2_cluster_file_in_flight = True
+        self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
+        self._save_cycle_checkpoint(state, path=path)
+        try:
+            if path.is_file():
+                content = read_graph_file_text(path, self.graph_root, errors="replace")
+                if link_verify_enabled():
+                    with contextlib.suppress(OSError):
+                        merge_page_links_into_registry(self.graph_root, path, content)
+            get_graph_ast_cache(self.graph_root).apply_file_event(path, "modified")
+            state.files[key] = FileState(
+                mtime=path.stat().st_mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="processed",
+            )
+        except Exception as exc:  # noqa: BLE001 - per-file settle must not abort cycle
+            state.files[key] = FileState(
+                mtime=mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="error",
+                error=str(exc),
+            )
+        finally:
+            if cluster_id is not None:
+                state.phase2_cluster_file_in_flight = False
+        self._mark_telemetry_dirty()
+        self._save_cycle_checkpoint(state, path=path)
+        return False
+
     def _process_llm_cycle_file(
         self,
         path: Path,
@@ -2527,6 +2583,12 @@ class MaintenanceDaemon:
         cluster_id: str | None = None,
     ) -> bool:
         """Index one pending page via LLM path. Returns whether inference ran this turn."""
+        if is_journal_page_path(self.graph_root, path):
+            return self._settle_journal_structural_cycle_file(
+                path,
+                state,
+                cluster_id=cluster_id,
+            )
         key = _daemon_file_key(self.graph_root, path)
         mtime = path.stat().st_mtime
         title = _page_title_from_path(self.graph_root, path)

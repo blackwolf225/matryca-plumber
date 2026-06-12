@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from ..agent.cooperative_yield import io_batch_pause_seconds, yield_host
 from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
@@ -56,7 +56,7 @@ def _progress_harvest_status(raw_status: str) -> BootstrapHarvestStatus | None:
     if raw_status == "skipped_empty":
         return "skipped"
     if raw_status in ("regex", "llm", "skipped", "error"):
-        return raw_status  # type: ignore[return-value]
+        return cast(BootstrapHarvestStatus, raw_status)
     return None
 
 

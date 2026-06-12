@@ -101,6 +101,14 @@ When Shadow DB SQLite + FTS5 ships (v2.0), follow the migration trigger in [`llm
 
 ---
 
+## Contributor quality bar (codebase)
+
+Patches that touch `src/` must pass **`make check`**, including **mypy strict with zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)). Use `typing.Protocol`, `cast()` after runtime checks, and `isinstance()` narrowing — not suppressions. Full policy: [`CONTRIBUTING.md`](../../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
+
+Daemon duty-cycle changes must respect the **journal Phase-2 bypass**: `journals/` pages get structural AST/OCC settle only; semantic LLM indexing applies to `pages/` — [`llm-performance.md`](llm-performance.md#journal-pages--phase-2-semantic-bypass).
+
+---
+
 ## Related reading
 
 - [`llm-os-instructions.md`](llm-os-instructions.md) — two-tier architecture, Soft Gate, `bootstrap_status`

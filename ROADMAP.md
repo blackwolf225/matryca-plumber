@@ -32,12 +32,12 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 
 - Incremental AST reload instead of full-vault rescans
 - Catalog and alias hot-path optimizations; checkpoint debounce
-- Skip Phase 2 LLM work on daily journals; UI progress denominator fixes
+- ~~Skip Phase 2 LLM work on daily journals; UI progress denominator fixes~~ — **done** (journal structural-only settle + Phase-2 vault metrics exclude `journals/`)
 
 **[v1.9.12 — Code Perfection & Tech Debt](https://github.com/MarcoPorcellato/matryca-plumber/milestone/8)** ([#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57)–[#64](https://github.com/MarcoPorcellato/matryca-plumber/issues/64), [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
 
 - Split `maintenance_daemon.py`; handler registry for `graph_dispatch.py`
-- Centralize env parsing; eliminate `type: ignore` suppressions
+- Centralize env parsing; ~~eliminate `type: ignore` suppressions~~ — **done** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60); zero `# type: ignore` in `src/`)
 - ~~Public API on `SessionAliasRegistry`~~ — scoped v1.9.14 helpers in `alias_state.py` (#64 partial); full upstream API deferred to v2.0
 - Journal page detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
 
@@ -90,6 +90,7 @@ Not backlog — context for where we are today:
 | v1.9.9 | Security & Sandbox milestone |
 | v1.9.13 | Enterprise Resilience (704+ tests, sandbox/RAG/automation hardening) |
 | v1.9.14 | Contributor readiness (#62/#64 tech debt), journal-aware Phase 2 clustering, good-first issue blueprints (710+ tests) |
+| Unreleased | Mypy strict `#60` (zero `src/` ignores); journal Phase-2 semantic bypass with Phase-1 AST/OCC preserved (712+ tests) |
 
 ---
 
