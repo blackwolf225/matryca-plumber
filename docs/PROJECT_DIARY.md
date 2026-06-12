@@ -10,6 +10,21 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
+## [2026-06-12] Unreleased — Mypy strictness (#60) & journal Phase-2 bypass
+
+### Context
+
+Two v1.9.x perfection-track items closed without a parser semver bump: eliminate mypy cheat suppressions in `src/`, and stop burning LLM tokens on daily fleeting notes that the daemon itself mutates heavily.
+
+### Shipped
+
+1. **Mypy strictness (#60)** — Removed all 11 `# type: ignore` comments under `src/`; replaced with `typing.cast()`, `isinstance()` narrowing, `Path()` coercion, a `_FilesystemObserver` Protocol (`file_watcher.py`), and lambda key functions. `uv run mypy src tests` passes with `strict = true` and **zero** production suppressions.
+2. **Journal Phase-2 skip** — Files under `journals/` still enter the duty cycle for **Phase-1 structural settle** (AST cache `apply_file_event`, link-registry merge, OCC `mtime` ledger via `_settle_journal_structural_cycle_file`) but **bypass** cognitive lint, `index_page`, semantic index writes, and dual embeddings. `page_needs_phase2_cognitive` never re-queues settled journals for semantic work; vault progress metrics exclude `journals/` from the Phase-2 denominator.
+
+**Suite:** 712+ tests green · mypy strict (no `src/` ignores) · ruff clean.
+
+---
+
 ## [2026-06-10] v1.9.14 — Contributor readiness & scoped tech debt
 
 ### Context

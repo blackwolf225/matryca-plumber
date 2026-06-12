@@ -9,6 +9,8 @@ Matryca Plumber can **atomically ingest** external Markdown (email bodies, expor
 
 This complements the **Search → Scan → Update** workflow in `SYSTEM_PROMPT.md`: use `ingest_document` when the payload is already outline-shaped Markdown and you want a **single transactional append** (destination + ledgers) instead of hand-planned `mutate_graph` / `write_outline` steps.
 
+> **Terminology:** This RFC's **Phase 2** is **external Markdown ingestion** (`ingest_document` → L2 graph append). That is distinct from the maintenance daemon's **Phase 2 cognitive indexing** (`_process_llm_cycle_file`), which applies semantic LLM lint to `pages/` only. Daily notes under `journals/` receive daemon **Phase-1 structural sync** (AST cache, OCC ledger) but **skip** semantic indexing and embeddings — see [`llm-performance.md`](llm-performance.md#journal-pages--phase-2-semantic-bypass).
+
 ---
 
 ## MCP tool: `ingest_document`

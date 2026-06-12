@@ -50,7 +50,7 @@ flowchart TB
   Locks --> Vault
 ```
 
-**Quality bar:** **637+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests`, Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
+**Quality bar:** **712+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
@@ -63,6 +63,8 @@ flowchart TB
 **v1.9.4 focus:** **Journey Log consolidation** — one cumulative `- 🤖 Matryca Activity` bullet per calendar day (`DaemonState.journey_day` ledger + `upsert_matryca_activity_block`); idle cycles skip journal writes; legacy `##` sections stripped on first upsert. Spec: [`openspec/agent-dx.md`](openspec/agent-dx.md) §4.
 
 **v1.9.5 focus:** **LLM OS agent contract** — two-tier Gardener vs Cognitive Agent discipline, Master Index **Soft Gate** (Human-in-the-Loop), `read_graph_data` / `bootstrap_status` Phase 1 semaphore, Safe-Sync read/write rules. Spec: [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md); cognitive law in [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) § "LLM OS".
+
+**Unreleased (v1.9.x perfection track):** **Journal Phase-2 bypass** — daily notes under `journals/` receive structural indexing only (AST cache, link registry, OCC `mtime` ledger); semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — all `# type: ignore` suppressions removed from `src/`; strict typing via Protocols, `cast()`, and runtime narrowing. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing) and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 ---
 
@@ -287,6 +289,23 @@ stateDiagram-v2
   Phase2 --> [*]
 ```
 
+### Journal pages — structural-only indexing
+
+Daily fleeting notes live under **`journals/`** (Logseq daily pages). The daemon and Journey Log mutate these files frequently; running full Phase-2 cognitive lint and semantic embeddings on every journal edit wastes local LLM tokens and GPU prefill time without improving long-horizon knowledge structure.
+
+| Path | Phase-1 (structural) | Phase-2 (semantic / LLM) |
+|------|----------------------|---------------------------|
+| **`pages/**/*.md`** | Bootstrap catalog, fast-track structural checks, AST cache on watchdog events | Cognitive lint modules, `index_page`, semantic index append, optional dual embeddings |
+| **`journals/**/*.md`** | `_settle_journal_structural_cycle_file`: read content, merge link registry, `get_graph_ast_cache().apply_file_event`, persist `FileState` with current `mtime` | **Skipped** — no `run_cognitive_lint_pipeline`, `index_page`, `apply_semantic_page_result`, or `run_dual_embedding_after_semantic_write` |
+
+**Detection:** `is_journal_page_path(graph_root, page_path)` — first path segment under the graph root is `journals` (`src/agent/plumber_modules/_shared.py`).
+
+**Queue semantics:** `page_needs_phase2_cognitive` returns `true` only while a journal lacks a matching ledger entry or `mtime` drift (structural settle pending). Once settled, journals never re-enter the semantic queue. `compute_phase2_progress_metrics` excludes `journals/` from the Phase-2 vault denominator.
+
+**Preserved:** File watcher AST refresh on external edits; Journey Log upsert still uses `page_rmw_lock` + OCC on today's journal; link verification batch pass unchanged.
+
+Spec detail: [`openspec/llm-performance.md`](openspec/llm-performance.md#journal-pages--phase-2-semantic-bypass).
+
 ---
 
 ## Headless mutation plane (shared by all surfaces)
@@ -374,7 +393,7 @@ Local LLM inference is **slow** (seconds to minutes). Logseq users keep editing 
 
 Cognitive modules (`apply_semantic_page_result`, `property_hygiene`, `auto_split`, `append_page_alias_line`, …) thread `baseline_mtime` through this gate. After Plumber’s **own** intermediate write in the same request, callers may **`OCCSnapshot.refresh_after_own_write()`** to re-baseline multi-step edits.
 
-**Phase 2 daemon (`_process_llm_cycle_file`):** The maintenance daemon does **not** hold `page_rmw_lock` during cognitive lint or `index_page` LLM inference. It snapshots mtime, reads content, runs modules and the LLM (each cognitive write acquires its own short lock scope), re-checks drift, then commits only inside **`apply_semantic_page_result`** — matching the sequence diagram below. Holding the page lock across multi-minute inference would block Logseq saves and other writers without adding OCC value.
+**Phase 2 daemon (`_process_llm_cycle_file`):** For **`pages/`** only (not `journals/`), the maintenance daemon does **not** hold `page_rmw_lock` during cognitive lint or `index_page` LLM inference. It snapshots mtime, reads content, runs modules and the LLM (each cognitive write acquires its own short lock scope), re-checks drift, then commits only inside **`apply_semantic_page_result`** — matching the sequence diagram below. Journal paths delegate to `_settle_journal_structural_cycle_file` before any LLM work. Holding the page lock across multi-minute inference would block Logseq saves and other writers without adding OCC value.
 
 **Semantic index prompts:** `_enumerate_blocks_for_prompt` caps the block UUID catalog at **8000 characters** (aligned with the page body cap in `_build_index_prompt`) so block-rich pages cannot blow the local context window; truncated catalogs include an explicit omission note for the model.
 

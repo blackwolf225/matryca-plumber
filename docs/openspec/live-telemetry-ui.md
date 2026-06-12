@@ -60,7 +60,7 @@ sequenceDiagram
 
 - Click **Start Engine** (or start `matryca plumber start` before opening the UI) for the full live console.
 - During Phase 1 on large vaults, expect pill updates about every **5 pages** and percent updates at heartbeat + catalog checkpoints.
-- Phase 2 vault progress increments per processed file; full vault rescans remain at cycle boundaries (every 10 cycles) to avoid O(pages) scans on every tick.
+- Phase 2 vault progress increments per processed `pages/` file; **`journals/` are excluded** from the cognitive-indexing denominator (structural settle only). Full vault rescans remain at cycle boundaries (every 10 cycles) to avoid O(pages) scans on every tick.
 
 ## v1.9.11 graph analytics polling
 

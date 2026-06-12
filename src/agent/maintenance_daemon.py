@@ -1766,6 +1766,19 @@ def page_needs_phase2_cognitive(
     if _page_is_terminal_skip(text):
         return False
 
+    if is_journal_page_path(graph_root, path):
+        _key, rec = _lookup_file_state(graph_root, state, path)
+        mtime = path.stat().st_mtime
+        if rec is None:
+            return True
+        if not _mtime_matches(rec.mtime, mtime):
+            return True
+        if rec.status == "error":
+            return False
+        if _lock_backoff_active(rec):
+            return False
+        return False
+
     _key, rec = _lookup_file_state(graph_root, state, path)
     mtime = path.stat().st_mtime
     if rec is None:
@@ -1795,6 +1808,8 @@ def compute_phase2_progress_metrics(
     for path in iter_alias_source_paths(graph_root):
         title = _page_title_from_path(graph_root, path)
         if title in MATRYCA_GENERATED_PAGE_TITLES:
+            continue
+        if is_journal_page_path(graph_root, path):
             continue
         total += 1
         _key, rec = _lookup_file_state(graph_root, state, path)
@@ -2517,6 +2532,47 @@ class MaintenanceDaemon:
                 merge_page_links_into_registry(self.graph_root, path, content)
         return False
 
+    def _settle_journal_structural_cycle_file(
+        self,
+        path: Path,
+        state: DaemonState,
+        *,
+        cluster_id: str | None = None,
+    ) -> bool:
+        """Phase-1 structural settle for ``journals/`` pages (no semantic LLM or embeddings)."""
+        key = _daemon_file_key(self.graph_root, path)
+        mtime = path.stat().st_mtime
+        state.last_file = sanitize_for_console(key)
+        if cluster_id is not None:
+            state.phase2_cluster_file_in_flight = True
+        self._sync_live_telemetry(state, cluster_id=cluster_id, mark_running=True)
+        self._save_cycle_checkpoint(state, path=path)
+        try:
+            if path.is_file():
+                content = read_graph_file_text(path, self.graph_root, errors="replace")
+                if link_verify_enabled():
+                    with contextlib.suppress(OSError):
+                        merge_page_links_into_registry(self.graph_root, path, content)
+            get_graph_ast_cache(self.graph_root).apply_file_event(path, "modified")
+            state.files[key] = FileState(
+                mtime=path.stat().st_mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="processed",
+            )
+        except Exception as exc:  # noqa: BLE001 - per-file settle must not abort cycle
+            state.files[key] = FileState(
+                mtime=mtime,
+                processed_at=datetime.now(tz=UTC).isoformat(),
+                status="error",
+                error=str(exc),
+            )
+        finally:
+            if cluster_id is not None:
+                state.phase2_cluster_file_in_flight = False
+        self._mark_telemetry_dirty()
+        self._save_cycle_checkpoint(state, path=path)
+        return False
+
     def _process_llm_cycle_file(
         self,
         path: Path,
@@ -2527,6 +2583,12 @@ class MaintenanceDaemon:
         cluster_id: str | None = None,
     ) -> bool:
         """Index one pending page via LLM path. Returns whether inference ran this turn."""
+        if is_journal_page_path(self.graph_root, path):
+            return self._settle_journal_structural_cycle_file(
+                path,
+                state,
+                cluster_id=cluster_id,
+            )
         key = _daemon_file_key(self.graph_root, path)
         mtime = path.stat().st_mtime
         title = _page_title_from_path(self.graph_root, path)

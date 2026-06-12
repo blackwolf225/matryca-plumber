@@ -107,7 +107,26 @@ Full TRIZ framing, failure anatomy, and verification: **[`resilience-llm-json-tr
 
 `_process_llm_cycle_file` follows the canonical OCC order in [`ARCHITECTURE.md`](../ARCHITECTURE.md#optimistic-concurrency-control-occ): **`page_rmw_lock` is not held during LLM inference**. Cognitive modules take short per-operation locks; the semantic index commit acquires the page lock only inside **`apply_semantic_page_result`**.
 
+### Journal pages — Phase-2 semantic bypass
+
+**Problem:** Journal-heavy vaults spend disproportionate Phase-2 time on daily fleeting notes the daemon itself appends to (`Journey Log`, task markers). Semantic summaries and block embeddings on `journals/YYYY_MM_DD.md` add LLM token and embedding cost without improving durable `pages/` knowledge.
+
+**Policy (shipped):**
+
+| Stage | `pages/` | `journals/` |
+|-------|----------|-------------|
+| Pending detection | `page_needs_phase2_cognitive` — full semantic queue rules | Same function, but returns `false` once structural ledger matches `mtime` (never semantic re-queue) |
+| Duty-cycle handler | `_process_llm_cycle_file` — cognitive lint → `index_page` → `apply_semantic_page_result` → optional dual embed | `_settle_journal_structural_cycle_file` — read, link registry, AST `apply_file_event`, `FileState` processed |
+| Vault progress | Counted in `phase2_cognitive_total` / `done` | **Excluded** from Phase-2 vault metrics |
+
+**Detection:** `is_journal_page_path(graph_root, path)` — path relative to `LOGSEQ_GRAPH_PATH` has first segment `journals`.
+
+**Non-goals:** This does **not** skip Phase-1 bootstrap catalog harvest for journals (bootstrap still walks `journals/**/*.md` for the master index). It does **not** disable Journey Log writes or MCP `append_journal`.
+
+**Verification:** `tests/test_maintenance_daemon.py::test_run_cycle_journal_phase1_only_skips_semantic_indexing`, `test_page_needs_phase2_cognitive_journal_settles_without_semantic_requeue`.
+
 ---
+
 
 ## Frozen KV prefix
 
@@ -147,3 +166,4 @@ Daemon checkpoint frequency during Phase 1 is controlled by `MATRYCA_BOOTSTRAP_C
 | CPU sandbox | `tests/test_process_priority.py` |
 | Mmap reads | `tests/test_markdown_io.py` |
 | Slow soak | `tests/slow/test_daemon_memory_soak.py` (`pytest -m slow`) |
+| Journal Phase-2 bypass | `tests/test_maintenance_daemon.py` (`test_run_cycle_journal_phase1_only_skips_semantic_indexing`) |

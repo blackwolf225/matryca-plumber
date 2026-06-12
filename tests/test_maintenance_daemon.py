@@ -28,8 +28,10 @@ from src.agent.maintenance_daemon import (
     compute_scan_metrics,
     list_pending_files,
     load_daemon_state,
+    page_needs_phase2_cognitive,
     prune_stale_daemon_file_entries,
     read_pid_file,
+    run_dual_embedding_after_semantic_write,
     save_daemon_state,
     start_daemon_detached,
     start_daemon_foreground,
@@ -37,10 +39,13 @@ from src.agent.maintenance_daemon import (
     stop_daemon,
     write_pid_file,
 )
+from src.agent.page_prompt_session import PagePromptSession
 from src.agent.plumber_config import PlumberLintConfig
 from src.agent.plumber_llm import BootstrapSummaryResult, GraphInsightsLLMResult
+from src.agent.plumber_modules import CognitiveLintOutcome, run_cognitive_lint_pipeline
 from src.cli import build_parser
 from src.cli.tui_dashboard import MONITOR_TITLE, collect_snapshot
+from src.daemon.file_watcher import FileEventKind
 from src.graph.bootstrap_harvest import run_bootstrap_harvest
 from src.graph.master_catalog import CatalogEntry, load_master_catalog, master_index_page_path
 from src.graph.page_write_lock import clear_page_write_locks, page_rmw_lock
@@ -1859,6 +1864,156 @@ def test_load_daemon_state_recovers_from_bak_when_primary_corrupt(graph_root: Pa
     assert loaded.session_completion_tokens == 7
     restored = json.loads(state_path(graph_root).read_text(encoding="utf-8"))
     assert restored["session_prompt_tokens"] == 42
+
+
+def test_run_cycle_journal_phase1_only_skips_semantic_indexing(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``journals/`` pages get AST/OCC settle; ``pages/`` still run Phase-2 semantic indexing."""
+    monkeypatch.setenv("MATRYCA_THERMAL_DELAY_COGNITIVE", "0")
+
+    journal_dir = graph_root / "journals"
+    journal_dir.mkdir(parents=True)
+    journal_path = journal_dir / "2026_06_10.md"
+    journal_path.write_text(
+        f"- daily fleeting note\n  id:: {BLOCK_UUID}\n",
+        encoding="utf-8",
+    )
+    page_path = _write_page(
+        graph_root,
+        "SemanticTopic",
+        f"- durable page body\n  id:: {BLOCK_UUID}\n",
+    )
+
+    semantic_titles: list[str] = []
+    cognitive_titles: list[str] = []
+    dual_embed_titles: list[str] = []
+    ast_events: list[Path] = []
+
+    class SemanticProbeLLM(StubLLM):
+        def index_page(
+            self,
+            page_title: str,
+            content: str,
+            *,
+            page_path: Path | None = None,
+            graph_root: Path | None = None,
+            alias_index: object | None = None,
+            enable_semantic_routing: bool = False,
+            llm_context: str | None = None,
+            prompt_session: object | None = None,
+        ) -> tuple[SemanticIndexResult, dict[str, int]]:
+            semantic_titles.append(page_title)
+            return super().index_page(
+                page_title,
+                content,
+                page_path=page_path,
+                graph_root=graph_root,
+                alias_index=alias_index,
+                enable_semantic_routing=enable_semantic_routing,
+                llm_context=llm_context,
+                prompt_session=prompt_session,
+            )
+
+    def _spy_cognitive(
+        graph_root_arg: Path,
+        page_path_arg: Path,
+        page_title: str,
+        content: str,
+        *,
+        llm: object,
+        config: PlumberLintConfig,
+        prompt_session: PagePromptSession | None = None,
+    ) -> tuple[CognitiveLintOutcome, PagePromptSession | None]:
+        cognitive_titles.append(page_title)
+        return run_cognitive_lint_pipeline(
+            graph_root_arg,
+            page_path_arg,
+            page_title,
+            content,
+            llm=llm,
+            config=config,
+            prompt_session=prompt_session,
+        )
+
+    def _spy_dual_embed(
+        graph_root_arg: Path,
+        page_path_arg: Path,
+        page_title: str,
+        llm_client: object,
+    ) -> None:
+        dual_embed_titles.append(page_title)
+        run_dual_embedding_after_semantic_write(
+            graph_root_arg,
+            page_path_arg,
+            page_title,
+            llm_client,
+        )
+
+    from src.daemon.ast_cache import GraphAstCache
+
+    original_apply = GraphAstCache.apply_file_event
+
+    def _spy_apply(self: GraphAstCache, path: Path, kind: FileEventKind) -> None:
+        ast_events.append(path)
+        original_apply(self, path, kind)
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_cognitive_lint_pipeline",
+        _spy_cognitive,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_dual_embedding_after_semantic_write",
+        _spy_dual_embed,
+    )
+    monkeypatch.setattr(GraphAstCache, "apply_file_event", _spy_apply)
+
+    run_bootstrap_harvest(graph_root, llm=StubLLM(), incremental=False, phase1_strict=True)
+    daemon = MaintenanceDaemon(
+        graph_root,
+        llm_client=SemanticProbeLLM(),
+        max_files_per_cycle=2,
+    )
+    daemon.bootstrap_complete = True
+    state = daemon.run_cycle()
+
+    journal_key = graph_relative_path_key(journal_path, graph_root)
+    page_key = graph_relative_path_key(page_path, graph_root)
+    assert state.files[journal_key].status == "processed"
+    assert state.files[page_key].status == "processed"
+    assert journal_path in ast_events
+    assert "SemanticTopic" in semantic_titles
+    assert "2026_06_10" not in semantic_titles
+    assert "2026_06_10" not in cognitive_titles
+    assert "SemanticTopic" in cognitive_titles
+    assert "2026_06_10" not in dual_embed_titles
+    assert "SemanticTopic" in dual_embed_titles
+
+
+def test_page_needs_phase2_cognitive_journal_settles_without_semantic_requeue(
+    graph_root: Path,
+) -> None:
+    journal_dir = graph_root / "journals"
+    journal_dir.mkdir(parents=True)
+    journal_path = journal_dir / "2026_06_10.md"
+    journal_path.write_text("- fleeting note\n", encoding="utf-8")
+    journal_key = graph_relative_path_key(journal_path, graph_root)
+
+    pending_state = DaemonState(bootstrap_complete=True)
+    assert page_needs_phase2_cognitive(graph_root, journal_path, pending_state) is True
+
+    settled_state = DaemonState(
+        bootstrap_complete=True,
+        files={
+            journal_key: FileState(
+                mtime=journal_path.stat().st_mtime,
+                processed_at="2026-06-10T00:00:00+00:00",
+                status="processed",
+            ),
+        },
+    )
+    assert page_needs_phase2_cognitive(graph_root, journal_path, settled_state) is False
 
 
 def test_group_pending_by_cluster_isolates_journals(graph_root: Path) -> None:
