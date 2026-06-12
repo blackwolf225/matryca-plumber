@@ -266,7 +266,10 @@ def _fallback_insights(metrics: TopologyMetrics) -> GraphInsightsLLMResult:
         f"with {metrics.catalog_coverage}% catalog coverage.",
     ]
     if metrics.domain_distribution:
-        top_domain = max(metrics.domain_distribution, key=metrics.domain_distribution.get)  # type: ignore[arg-type]
+        top_domain = max(
+            metrics.domain_distribution,
+            key=lambda domain: metrics.domain_distribution[domain],
+        )
         lines.append(
             f"The dominant MARPA domain is **{top_domain}** "
             f"({metrics.domain_distribution[top_domain]} pages).",

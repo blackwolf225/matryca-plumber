@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Mypy strictness (#60)** — Removed all 11 `# type: ignore` suppressions under `src/`; replaced with `cast()`, `isinstance()` narrowing, `Path()` coercion, a `_FilesystemObserver` Protocol, and lambda key functions so strict mypy passes without cheats.
+
 ## [1.9.14] - 2026-06-10
 
 **Contributor Readiness & Tech Debt Cleanup**

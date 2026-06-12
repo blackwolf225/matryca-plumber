@@ -6,7 +6,7 @@ import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from loguru import logger
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
@@ -14,6 +14,24 @@ from watchdog.observers import Observer
 
 from ..graph.alias_index import is_scannable_graph_markdown
 from ..graph.path_sandbox import assert_path_within_graph
+
+
+class _FilesystemObserver(Protocol):
+    """Subset of ``watchdog.observers.Observer`` used by ``GraphFileWatcher``."""
+
+    def schedule(
+        self,
+        event_handler: FileSystemEventHandler,
+        path: str,
+        *,
+        recursive: bool = False,
+    ) -> object: ...
+
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def join(self, timeout: float | None = None) -> None: ...
 
 FileEventKind = Literal["created", "modified", "deleted"]
 
@@ -125,7 +143,7 @@ class GraphFileWatcher:
         self._graph_root = graph_root.expanduser().resolve(strict=False)
         self._on_debounced_change = on_debounced_change
         self._debounce_s = debounce_s if debounce_s is not None else _debounce_ms_from_env()
-        self._observer: Observer | None = None  # type: ignore[valid-type]
+        self._observer: _FilesystemObserver | None = None
         self._handler: _DebouncedMarkdownHandler | None = None
 
     def start(self) -> None:

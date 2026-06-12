@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -448,7 +448,7 @@ class DaemonState:
                 files[str(path)] = FileState(
                     mtime=float(rec.get("mtime", 0.0)),
                     processed_at=str(rec.get("processed_at", "")),
-                    status=str(rec.get("status", "processed")),  # type: ignore[arg-type]
+                    status=cast(FileStatus, str(rec.get("status", "processed"))),
                     error=rec.get("error") if rec.get("error") is not None else None,
                     lock_backoff_until=(
                         float(backoff_until) if backoff_until is not None else None
@@ -460,7 +460,7 @@ class DaemonState:
         return cls(
             version=int(payload.get("version", 1)),
             files=files,
-            status=str(payload.get("status", "idle")),  # type: ignore[arg-type]
+            status=cast(DaemonStatus, str(payload.get("status", "idle"))),
             model=str(payload.get("model", DEFAULT_LM_MODEL)),
             bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
             bootstrap_failed=bool(payload.get("bootstrap_failed", False)),
@@ -511,7 +511,7 @@ def _bootstrap_recent_from_json(
         if harvest not in ("regex", "llm", "skipped", "error"):
             continue
         recent[str(path)] = BootstrapRecentEntry(
-            harvest=harvest,  # type: ignore[arg-type]
+            harvest=cast(BootstrapHarvestStatus, harvest),
             processed_at=str(rec.get("processed_at", "")),
         )
     return recent

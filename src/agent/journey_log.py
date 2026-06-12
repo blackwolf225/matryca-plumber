@@ -18,10 +18,18 @@ def journey_log_enabled() -> bool:
 
 def _coerce_int(value: object, default: int = 0) -> int:
     """Best-effort int coercion for persisted ledger fields (corrupt-state resilient)."""
-    try:
-        return int(value)  # type: ignore[call-overload, no-any-return]
-    except (TypeError, ValueError):
-        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
 
 
 @dataclass

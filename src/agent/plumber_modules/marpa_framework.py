@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.generational_cache import patch_generational_caches_for_paths
@@ -212,7 +212,7 @@ def run_marpa_framework(
         domain: MarpaDomain = "risorsa"
         existing_type = page_property_keys(content).get("type", "").casefold()
         if existing_type in {"mappa", "area", "risorsa", "progetto", "archivio"}:
-            domain = existing_type  # type: ignore[assignment]
+            domain = cast(MarpaDomain, existing_type)
         classification = MarpaClassificationResult(assigned_domain=domain)
     else:
         llm_body = (llm_context if llm_context is not None else content)[:8000]

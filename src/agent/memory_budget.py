@@ -7,6 +7,7 @@ import os
 import resource
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -89,8 +90,8 @@ def release_phase1_memory(graph_root: os.PathLike[str] | str) -> None:
     clear_generational_caches()
     release_bm25_corpus(root)
     clear_semantic_cache_memory()
-    purge_expired_semantic_cache(graph_root)  # type: ignore[arg-type]
-    unload_master_catalog(graph_root)  # type: ignore[arg-type]
+    purge_expired_semantic_cache(Path(graph_root))
+    unload_master_catalog(Path(graph_root))
     gc.collect()
 
 
@@ -98,7 +99,7 @@ def maybe_release_after_cycle(*, llm_turns: int, graph_root: os.PathLike[str] | 
     """Lightweight release when a daemon cycle used LLM (optional catalog trim)."""
     if llm_turns <= 0:
         return
-    purge_expired_semantic_cache(graph_root)  # type: ignore[arg-type]
+    purge_expired_semantic_cache(Path(graph_root))
     snap = snapshot()
     if snap.over_budget:
         gc.collect()
