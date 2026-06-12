@@ -33,6 +33,7 @@ class _FilesystemObserver(Protocol):
 
     def join(self, timeout: float | None = None) -> None: ...
 
+
 FileEventKind = Literal["created", "modified", "deleted"]
 
 _DEFAULT_DEBOUNCE_MS = 750
