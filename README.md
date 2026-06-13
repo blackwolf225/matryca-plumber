@@ -1,12 +1,5 @@
 # Matryca Plumber
 
-> I gave my AI access to my notes. It corrupted them.  
-> I built Matryca Plumber so that never happens again.
-
-**Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog), Matryca Plumber** is a local background assistant that keeps your Logseq notes organized, linked, and safe while you (or your AI) work — no cloud, no Logseq API, no silent overwrites. It has also CLI/MCP for your AI agents to directly read/write on your notes. It's a promising new architecture for agentic memory with graph architecture and markdown based.
-
-**Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — the product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
-
 [![CI](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
@@ -27,6 +20,15 @@
 [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant-4baaaa)](CODE_OF_CONDUCT.md)
 ![Views](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/views-badge.json)
 ![Clones](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/MarcoPorcellato/matryca-plumber/metrics/metrics/clones-badge.json)
+
+> I gave my AI access to my notes. It corrupted them.  
+> I built Matryca Plumber so that never happens again.
+
+**Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog), Matryca Plumber** is a local background assistant that keeps your Logseq notes organized, linked, and safe while you (or your AI) work — no cloud, no Logseq API, no silent overwrites. It has also CLI/MCP for your AI agents to directly read/write on your notes. It's a promising new architecture for agentic memory with graph architecture and markdown based.
+
+**Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — the product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
+
+![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
 ## What it does for you
 
@@ -53,8 +55,6 @@
 > Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.9.14** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, journal-aware Phase 2 clustering, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
 > **Current: v1.9.14** — **Contributor Readiness & Tech Debt Cleanup:** OSS onboarding blueprints, journal-aware Phase 2 clustering, entity-consolidation token savings, and scoped tech-debt fixes (#62, #64) — **710+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
-
-![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
 > "Logseq is building the best local outliner database. But AI Agent memory is at the very bottom of their roadmap. Matryca Plumber gives you that future today, safely bridging your local agents to your Logseq graph without waiting years." - Marco Porcellato - Matryca.ai chief architect and co-founder
 
