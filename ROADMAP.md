@@ -6,7 +6,7 @@ Matryca Plumber is local data infrastructure for headless AI agents working with
 
 Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](https://github.com/MarcoPorcellato/matryca-plumber/discussions/19).
 
-*Status as of v1.9.14 — issue numbers link to GitHub; scope may shift as milestones close.*
+*Status as of v1.9.15 — issue numbers link to GitHub; scope may shift as milestones close.*
 
 ---
 
@@ -25,8 +25,8 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 **[v1.9.10 — Concurrency & Data Integrity](https://github.com/MarcoPorcellato/matryca-plumber/milestone/6)** ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)–[#45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45))
 
 - OCC gaps on hub pages, `json_flock` parity with `page_rmw_lock`
-- Atomic JSON writes for link registry and daemon state
-- Catalog cache coherence under concurrent disk writers
+- ~~Atomic JSON writes for link registry and daemon state~~ — **partial (unreleased):** link registry `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); daemon state already atomic
+- ~~Catalog cache coherence under concurrent disk writers~~ — **partial (unreleased):** master catalog load flock ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)), merge-on-save ([#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), harvest catalog/page drift guard on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37))
 
 **[v1.9.11 — Performance & I/O](https://github.com/MarcoPorcellato/matryca-plumber/milestone/7)** ([#46](https://github.com/MarcoPorcellato/matryca-plumber/issues/46)–[#56](https://github.com/MarcoPorcellato/matryca-plumber/issues/56), [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67)–[#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70))
 
@@ -90,7 +90,8 @@ Not backlog — context for where we are today:
 | v1.9.9 | Security & Sandbox milestone |
 | v1.9.13 | Enterprise Resilience (704+ tests, sandbox/RAG/automation hardening) |
 | v1.9.14 | Contributor readiness (#62/#64 tech debt), journal-aware Phase 2 clustering, good-first issue blueprints (710+ tests) |
-| Unreleased | Mypy strict `#60` (zero `src/` ignores); journal Phase-2 semantic bypass with Phase-1 AST/OCC preserved (712+ tests) |
+| v1.9.15 | Mypy strict `#60` (zero `src/` ignores); journal Phase-2 semantic bypass with Phase-1 AST/OCC preserved (721+ tests) |
+| Unreleased | v1.9.10 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); Dependabot dependency bumps; OSS GitHub hygiene (PR template, CodeQL, frontend CI) |
 
 ---
 

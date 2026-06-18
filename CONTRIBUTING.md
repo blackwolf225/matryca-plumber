@@ -223,7 +223,7 @@ That means, in order:
 1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
 2. **Mypy** — strict type-check on `src/` and `tests/` (**zero `# type: ignore` in `src/`** — see [Strict typing](#strict-typing-zero-mypy-suppressions-in-src))
 3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag; daemon pid/lock reads need `# sandbox-read-ok`)
-4. **Pytest** — full suite (**712+** targets on `main`; slow tests excluded unless you run `make perf`)
+4. **Pytest** — full suite (**721+** targets on `main`; slow tests excluded unless you run `make perf`)
 
 GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 
@@ -304,7 +304,7 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 2. **Open or reference an issue** for larger features so design stays aligned with the Phase 0–4 rules.
 3. Describe **why** the change exists and any trade-offs in the PR body.
 4. Confirm **`make check`** passes locally.
-5. Use the PR template checklist (OCC, CRLF, `make check`).
+5. Use the PR template checklist (OCC, CRLF, `make check`) in [`.github/pull_request_template.md`](.github/pull_request_template.md).
 
 ---
 

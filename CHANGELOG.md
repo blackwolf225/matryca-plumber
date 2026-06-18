@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Master catalog merge-on-save (#36)** — `MasterCatalog.save()` reloads disk state under flock and merges page rows by `last_mtime` (with explicit `replace=True` for prune); pending `remove()` deltas propagate on merge so harvest and daemon writers no longer clobber each other.
 - **Master catalog load flock (#35)** — `load_master_catalog` reads `master_catalog.json` (and `.bak` restore) under `cross_process_json_flock`, matching the save path and `backlink_index` load pattern; backup refresh also runs under flock.
 
+### Changed
+
+- **Documentation** — ROADMAP, ARCHITECTURE, PROJECT_DIARY, Ironclad Shield checklist, and openspec (`runtime-bootstrap`, `link-verification`, `security-sandbox`, `llm-performance`) updated for v1.9.10 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)).
+- **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, frontend Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment, doc sync to v1.9.15 (721+ tests).
+
 ### Security
 
 - **Dependency advisories** — Bump transitive Python packages (`starlette` 1.3.1, `aiohttp` 3.14.1, `cryptography` 49.0.0, `python-multipart` 0.0.32) and frontend toolchain (`vite` 8.0.16+, `esbuild` 0.28.1+, `@babel/core` 7.29.7) to clear open Dependabot alerts.

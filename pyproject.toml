@@ -9,11 +9,30 @@ description = "Enterprise-grade, local-first autonomous background AI daemon and
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
+authors = [
+    { name = "Marco Porcellato", email = "marco@matryca.ai" },
+]
+keywords = [
+    "logseq",
+    "mcp",
+    "local-first",
+    "knowledge-graph",
+    "llm",
+    "fastmcp",
+    "agentic-ai",
+    "markdown",
+]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Markup",
 ]
 dependencies = [
     "logseq-matryca-parser>=1.1.1,<2.0.0",
@@ -35,8 +54,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/MarcoPorcellato/matryca-plumber"
+Documentation = "https://github.com/MarcoPorcellato/matryca-plumber#readme"
 Repository = "https://github.com/MarcoPorcellato/matryca-plumber"
 Issues = "https://github.com/MarcoPorcellato/matryca-plumber/issues"
+Changelog = "https://github.com/MarcoPorcellato/matryca-plumber/blob/main/CHANGELOG.md"
 
 [project.scripts]
 matryca-plumber = "src.plumber_entry:main"

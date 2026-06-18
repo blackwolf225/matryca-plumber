@@ -33,6 +33,22 @@ Graph-local JSON files (catalog, link registry, daemon state, semantic cache, bl
 
 ---
 
+## JSON flock and atomic persistence (v1.9.10 — unreleased)
+
+Beyond size bounds, hot sidecars use **`cross_process_json_flock`** so readers never observe torn JSON during concurrent `atomic_write_bytes` replace, and writers merge or atomically commit:
+
+| File | v1.9.10 behavior |
+|------|------------------|
+| `.matryca_semantic_cache/master_catalog.json` | Load + backup refresh under flock ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)); `save()` merge-on-save by `last_mtime` ([#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)) |
+| `.matryca_link_registry.json` | Save via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)) |
+| `.matryca_daemon_state.json` | Already flock + atomic replace (pre-existing) |
+
+Bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) so catalog rows cannot claim summaries absent from page bodies.
+
+See [`runtime-bootstrap.md`](runtime-bootstrap.md#master-catalog-persistence-v1910-unreleased) and [`ARCHITECTURE.md`](../ARCHITECTURE.md).
+
+---
+
 ## Debug log and UI token policy
 
 | Variable | v1.9.9 behavior |
