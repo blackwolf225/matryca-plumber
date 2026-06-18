@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from src.agent.maintenance_daemon import DaemonState, FileState, save_daemon_state
 from src.agent.plumber_config import reload_plumber_dotenv
 from src.cli.ui_auth import reset_ui_token_for_tests
-from src.cli.ui_server import LmModelsResponse, _verify_daemon_launch, app
+from src.cli.ui_server import LmModelsResponse, _fetch_lm_studio_models, _verify_daemon_launch, app
 
 
 @pytest.fixture(autouse=True)
@@ -436,6 +436,40 @@ def test_post_config_rejects_unsafe_lm_studio_url(
     assert response.status_code == 400
     assert "not allowed" in response.json()["detail"]
     assert env_path.read_text(encoding="utf-8") == 'LOGSEQ_GRAPH_PATH="/old/path"\n'
+
+
+def test_fetch_lm_studio_models_parses_httpx_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            captured["follow_redirects"] = kwargs.get("follow_redirects")
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def get(self, url: str, *, headers: dict[str, str]) -> object:
+            captured["url"] = url
+            captured["headers"] = headers
+
+            class FakeResponse:
+                def raise_for_status(self) -> None:
+                    return None
+
+                def json(self) -> dict[str, object]:
+                    return {"data": [{"id": "local-model"}, {"id": "qwen3-8b"}]}
+
+            return FakeResponse()
+
+    monkeypatch.setattr("src.cli.ui_server.httpx.Client", FakeClient)
+    result = _fetch_lm_studio_models("http://localhost:1234/v1")
+    assert result.error is None
+    assert result.models == ["local-model", "qwen3-8b"]
+    assert captured["follow_redirects"] is False
+    assert str(captured["url"]).endswith("/models")
 
 
 def test_get_lm_models_returns_openai_compatible_ids(

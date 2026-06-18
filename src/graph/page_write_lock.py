@@ -138,7 +138,7 @@ def _cross_process_file_lock(page_path: str | Path) -> Iterator[None]:
 
     lock_path = _sidecar_lock_path(page_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
         acquired = _acquire_cross_process_flock(fd, lock_path)
         if not acquired and _fcntl is not None and not _flock_degradation_allowed():
@@ -180,7 +180,7 @@ def probe_page_rmw_lock(page_path: str | Path) -> None:
             return
         lock_path = _sidecar_lock_path(page_path)
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
         try:
             try:
                 _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)

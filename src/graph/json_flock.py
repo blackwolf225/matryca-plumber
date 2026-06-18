@@ -29,7 +29,7 @@ def cross_process_json_flock(target: Path) -> Iterator[None]:
 
     lock_path = flock_sidecar_path(target)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
         _fcntl.flock(fd, _fcntl.LOCK_EX)
         try:

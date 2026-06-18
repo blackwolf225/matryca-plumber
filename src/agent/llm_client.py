@@ -16,7 +16,8 @@ import httpx
 import instructor
 from loguru import logger
 from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
-from pydantic import BaseModel, ValidationError
+from openai.lib._pydantic import to_strict_json_schema as _openai_to_strict_json_schema
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..daemon.config_layer import inject_identity_into_system_prompt
 from ..graph.insights_engine import INSIGHTS_SYSTEM_PROMPT
@@ -133,14 +134,38 @@ def call_openai_with_transport_retries[T](factory: Callable[[], T]) -> T:
 MAX_SELF_CORRECTION_RETRIES = 3
 
 
-def _structured_completion_kwargs() -> dict[str, Any]:
+def _model_uses_max_completion_tokens(model: str) -> bool:
+    """Return True when the OpenAI SDK expects ``max_completion_tokens`` (o-series, gpt-5+)."""
+    normalized = model.strip().lower()
+    if not normalized:
+        return False
+    for marker in ("o1-", "o1/", "o3-", "o3/", "o4-", "gpt-5"):
+        if marker in normalized:
+            return True
+    return normalized.startswith(("o1", "o3", "o4"))
+
+
+def llm_completion_token_limit_kwargs(*, model: str, limit: int) -> dict[str, Any]:
+    """Emit the completion token cap key supported by ``model``."""
+    if _model_uses_max_completion_tokens(model):
+        return {"max_completion_tokens": limit}
+    return {"max_tokens": limit}
+
+
+def _structured_completion_kwargs(*, model: str) -> dict[str, Any]:
     """Bounded completion size to stop local-model token-loop degeneration."""
-    return {"max_tokens": resolve_llm_max_completion_tokens()}
+    return llm_completion_token_limit_kwargs(
+        model=model,
+        limit=resolve_llm_max_completion_tokens(),
+    )
 
 
-def _compression_completion_kwargs() -> dict[str, Any]:
+def _compression_completion_kwargs(*, model: str) -> dict[str, Any]:
     """Separate cap for markdown context-compression calls (Ermes history)."""
-    return {"max_tokens": resolve_llm_max_compression_tokens()}
+    return llm_completion_token_limit_kwargs(
+        model=model,
+        limit=resolve_llm_max_compression_tokens(),
+    )
 
 
 _CORRECTION_USER_TEMPLATE = (
@@ -231,10 +256,8 @@ def _schema_name(model: type[BaseModel]) -> str:
 
 
 def pydantic_to_strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
-    """Build a strict JSON Schema dict for OpenAI ``response_format``."""
-    schema = model.model_json_schema()
-    schema.setdefault("additionalProperties", False)
-    return schema
+    """Build a strict JSON Schema dict for OpenAI ``response_format`` (nested objects included)."""
+    return _openai_to_strict_json_schema(model)
 
 
 def append_correction_turn(messages: list[ChatMessage], *, error: str) -> list[ChatMessage]:
@@ -251,6 +274,8 @@ def append_correction_turn(messages: list[ChatMessage], *, error: str) -> list[C
 
 
 class _ProbeModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ok: bool = True
 
 
@@ -281,11 +306,11 @@ class AdaptiveStructuredOutputEngine:
             ],
         )
         try:
+            probe_limit = llm_completion_token_limit_kwargs(model=client.model, limit=32)
             client._raw_client.chat.completions.create(
                 model=client.model,
                 messages=api_messages,
                 temperature=0.0,
-                max_tokens=32,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -294,16 +319,18 @@ class AdaptiveStructuredOutputEngine:
                         "strict": True,
                     },
                 },
+                **probe_limit,
             )
             capability = GrammarCapability.LOGITS_JSON_SCHEMA
         except Exception:  # noqa: BLE001 - probe is best-effort
             try:
+                probe_limit = llm_completion_token_limit_kwargs(model=client.model, limit=32)
                 client._raw_client.chat.completions.create(
                     model=client.model,
                     messages=api_messages,
                     temperature=0.0,
-                    max_tokens=32,
                     response_format={"type": "json_object"},
+                    **probe_limit,
                 )
                 capability = GrammarCapability.JSON_OBJECT_ONLY
             except Exception:  # noqa: BLE001
@@ -399,7 +426,7 @@ class AdaptiveStructuredOutputEngine:
         client = self._client
         schema = pydantic_to_strict_json_schema(response_model)
         api_messages = cast(Any, messages)
-        completion_kwargs = _structured_completion_kwargs()
+        completion_kwargs = _structured_completion_kwargs(model=client.model)
         response = call_openai_with_transport_retries(
             lambda: client._raw_client.chat.completions.create(
                 model=client.model,
@@ -478,7 +505,7 @@ class AdaptiveStructuredOutputEngine:
                     messages=working_messages,
                     response_model=response_model,
                     max_retries=1,
-                    **_structured_completion_kwargs(),
+                    **_structured_completion_kwargs(model=client.model),
                 )
                 if use_history:
                     client._append_execution_turn(prompt, parsed.model_dump_json())
@@ -744,7 +771,7 @@ class InstructorLLMClient:
                     {"role": "user", "content": compression_prompt},
                 ],
                 temperature=0.1,
-                **_compression_completion_kwargs(),
+                **_compression_completion_kwargs(model=self.model),
             ),
         )
         content = sanitize_prose_llm_completion(
@@ -777,7 +804,7 @@ class InstructorLLMClient:
         _ = thermal_profile
         api_messages = cast(Any, messages)
         try:
-            completion_kwargs = _structured_completion_kwargs()
+            completion_kwargs = _structured_completion_kwargs(model=self.model)
             response = call_openai_with_transport_retries(
                 lambda: self._raw_client.chat.completions.create(
                     model=self.model,
@@ -788,7 +815,7 @@ class InstructorLLMClient:
                 ),
             )
         except Exception:  # noqa: BLE001
-            completion_kwargs = _structured_completion_kwargs()
+            completion_kwargs = _structured_completion_kwargs(model=self.model)
             response = call_openai_with_transport_retries(
                 lambda: self._raw_client.chat.completions.create(
                     model=self.model,
@@ -1078,5 +1105,6 @@ __all__ = [
     "StructuredOutputExhaustedError",
     "ThermalProfile",
     "append_correction_turn",
+    "llm_completion_token_limit_kwargs",
     "pydantic_to_strict_json_schema",
 ]

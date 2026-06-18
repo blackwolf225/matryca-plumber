@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Self, cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .quality_gate import (
     outline_bounds_violations,
@@ -20,6 +20,8 @@ _HEADING_LEVEL_PROP_KEYS = frozenset({"heading_level", "heading_level::"})
 
 class OutlineNode(BaseModel):
     """Hierarchical outline node as accepted by agent tools (JSON-serializable)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     text: str = Field(..., description="Block text (Logseq outliner / Markdown body).")
     properties: dict[str, str] = Field(

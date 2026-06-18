@@ -12,7 +12,6 @@ import tempfile
 import threading
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 import webbrowser
 from collections import defaultdict, deque
@@ -21,6 +20,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import httpx
 from dotenv import dotenv_values, load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +59,7 @@ from ..graph.graph_path_validate import validate_logseq_graph_path_for_config
 from ..utils.console_sanitize import sanitize_for_console
 from ..utils.env_placeholders import is_template_env_path
 from ..utils.llm_url_policy import UnsafeLlmProxyUrlError, validate_llm_proxy_url
-from ..utils.network import NoRedirect
+from ..utils.logging_config import configure_loguru
 from ..utils.preflight import run_preflight_checks
 from ..utils.provision_l1 import provision_matryca_l1_sibling
 from ..utils.runtime_bootstrap import prepare_matryca_runtime, try_prepare_matryca_runtime_from_env
@@ -324,16 +324,19 @@ def _validate_lm_models_base_url(base_url: str) -> str:
     return assert_safe_lm_proxy_url(base_url)
 
 
+_LM_MODELS_HTTP_TIMEOUT = httpx.Timeout(5.0)
+
+
 def _fetch_lm_studio_models(base_url: str) -> LmModelsResponse:
     """Query ``GET /v1/models`` on an OpenAI-compatible local inference server."""
     models_url = f"{resolve_llm_base_url(override=base_url).rstrip('/')}/models"
 
-    opener = urllib.request.build_opener(NoRedirect())
     try:
-        request = urllib.request.Request(models_url, headers={"Accept": "application/json"})
-        with opener.open(request, timeout=5.0) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        with httpx.Client(timeout=_LM_MODELS_HTTP_TIMEOUT, follow_redirects=False) as client:
+            response = client.get(models_url, headers={"Accept": "application/json"})
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError) as exc:
         return LmModelsResponse(models=[], error=str(exc))
 
     data = payload.get("data") if isinstance(payload, dict) else None
@@ -567,6 +570,53 @@ def _update_dotenv(payload: PlumberConfigResponse) -> None:
         "false" if payload.enable_inline_semantic_corrections else "true"
     )
     _apply_dotenv_updates(updates)
+
+
+def _persist_graph_path_update(payload: GraphPathUpdateRequest) -> PlumberConfigResponse:
+    """Write ``LOGSEQ_GRAPH_PATH`` and re-bootstrap runtime (blocking; run off the event loop)."""
+    try:
+        validated_path = serialize_plumber_config_field_for_dotenv(
+            "logseq_graph_path",
+            payload.logseq_graph_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        _apply_dotenv_updates({"LOGSEQ_GRAPH_PATH": validated_path})
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
+    reload_plumber_dotenv(override=True)
+    graph_root = validate_logseq_graph_path_for_config(validated_path)
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
+    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
+
+
+def _persist_config_update(payload: PlumberConfigResponse) -> PlumberConfigResponse:
+    """Persist settings to ``.env`` and re-bootstrap runtime (blocking; off event loop)."""
+    try:
+        _update_dotenv(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
+    config = load_plumber_lint_config()
+    graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
+    graph_root = None
+    if graph_raw:
+        try:
+            graph_root = resolve_graph_root()
+        except ValueError:
+            graph_root = None
+    prepare_matryca_runtime(
+        graph_root=graph_root,
+        wiki_config=load_matryca_wiki_config(),
+        eager_graph=False,
+    )
+    return PlumberConfigResponse.from_lint_config(config)
 
 
 def _ensure_graph_root_env_loaded() -> None:
@@ -829,58 +879,21 @@ async def get_lm_models(
 
 @app.post("/api/config/graph-path", response_model=PlumberConfigResponse)
 @app.patch("/api/config/graph-path", response_model=PlumberConfigResponse)
-def save_graph_path(
+async def save_graph_path(
     payload: GraphPathUpdateRequest,
     _: None = Depends(_require_ui_token),
 ) -> PlumberConfigResponse:
     """Persist only ``LOGSEQ_GRAPH_PATH`` (pre-flight onboarding; avoids full-settings POST)."""
-    try:
-        validated_path = serialize_plumber_config_field_for_dotenv(
-            "logseq_graph_path",
-            payload.logseq_graph_path,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    try:
-        _apply_dotenv_updates({"LOGSEQ_GRAPH_PATH": validated_path})
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
-    reload_plumber_dotenv(override=True)
-    graph_root = validate_logseq_graph_path_for_config(validated_path)
-    prepare_matryca_runtime(
-        graph_root=graph_root,
-        wiki_config=load_matryca_wiki_config(),
-        eager_graph=False,
-    )
-    return PlumberConfigResponse.from_lint_config(load_plumber_lint_config())
+    return await asyncio.to_thread(_persist_graph_path_update, payload)
 
 
 @app.post("/api/config", response_model=PlumberConfigResponse)
-def post_config(
+async def post_config(
     payload: PlumberConfigResponse,
     _: None = Depends(_require_ui_token),
 ) -> PlumberConfigResponse:
     """Update ``.env`` and in-process settings from the control-room form."""
-    try:
-        _update_dotenv(payload)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write .env: {exc}") from exc
-    config = load_plumber_lint_config()
-    graph_raw = os.environ.get("LOGSEQ_GRAPH_PATH", "").strip()
-    graph_root = None
-    if graph_raw:
-        try:
-            graph_root = resolve_graph_root()
-        except ValueError:
-            graph_root = None
-    prepare_matryca_runtime(
-        graph_root=graph_root,
-        wiki_config=load_matryca_wiki_config(),
-        eager_graph=False,
-    )
-    return PlumberConfigResponse.from_lint_config(config)
+    return await asyncio.to_thread(_persist_config_update, payload)
 
 
 def _daemon_control_response(result: dict[str, Any]) -> DaemonControlResponse:
@@ -1110,6 +1123,7 @@ def run_ui_server(*, host: str = "127.0.0.1", port: int = DEFAULT_UI_PORT) -> No
         )
     sys.stdout.write("Starting Matryca Plumber control room…\n")
     sys.stdout.flush()
+    configure_loguru()
     _ensure_frontend_built()
     _mount_frontend_assets()
 

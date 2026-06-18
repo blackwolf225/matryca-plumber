@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Sovereign UI API** — `POST /api/config` and graph-path saves offload `.env` I/O and `prepare_matryca_runtime()` to a worker thread so telemetry polling stays responsive during configuration writes; LM Studio model discovery uses `httpx` (no redirects) instead of `urllib`; control-room startup calls `configure_loguru()` for rotating file logs.
+- **LLM structured output** — Pydantic LLM/outline models use `extra="forbid"`; OpenAI strict JSON schemas are generated recursively via the SDK helper; completion calls emit `max_completion_tokens` for o-series/gpt-5 models and legacy `max_tokens` for local servers.
 - **CodeQL** — workflow query suite narrowed from `security-and-quality` to `security-extended` so Code Scanning reports security findings only (drops maintainability noise such as cyclic-import and unused-variable alerts).
+
+### Security
+
+- **Lock sidecar permissions** — cross-process flock files (`json_flock`, page RMW locks, daemon lock) created with `0o600` instead of `0o644` (CodeQL `py/overly-permissive-file`).
 
 ## [1.10.2] - 2026-06-18
 

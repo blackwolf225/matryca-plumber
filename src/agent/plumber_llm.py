@@ -5,13 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 MarpaDomain = Literal["mappa", "area", "risorsa", "progetto", "archivio"]
+
+_MatrycaLLMModel = ConfigDict(extra="forbid")
 
 
 class MarpaClassificationResult(BaseModel):
     """LLM classification payload for the MARPA taxonomy framework."""
+
+    model_config = _MatrycaLLMModel
 
     assigned_domain: MarpaDomain = Field(description="MARPA domain assignment")
     detected_tags: list[str] = Field(default_factory=list)
@@ -22,11 +26,15 @@ class MarpaClassificationResult(BaseModel):
 class ContextualSeedResult(BaseModel):
     """Micro-definition for a newly seeded dangling-link page."""
 
+    model_config = _MatrycaLLMModel
+
     definition: str = Field(description="Short contextual definition for the new page")
 
 
 class EntityOverlapResult(BaseModel):
     """Semantic overlap assessment between two page concepts."""
+
+    model_config = _MatrycaLLMModel
 
     overlap_score: float = Field(ge=0.0, le=1.0, description="0-1 semantic similarity")
     canonical_title: str = Field(description="Preferred canonical page title")
@@ -40,6 +48,8 @@ class EntityOverlapResult(BaseModel):
 class InferredPropertiesResult(BaseModel):
     """Properties inferred for a tagged page."""
 
+    model_config = _MatrycaLLMModel
+
     properties: dict[str, str] = Field(
         default_factory=dict,
         description="Logseq property keys (without ::) mapped to values",
@@ -49,6 +59,8 @@ class InferredPropertiesResult(BaseModel):
 class BootstrapSummaryResult(BaseModel):
     """Minimal structured payload for bootstrap catalog harvesting."""
 
+    model_config = _MatrycaLLMModel
+
     summary: str = Field(description="One-sentence page summary")
     suggested_tags: list[str] = Field(default_factory=list)
     domain: str = Field(default="", description="MARPA domain when inferable")
@@ -56,6 +68,8 @@ class BootstrapSummaryResult(BaseModel):
 
 class GraphInsightsLLMResult(BaseModel):
     """Structured LLM payload for the graph insights dashboard."""
+
+    model_config = _MatrycaLLMModel
 
     ontology_report: str = Field(
         description="Panoramic review of hidden conceptual clusters (markdown prose)",

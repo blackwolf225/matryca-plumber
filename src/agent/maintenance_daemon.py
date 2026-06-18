@@ -687,7 +687,7 @@ def _try_acquire_daemon_process_lock_windows(graph_root: Path) -> int | None:
     path.parent.mkdir(parents=True, exist_ok=True)
     for _attempt in range(3):
         try:
-            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         except FileExistsError:
             holder = _read_lock_holder_pid(path)
             if holder is not None and is_plumber_process(holder):
@@ -724,7 +724,7 @@ def _try_acquire_daemon_process_lock(graph_root: Path) -> int | None:
         return _try_acquire_daemon_process_lock_windows(graph_root)
     path = daemon_lock_path(graph_root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o644)
+    fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
     try:
         _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
     except BlockingIOError:

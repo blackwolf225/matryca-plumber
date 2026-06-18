@@ -14,9 +14,34 @@ from src.agent.llm_client import (
     LlmBackendProfile,
     StructuredOutputExhaustedError,
     append_correction_turn,
+    llm_completion_token_limit_kwargs,
+    pydantic_to_strict_json_schema,
 )
+from src.agent.outline_models import OutlineNode
 from src.agent.plumber_config import DEFAULT_LLM_MAX_COMPRESSION_TOKENS
 from src.agent.plumber_llm import GraphInsightsLLMResult
+
+
+def test_pydantic_to_strict_json_schema_marks_nested_objects_strict() -> None:
+    schema = pydantic_to_strict_json_schema(OutlineNode)
+    outline_def = schema["$defs"]["OutlineNode"]
+    assert schema.get("additionalProperties") is False
+    assert outline_def.get("additionalProperties") is False
+
+
+def test_llm_completion_token_limit_kwargs_prefers_legacy_for_local_models() -> None:
+    assert llm_completion_token_limit_kwargs(model="qwen3-8b", limit=512) == {"max_tokens": 512}
+
+
+def test_llm_completion_token_limit_kwargs_uses_openai_key_for_o_series() -> None:
+    assert llm_completion_token_limit_kwargs(model="o1-preview", limit=128) == {
+        "max_completion_tokens": 128,
+    }
+
+
+def test_outline_node_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        OutlineNode.model_validate({"text": "Note", "unexpected_field": "nope"})
 
 
 def test_append_correction_turn_strips_degenerate_error_tail() -> None:
@@ -184,7 +209,7 @@ def test_path_b_exhausted_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
-def test_compress_history_uses_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compress_history_uses_completion_token_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     client = InstructorLLMClient(base_url="http://localhost:1234/v1")
     response = MagicMock()
     response.choices = [MagicMock(message=MagicMock(content="## Consolidated Epistemic State\n"))]
@@ -194,4 +219,8 @@ def test_compress_history_uses_max_tokens(monkeypatch: pytest.MonkeyPatch) -> No
     out = client._compress_history_via_llm("compress this history")
     assert "Consolidated" in out
     kwargs = create_mock.call_args.kwargs
-    assert kwargs.get("max_tokens") == DEFAULT_LLM_MAX_COMPRESSION_TOKENS
+    expected = llm_completion_token_limit_kwargs(
+        model=client.model,
+        limit=DEFAULT_LLM_MAX_COMPRESSION_TOKENS,
+    )
+    assert expected.items() <= kwargs.items()

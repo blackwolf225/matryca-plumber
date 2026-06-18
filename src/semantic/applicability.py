@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from ..agent.llm_client import call_openai_with_transport_retries
+from ..agent.llm_client import call_openai_with_transport_retries, llm_completion_token_limit_kwargs
 from ..agent.plumber_config import resolve_llm_max_compression_tokens
 from ..utils.json_repair import sanitize_prose_llm_completion
 
@@ -60,7 +60,8 @@ class InstructorApplicabilityLLM:
             msg = "InstructorApplicabilityLLM requires _raw_client"
             raise TypeError(msg)
         prompt = build_applicability_prompt(block_text)
-        max_tokens = min(256, resolve_llm_max_compression_tokens())
+        limit = min(256, resolve_llm_max_compression_tokens())
+        token_kwargs = llm_completion_token_limit_kwargs(model=model, limit=limit)
         response = call_openai_with_transport_retries(
             lambda: raw_client.chat.completions.create(
                 model=model,
@@ -69,7 +70,7 @@ class InstructorApplicabilityLLM:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
-                max_tokens=max_tokens,
+                **token_kwargs,
             ),
         )
         choice = response.choices[0].message.content if response.choices else ""
