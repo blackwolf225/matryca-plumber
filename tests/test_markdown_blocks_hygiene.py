@@ -9,7 +9,11 @@ import pytest
 from src.graph.markdown_blocks import atomic_write_bytes, sweep_dangling_atomic_tmp_files
 
 
-def test_atomic_write_unlinks_temp_when_replace_fails(tmp_path: Path) -> None:
+def test_atomic_write_unlinks_temp_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.graph.markdown_blocks.IO_RETRY_ATTEMPTS", 1)
     target = tmp_path / "page.md"
     temps_before = list(tmp_path.glob(".*.tmp"))
 

@@ -27,7 +27,7 @@ Ship the v1.9.10 **Concurrency & Data Integrity** milestone under semver **1.10.
 7. **Docs** — README, `llms.txt`, ROADMAP, ARCHITECTURE, OpenSpec index harmonized for v1.10.0.
 8. **Developer DX** — `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); `make test-full` for CI coverage gate.
 
-**Suite:** 720+ tests green · mypy strict · ruff clean · frontend ESLint clean · `make test-fast` ~9s on typical dev hardware.
+**Suite:** 720+ tests green · mypy strict · ruff clean · frontend ESLint clean · `make test-fast` ~5s on typical dev hardware.
 
 ---
 

@@ -173,7 +173,7 @@ uv run pytest tests/test_json_repair.py tests/test_llm_client_adaptive.py -q --n
 # or: make test-resilience  (31 tests: json_repair, llm_client, semantic_cache)
 ```
 
-Fast local gate (~9s, 708 tests): `make test-fast` (`NUM_WORKERS` default `4`, skips `tests/slow/`).
+Fast local gate (~5s, 703 tests): `make test-fast` (`NUM_WORKERS` default `4`, skips `tests/slow/` and `integration`).
 
 Full suite (CI coverage ≥ 70%): `make test-full` or `make test`.
 

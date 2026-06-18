@@ -1360,6 +1360,7 @@ def test_bootstrap_restart_bypasses_phase1_when_catalog_complete(
     assert harvest_calls == []
 
 
+@pytest.mark.integration
 def test_run_cycle_disables_semantic_routing_until_bootstrap_complete(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,

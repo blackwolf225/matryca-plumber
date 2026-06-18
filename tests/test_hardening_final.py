@@ -108,6 +108,7 @@ def test_atomic_write_respects_existing_page_lock(tmp_path: Path) -> None:
     assert target.read_bytes() == b"new"
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not cross_process_lock_available(), reason="fcntl flock unavailable")
 def test_cross_process_page_rmw_lock_serializes_subprocesses(tmp_path: Path) -> None:
     clear_page_write_locks()

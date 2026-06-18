@@ -150,9 +150,7 @@ class MasterCatalog:
             payload = {
                 "version": version,
                 "updated_at": updated_at,
-                "pages": {
-                    title: entry.to_json() for title, entry in sorted(merged_pages.items())
-                },
+                "pages": {title: entry.to_json() for title, entry in sorted(merged_pages.items())},
             }
             data = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
             atomic_write_bytes(

@@ -194,6 +194,7 @@ def test_main_invalid_json_payload_exits_one(
     assert err
 
 
+@pytest.mark.integration
 def test_subprocess_read_memory_routes(tmp_path: Path) -> None:
     (tmp_path / "pages").mkdir(parents=True)
     proc = subprocess.run(
@@ -216,6 +217,7 @@ def _write_xray_fixture_page(graph_root: Path, page_title: str = "Alias Demo") -
     )
 
 
+@pytest.mark.integration
 def test_subprocess_xray_page_then_mutate_alias_across_invocations(tmp_path: Path) -> None:
     """X-Ray read persists aliases; a later CLI mutate can target ``[0]``."""
     _write_xray_fixture_page(tmp_path)
@@ -265,6 +267,7 @@ def test_subprocess_xray_page_then_mutate_alias_across_invocations(tmp_path: Pat
     assert "status:: active" not in page_text
 
 
+@pytest.mark.integration
 def test_subprocess_missing_subcommand_exits_nonzero(tmp_path: Path) -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "src.cli"],

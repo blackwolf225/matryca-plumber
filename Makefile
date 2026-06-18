@@ -1,6 +1,6 @@
 NUM_WORKERS ?= 4
 
-.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-resilience check clean version-check
+.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-integration test-resilience check clean version-check
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -29,9 +29,12 @@ test: test-full ## Run the full pytest suite (coverage gate, -n auto)
 test-full: ## Full suite: coverage fail-under 70%, all logical CPUs
 	uv run pytest -n auto -q
 
-test-fast: ## Fast local gate: $(NUM_WORKERS) workers, no coverage, skip slow/remediation
-	@echo "Running fast local test suite ($(NUM_WORKERS) workers, no coverage, skipping slow/remediation tests)..."
-	uv run pytest -n $(NUM_WORKERS) --no-cov --ignore=tests/slow/ --ignore=tests/test_security_remediation.py -q
+test-fast: ## Fast local gate: $(NUM_WORKERS) workers, no coverage, skip slow/integration/remediation
+	@echo "Running fast local test suite ($(NUM_WORKERS) workers, no coverage, skipping slow/integration/remediation tests)..."
+	uv run pytest -n $(NUM_WORKERS) --no-cov -m "not integration" --disable-warnings --ignore=tests/slow/ --ignore=tests/test_security_remediation.py -q
+
+test-integration: ## Subprocess + bootstrap integration tests (no coverage gate)
+	uv run pytest -m integration -q --no-cov
 
 test-fast-parallel: ## test-fast with -n auto; lock-heavy suites may thrash on many cores
 	$(MAKE) test-fast NUM_WORKERS=auto

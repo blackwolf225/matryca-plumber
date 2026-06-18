@@ -54,7 +54,7 @@
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
 > Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.10.0** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, catalog/registry integrity, journal Phase-2 semantic bypass, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-> **Current: v1.10.0** — **Catalog Integrity & OSS Maturity:** closes v1.9.10 concurrency milestone (#35–#37, #41); GitHub Community Profile complete (PR template, CodeQL, frontend ESLint in CI); `make test-fast` local gate (~9s); dependency advisory bumps — **720+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
+> **Current: v1.10.0** — **Catalog Integrity & OSS Maturity:** closes v1.9.10 concurrency milestone (#35–#37, #41); GitHub Community Profile complete (PR template, CodeQL, frontend ESLint in CI); `make test-fast` local gate (~5s); dependency advisory bumps — **720+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 > "Logseq is building the best local outliner database. But AI Agent memory is at the very bottom of their roadmap. Matryca Plumber gives you that future today, safely bridging your local agents to your Logseq graph without waiting years." - Marco Porcellato - Matryca.ai chief architect and co-founder
 
@@ -348,8 +348,11 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Fast iteration loop (~9s, no coverage)
+# Fast iteration loop (~5s, no coverage)
 make test-fast
+
+# Integration slice (subprocess CLI, cross-process locks) before push
+make test-integration
 
 # Full CI gate before PR (coverage ≥ 70%, ~5 min)
 make check

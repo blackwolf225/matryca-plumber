@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`make test-fast`** — skips `@pytest.mark.integration` subprocess/bootstrap tests; removes real sleeps from TTL and I/O-retry unit tests; adds `make test-integration` for the excluded slice (~4–5s local gate on typical hardware).
+
 ## [1.10.0] - 2026-06-18
 
 **Catalog Integrity & OSS Maturity**

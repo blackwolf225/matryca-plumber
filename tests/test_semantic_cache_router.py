@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pytest
@@ -43,8 +42,10 @@ def test_semantic_cache_miss_after_ttl_expired(
     page.write_text("- ttl\n", encoding="utf-8")
     monkeypatch.setenv("MATRYCA_LINT_SEMANTIC_CACHE_TTL", "1")
     key = semantic_cache_key(page, "semantic_index")
+    fake_now = [1_000_000.0]
+    monkeypatch.setattr(router.time, "time", lambda: fake_now[0])
     cache_put(graph_root, "index", key, {"summary": "old"}, ttl_seconds=1)
-    time.sleep(1.1)
+    fake_now[0] += 2.0
     assert cache_get(graph_root, "index", key) is None
 
 

@@ -189,7 +189,8 @@ Ensure your repo **`.env`** includes the Ironclad security block from **`.env.ex
 | `make lint` | Ruff lint only |
 | `make typecheck` | `mypy src/ tests/` (strict) |
 | `make test` / `make test-full` | Full suite: coverage ≥ 70%, `-n auto` |
-| `make test-fast` | Fast local gate: `NUM_WORKERS` (default `4`), no coverage, skips `tests/slow/` and `test_security_remediation.py` |
+| `make test-fast` | Fast local gate: `NUM_WORKERS` (default `4`), no coverage, skips `tests/slow/`, `integration`, and `test_security_remediation.py` |
+| `make test-integration` | Subprocess CLI + cross-process lock + bootstrap routing tests (`-m integration`) |
 | `make sandbox-read-check` | Ensures graph/agent/rag reads use `read_graph_file_text()` (v1.9.9) |
 | `make perf` | `pytest -m slow` — memory / harvest soak (optional, not in default CI) |
 | **`make check`** | **`lint` → `typecheck` → `sandbox-read-check` → `test`** (full local gate) |
