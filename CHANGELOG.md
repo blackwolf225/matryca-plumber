@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Harvest catalog drift guard (#37)** — `catalog.upsert` runs only when `_append_minimal_semantic_index` confirms the page write (or the header is already present); OCC abort returns `pending_llm` without catalog/page drift.
+- **Link registry atomic save (#41)** — `_save_registry_unlocked` uses `atomic_write_bytes`, matching backlink index and daemon state persistence.
 - **Master catalog merge-on-save (#36)** — `MasterCatalog.save()` reloads disk state under flock and merges page rows by `last_mtime` (with explicit `replace=True` for prune); pending `remove()` deltas propagate on merge so harvest and daemon writers no longer clobber each other.
 - **Master catalog load flock (#35)** — `load_master_catalog` reads `master_catalog.json` (and `.bak` restore) under `cross_process_json_flock`, matching the save path and `backlink_index` load pattern; backup refresh also runs under flock.
 
