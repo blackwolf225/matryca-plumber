@@ -1,4 +1,6 @@
-.PHONY: help install format lint typecheck test test-fast test-fast-parallel test-resilience check clean version-check
+NUM_WORKERS ?= 4
+
+.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-resilience check clean version-check
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -22,14 +24,17 @@ sandbox-read-check: ## Ensure graph reads use read_graph_file_text (v1.9.9 secur
 version-check: ## Fail if llms.txt version headers drift from pyproject.toml
 	uv run python scripts/check_version_consistency.py
 
-test: ## Run the pytest suite (parallel via pytest-xdist)
+test: test-full ## Run the full pytest suite (coverage gate, -n auto)
+
+test-full: ## Full suite: coverage fail-under 70%, all logical CPUs
 	uv run pytest -n auto -q
 
-test-fast: ## Fast local/release gate: no coverage, skip security soak hang
-	uv run pytest -n auto --no-cov --ignore=tests/test_security_remediation.py -q
+test-fast: ## Fast local gate: $(NUM_WORKERS) workers, no coverage, skip slow/remediation
+	@echo "Running fast local test suite ($(NUM_WORKERS) workers, no coverage, skipping slow/remediation tests)..."
+	uv run pytest -n $(NUM_WORKERS) --no-cov --ignore=tests/slow/ --ignore=tests/test_security_remediation.py -q
 
-test-fast-parallel: ## test-fast with pytest-xdist (-n auto); daemon tests may flake
-	uv run pytest -n auto --no-cov --ignore=tests/test_security_remediation.py -q
+test-fast-parallel: ## test-fast with -n auto; lock-heavy suites may thrash on many cores
+	$(MAKE) test-fast NUM_WORKERS=auto
 
 test-resilience: ## LLM JSON resilience + semantic cache tests (no coverage gate)
 	uv run pytest -q tests/test_json_repair.py tests/test_llm_client_adaptive.py tests/test_semantic_cache_router.py --no-cov

@@ -25,8 +25,9 @@ Ship the v1.9.10 **Concurrency & Data Integrity** milestone under semver **1.10.
 5. **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, CodeQL, dependency-review, npm Dependabot, release verify job, version-consistency guard, frontend ESLint in CI, PyPI metadata.
 6. **Dependency advisories** — Transitive bumps for Python and frontend toolchain.
 7. **Docs** — README, `llms.txt`, ROADMAP, ARCHITECTURE, OpenSpec index harmonized for v1.10.0.
+8. **Developer DX** — `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); `make test-full` for CI coverage gate.
 
-**Suite:** 720+ tests green · mypy strict · ruff clean · frontend ESLint clean.
+**Suite:** 720+ tests green · mypy strict · ruff clean · frontend ESLint clean · `make test-fast` ~9s on typical dev hardware.
 
 ---
 

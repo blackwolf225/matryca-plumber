@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Documentation** — README, `llms.txt`, ROADMAP, ARCHITECTURE, PROJECT_DIARY, OpenSpec index, and Ironclad Shield checklist harmonized for v1.10.0 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)).
+- **`make test-fast`** — caps pytest-xdist at `NUM_WORKERS` (default `4`) to avoid lock thrashing on file-heavy tests; skips `tests/slow/` and `test_security_remediation.py`; adds `make test-full` alias for the coverage gate (`make test` unchanged for CI).
 - **OSS / GitHub hygiene** — PR template, CODEOWNERS, [`SUPPORT.md`](SUPPORT.md), frontend ESLint/Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment (720+ tests).
 
 ### Security

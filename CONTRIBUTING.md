@@ -172,7 +172,7 @@ After `make install`, validate changes the way operators run the **Agentic OS** 
 
 Ensure your repo **`.env`** includes the Ironclad security block from **`.env.example`** (at minimum `MATRYCA_MCP_ENABLED=true` if you use MCP hosts). See [`SECURITY.md`](SECURITY.md) for the full matrix.
 
-**Optional MCP stdio** — set `MATRYCA_MCP_ENABLED=true` before invoking bare `matryca-plumber` (stdio MCP is off by default). Supported MCP hosts include **Claude Desktop**, **Cursor**, and **[Hermes Agent](docs/integrations/hermes-agent.md)** (`~/.hermes/config.yaml`). Reach for a live MCP host only when you touch `mcp_server.py`, tool schemas, or host-specific serialization. Most graph and daemon behavior is proven faster with **`make test` / `make check`** plus the loop above — without wiring an external MCP host.
+**Optional MCP stdio** — set `MATRYCA_MCP_ENABLED=true` before invoking bare `matryca-plumber` (stdio MCP is off by default). Supported MCP hosts include **Claude Desktop**, **Cursor**, and **[Hermes Agent](docs/integrations/hermes-agent.md)** (`~/.hermes/config.yaml`). Reach for a live MCP host only when you touch `mcp_server.py`, tool schemas, or host-specific serialization. Most graph and daemon behavior is proven faster with **`make test-fast`** (local iteration) or **`make check`** (full CI gate) plus the loop above — without wiring an external MCP host.
 
 6. List Make targets:
 
@@ -188,8 +188,8 @@ Ensure your repo **`.env`** includes the Ironclad security block from **`.env.ex
 | `make format` | Ruff auto-fix + format |
 | `make lint` | Ruff lint only |
 | `make typecheck` | `mypy src/ tests/` (strict) |
-| `make test` | `pytest -q` |
-| `make test-fast` | Faster gate: no coverage, skips slow security soak (see `Makefile`) |
+| `make test` / `make test-full` | Full suite: coverage ≥ 70%, `-n auto` |
+| `make test-fast` | Fast local gate: `NUM_WORKERS` (default `4`), no coverage, skips `tests/slow/` and `test_security_remediation.py` |
 | `make sandbox-read-check` | Ensures graph/agent/rag reads use `read_graph_file_text()` (v1.9.9) |
 | `make perf` | `pytest -m slow` — memory / harvest soak (optional, not in default CI) |
 | **`make check`** | **`lint` → `typecheck` → `sandbox-read-check` → `test`** (full local gate) |
@@ -223,7 +223,7 @@ That means, in order:
 1. **Ruff** — lint clean (`make ci` also runs `format-check` without mutating the tree)
 2. **Mypy** — strict type-check on `src/` and `tests/` (**zero `# type: ignore` in `src/`** — see [Strict typing](#strict-typing-zero-mypy-suppressions-in-src))
 3. **Sandbox read gate** — `make sandbox-read-check` (no new `Path.read_text()` bypasses in graph/agent/rag; daemon pid/lock reads need `# sandbox-read-ok`)
-4. **Pytest** — full suite (**720+** targets on `main`; slow tests excluded unless you run `make perf`)
+4. **Pytest** — full suite via `make test-full` / `make test` (**720+** targets on `main`; slow tests excluded unless you run `make perf`). Use **`make test-fast`** during iteration (`NUM_WORKERS` default `4`, no coverage).
 
 GitHub Actions on pushes and pull requests to **`main`** runs **`make ci`** (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)): `uv sync`, frontend `npm ci` + `npm run build`, then `make ci`. **Any failing test blocks merge.**
 

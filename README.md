@@ -52,7 +52,7 @@
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
 > Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.10.0** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, catalog/registry integrity, journal Phase-2 semantic bypass, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-> **Current: v1.10.0** — **Catalog Integrity & OSS Maturity:** closes v1.9.10 concurrency milestone (#35–#37, #41); GitHub Community Profile complete (PR template, CodeQL, frontend ESLint in CI); dependency advisory bumps — **720+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
+> **Current: v1.10.0** — **Catalog Integrity & OSS Maturity:** closes v1.9.10 concurrency milestone (#35–#37, #41); GitHub Community Profile complete (PR template, CodeQL, frontend ESLint in CI); `make test-fast` local gate (~9s); dependency advisory bumps — **720+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 ![Matryca Plumber — Agentic Knowledge Management for Logseq OG](images/matryca-plumber-1-5-10-demo.gif)
 
@@ -348,7 +348,10 @@ make install
 # Build the React frontend
 cd frontend && npm install && npm run build && cd ..
 
-# Run tests (720+ passing, Mypy strict)
+# Fast iteration loop (~9s, no coverage)
+make test-fast
+
+# Full CI gate before PR (coverage ≥ 70%, ~5 min)
 make check
 
 # Optional: slow memory / harvest soak tests

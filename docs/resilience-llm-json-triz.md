@@ -170,10 +170,12 @@ Off by default. Production visibility remains `logs/matryca_plumber_ops.log` and
 
 ```bash
 uv run pytest tests/test_json_repair.py tests/test_llm_client_adaptive.py -q --no-cov
-# or: make test-resilience  (27 tests: json_repair, llm_client, semantic_cache)
+# or: make test-resilience  (31 tests: json_repair, llm_client, semantic_cache)
 ```
 
-Full suite (CI coverage ≥ 70%): `uv run pytest -q` or `make test`.
+Fast local gate (~9s, 708 tests): `make test-fast` (`NUM_WORKERS` default `4`, skips `tests/slow/`).
+
+Full suite (CI coverage ≥ 70%): `make test-full` or `make test`.
 
 **Manual soak (recommended after model or quant change):**
 
