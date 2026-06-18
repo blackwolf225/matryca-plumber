@@ -235,7 +235,8 @@ def _quarantine_corrupt_catalog(catalog_path: Path) -> Path:
 def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
     """Parse catalog JSON from disk; restore backup or quarantine on corruption."""
     try:
-        payload = read_bounded_json(path)
+        with cross_process_json_flock(path):
+            payload = read_bounded_json(path)
     except BoundedJsonError as exc:
         msg = str(exc)
         if msg.startswith("Cannot stat") or msg.startswith("Cannot read"):
@@ -243,7 +244,8 @@ def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
         backup = _catalog_backup_path(path)
         if backup.is_file():
             try:
-                payload = read_bounded_json(backup)
+                with cross_process_json_flock(backup):
+                    payload = read_bounded_json(backup)
                 logger.warning(
                     "[METADATA CORRUPTION DETECTED] Restored master catalog from backup at {}",
                     backup,
@@ -255,7 +257,8 @@ def _load_catalog_payload_from_disk(path: Path, root: Path) -> MasterCatalog:
             except BoundedJsonError:
                 pass
         try:
-            quarantined = _quarantine_corrupt_catalog(path)
+            with cross_process_json_flock(path):
+                quarantined = _quarantine_corrupt_catalog(path)
             logger.warning(
                 "[METADATA CORRUPTION DETECTED] Quarantined malformed catalog to {}",
                 quarantined,
@@ -311,7 +314,8 @@ def load_master_catalog(graph_root: Path, *, force_reload: bool = False) -> Mast
                 if catalog.persist_allowed:
                     backup = _catalog_backup_path(path)
                     try:
-                        shutil.copy2(path, backup)
+                        with cross_process_json_flock(path):
+                            shutil.copy2(path, backup)
                     except OSError as copy_exc:
                         logger.debug("Could not refresh catalog backup {}: {}", backup, copy_exc)
         catalog.rebuild_alias_index()

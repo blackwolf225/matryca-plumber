@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Master catalog load flock (#35)** — `load_master_catalog` reads `master_catalog.json` (and `.bak` restore) under `cross_process_json_flock`, matching the save path and `backlink_index` load pattern; backup refresh also runs under flock.
+
 ### Security
 
 - **Dependency advisories** — Bump transitive Python packages (`starlette` 1.3.1, `aiohttp` 3.14.1, `cryptography` 49.0.0, `python-multipart` 0.0.32) and frontend toolchain (`vite` 8.0.16+, `esbuild` 0.28.1+, `@babel/core` 7.29.7) to clear open Dependabot alerts.

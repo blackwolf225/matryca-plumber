@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -214,6 +215,75 @@ def test_load_and_save_master_catalog(graph_root: Path) -> None:
 
     reloaded = load_master_catalog(graph_root, force_reload=True)
     assert reloaded.pages["Demo"].domain == "mappa"
+
+
+def test_load_master_catalog_serializes_reads_under_concurrent_save(graph_root: Path) -> None:
+    """Concurrent reloads must not observe torn JSON during atomic catalog saves (#35)."""
+    baseline = load_master_catalog(graph_root)
+    baseline.upsert(
+        "Alpha",
+        CatalogEntry(
+            summary="Alpha baseline",
+            domain="risorsa",
+            tags=["alpha"],
+            last_mtime=1,
+            orphan=False,
+        ),
+    )
+    baseline.save()
+
+    parse_errors: list[str] = []
+    corrupt_loads: list[bool] = []
+    stop_event = threading.Event()
+
+    def reader_loop() -> None:
+        while not stop_event.is_set():
+            try:
+                reloaded = load_master_catalog(graph_root, force_reload=True)
+            except CatalogLoadError:
+                continue
+            if not reloaded.persist_allowed:
+                corrupt_loads.append(True)
+            catalog_path = MasterCatalog.catalog_path(graph_root)
+            try:
+                raw = catalog_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not raw.strip():
+                continue
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError:
+                parse_errors.append(raw[:120])
+
+    readers = [threading.Thread(target=reader_loop, daemon=True) for _ in range(4)]
+    for thread in readers:
+        thread.start()
+
+    try:
+        for index in range(120):
+            writer = load_master_catalog(graph_root)
+            writer.upsert(
+                f"Page{index % 8}",
+                CatalogEntry(
+                    summary=f"Summary {index}",
+                    domain="risorsa",
+                    tags=["concurrent"],
+                    last_mtime=index,
+                    orphan=False,
+                ),
+            )
+            writer.save()
+    finally:
+        stop_event.set()
+        for thread in readers:
+            thread.join(timeout=2.0)
+
+    assert parse_errors == []
+    assert corrupt_loads == []
+    final = load_master_catalog(graph_root, force_reload=True)
+    assert final.persist_allowed is True
+    assert len(final.pages) >= 8
 
 
 def test_needs_refresh_detects_mtime_drift(graph_root: Path) -> None:
