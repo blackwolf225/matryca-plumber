@@ -1091,6 +1091,11 @@ def test_bootstrap_harvest_uses_stateless_messages_when_compression_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Phase 1 must not send rolling Ermes history even if context compression is on."""
+    monkeypatch.delenv("LOGSEQ_GRAPH_PATH", raising=False)
+    monkeypatch.setattr(
+        "src.agent.llm_client.inject_identity_into_system_prompt",
+        lambda system_prompt, **_: system_prompt,
+    )
     client = InstructorLLMClient(base_url="http://localhost:1234/v1")
     client._append_execution_turn("stale-user", '{"stale": true}')
     client._append_execution_turn("stale-user-2", '{"stale": 2}')

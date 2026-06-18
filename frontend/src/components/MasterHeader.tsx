@@ -1,6 +1,6 @@
 import { Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore, useState } from 'react'
 
 import type { ConnectionStatus, DaemonStateResponse, PlumberConfig } from '../types/daemon'
 import { isEngineActive } from '../types/daemon'
@@ -31,13 +31,17 @@ interface MasterHeaderProps {
 const TOOLBAR_BUTTON_CLASS =
   'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-theme-border bg-theme-base transition-all hover:border-theme-accent/60'
 
+function useHydrated() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+}
+
 function ThemeToggleButton() {
   const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const mounted = useHydrated()
 
   const isDark = theme === 'dark'
 
@@ -100,23 +104,14 @@ export function MasterHeader({
 }: MasterHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [updateModalOpen, setUpdateModalOpen] = useState(false)
-  const [preflightOpen, setPreflightOpen] = useState(true)
+  const [preflightDismissed, setPreflightDismissed] = useState(false)
   const { report: preflightReport, loading: preflightLoading, error: preflightError, preflightReady, refreshPreflight } =
     usePreflight()
   const { data: updateInfo, fetchFailed: updateCheckFailed, checking: updateChecking, refetch: refetchUpdateCheck } =
     useUpdateCheck()
 
-  useEffect(() => {
-    if (!updateInfo?.update_available && updateModalOpen) {
-      setUpdateModalOpen(false)
-    }
-  }, [updateInfo, updateModalOpen])
-
-  useEffect(() => {
-    if (preflightReady && !preflightLoading) {
-      setPreflightOpen(false)
-    }
-  }, [preflightReady, preflightLoading])
+  const updateModalVisible = updateModalOpen && Boolean(updateInfo?.update_available)
+  const preflightModalOpen = !preflightDismissed && (!preflightReady || preflightLoading)
   const link = connectionBadge(connectionStatus)
   const daemonStatus = state?.status ?? 'stopped'
   const engineRunning = isEngineActive(daemonStatus) && !frozen
@@ -208,7 +203,7 @@ export function MasterHeader({
               {!preflightReady ? (
                 <button
                   type="button"
-                  onClick={() => setPreflightOpen(true)}
+                  onClick={() => setPreflightDismissed(false)}
                   className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-500/20 dark:text-amber-300"
                 >
                   Pre-flight
@@ -289,7 +284,7 @@ export function MasterHeader({
       </header>
 
       <PreFlightModal
-        open={preflightOpen}
+        open={preflightModalOpen}
         report={preflightReport}
         loading={preflightLoading}
         error={preflightError}
@@ -313,10 +308,10 @@ export function MasterHeader({
           })
         }
         onOpenSettings={() => {
-          setPreflightOpen(false)
+          setPreflightDismissed(true)
           setDrawerOpen(true)
         }}
-        onDismissWhenReady={() => setPreflightOpen(false)}
+        onDismissWhenReady={() => setPreflightDismissed(true)}
       />
 
       <SettingsDrawer
@@ -326,7 +321,7 @@ export function MasterHeader({
           setDrawerOpen(false)
           void refreshPreflight().then((latest) => {
             if (!latest?.ready) {
-              setPreflightOpen(true)
+              setPreflightDismissed(false)
             }
           })
         }}
@@ -339,7 +334,7 @@ export function MasterHeader({
 
       {updateInfo?.update_available ? (
         <UpdateGuideModal
-          open={updateModalOpen}
+          open={updateModalVisible}
           latestVersion={updateInfo.latest_version}
           onClose={() => setUpdateModalOpen(false)}
         />

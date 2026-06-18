@@ -44,7 +44,9 @@ export function useUpdateCheck(enabled: boolean = true): UpdateCheckState {
       return
     }
 
-    void refetch()
+    queueMicrotask(() => {
+      void refetch()
+    })
   }, [enabled, refetch])
 
   return { data, fetchFailed, checking, refetch }

@@ -527,20 +527,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
     surgeon: true,
   })
 
-  useEffect(() => {
-    if (config && !isDirty) {
-      setDraft(config)
-    }
-  }, [config, isDirty])
-
-  useEffect(() => {
-    if (!open) {
-      setSaved(false)
-      setIsDirty(false)
-      setSaveError(null)
-      setInvalidFields({})
-    }
-  }, [open])
+  const effectiveDraft = isDirty ? draft : (config ?? emptyPlumberConfig())
 
   const configLoaded = config !== null
 
@@ -548,11 +535,18 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
     if (isDirty && !window.confirm('Discard unsaved settings changes?')) {
       return
     }
+    setSaved(false)
+    setIsDirty(false)
+    setSaveError(null)
+    setInvalidFields({})
     onClose()
   }
 
   const updateField = <K extends keyof PlumberConfig>(key: K, raw: PlumberConfig[K]) => {
-    setDraft((prev) => ({ ...prev, [key]: raw }))
+    setDraft((prev) => {
+      const base = isDirty ? prev : (config ?? emptyPlumberConfig())
+      return { ...base, [key]: raw }
+    })
     setIsDirty(true)
     setSaved(false)
     setSaveError(null)
@@ -572,7 +566,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
   const validateDraft = (): boolean => {
     const nextInvalid: Partial<Record<keyof PlumberConfig, string>> = {}
     for (const key of NUMERIC_FIELDS) {
-      const value = draft[key]
+      const value = effectiveDraft[key]
       if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) {
         nextInvalid[key] = 'Enter a valid number'
       }
@@ -593,7 +587,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
     setSaving(true)
     setSaveError(null)
     try {
-      const result = await onSave(draft)
+      const result = await onSave(effectiveDraft)
       setSaving(false)
       if (result) {
         setSaved(true)
@@ -685,15 +679,15 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
                         key={field.key}
                         open={open}
                         field={field}
-                        lmStudioUrl={draft.lm_studio_url}
-                        value={draft.lm_model}
+                        lmStudioUrl={effectiveDraft.lm_studio_url}
+                        value={effectiveDraft.lm_model}
                         onChange={(model) => updateField('lm_model', model)}
                       />
                     ) : (
                       <ConfigField
                         key={field.key}
                         field={field}
-                        draft={draft}
+                        draft={effectiveDraft}
                         invalidFields={invalidFields}
                         onChange={updateField}
                       />
@@ -711,7 +705,7 @@ export function SettingsDrawer({ open, config, onClose, onSave }: SettingsDrawer
                     <TrustSectionCard
                       key={section.id}
                       section={section}
-                      draft={draft}
+                      draft={effectiveDraft}
                       expanded={expandedSections[section.id] ?? true}
                       invalidFields={invalidFields}
                       onToggle={() => toggleSection(section.id)}

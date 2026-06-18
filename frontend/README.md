@@ -36,7 +36,7 @@ npm run test   # Vitest
 npm run build  # tsc -b && vite build
 ```
 
-Root `make ci` runs Python gates plus frontend test/build. ESLint (`npm run lint`) has pre-existing react-hooks debt — run locally when touching UI code.
+Root `make ci` runs Python gates plus frontend lint/test/build.
 
 ## Architecture notes
 

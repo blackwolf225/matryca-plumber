@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Circle, Cpu, FolderPlus, Loader2, Sparkles, XCircle } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import type { PlumberConfig } from '../types/daemon'
 import type { PreflightCheck, PreflightResponse, ProvisionL1Response } from '../types/preflight'
@@ -115,34 +115,27 @@ export function PreFlightModal({
   onDismissWhenReady,
 }: PreFlightModalProps) {
   const [refreshing, setRefreshing] = useState(false)
-  const [graphPathDraft, setGraphPathDraft] = useState('')
+  const [graphPathOverride, setGraphPathOverride] = useState<string | null>(null)
+  const [graphPathTouched, setGraphPathTouched] = useState(false)
   const [savingGraph, setSavingGraph] = useState(false)
-  const [graphSaveError, setGraphSaveError] = useState<string | null>(null)
+  const [graphSaveErrorLocal, setGraphSaveErrorLocal] = useState<string | null>(null)
   const [provisioningL1, setProvisioningL1] = useState(false)
   const [provisionMessage, setProvisionMessage] = useState<string | null>(null)
   const [provisionError, setProvisionError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (config?.logseq_graph_path) {
-      setGraphPathDraft(config.logseq_graph_path)
-    }
-  }, [config?.logseq_graph_path])
-
-  useEffect(() => {
-    if (checkById(report, 'logseq_graph')?.status === 'pass') {
-      setGraphSaveError(null)
-    }
-  }, [report])
-
-  if (!open) {
-    return null
-  }
-
+  const serverGraphPath = config?.logseq_graph_path ?? ''
+  const graphPathDraft =
+    graphPathTouched && graphPathOverride !== null ? graphPathOverride : serverGraphPath
   const graphCheck = checkById(report, 'logseq_graph')
+  const graphSaveError = graphCheck?.status === 'pass' ? null : graphSaveErrorLocal
   const l1Check = checkById(report, 'l1_memory')
   const graphReady = graphCheck?.status === 'pass'
   const l1Ready = l1Check?.status === 'pass'
   const plannedL1Path = l1Check?.detail ?? null
+
+  if (!open) {
+    return null
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -156,27 +149,28 @@ export function PreFlightModal({
   const handleSaveGraph = async () => {
     const trimmed = graphPathDraft.trim()
     if (!trimmed) {
-      setGraphSaveError('Enter the absolute path to your Logseq vault root (folder containing pages/).')
+      setGraphSaveErrorLocal('Enter the absolute path to your Logseq vault root (folder containing pages/).')
       return
     }
     setSavingGraph(true)
-    setGraphSaveError(null)
+    setGraphSaveErrorLocal(null)
     try {
       const updated = await onSaveGraphPath(trimmed)
       if (updated) {
-        setGraphPathDraft(updated.logseq_graph_path)
+        setGraphPathTouched(false)
+        setGraphPathOverride(null)
       }
       const latest = await onRefresh()
-      const graphCheck = checkById(latest, 'logseq_graph')
-      if (graphCheck?.status === 'pass') {
-        setGraphSaveError(null)
+      const savedGraphCheck = checkById(latest, 'logseq_graph')
+      if (savedGraphCheck?.status === 'pass') {
+        setGraphSaveErrorLocal(null)
         return
       }
-      setGraphSaveError(
-        graphCheck?.message ?? 'Could not save graph path. Check the path and try again.',
+      setGraphSaveErrorLocal(
+        savedGraphCheck?.message ?? 'Could not save graph path. Check the path and try again.',
       )
     } catch (err) {
-      setGraphSaveError(err instanceof Error ? err.message : 'Failed to save graph path')
+      setGraphSaveErrorLocal(err instanceof Error ? err.message : 'Failed to save graph path')
     } finally {
       setSavingGraph(false)
     }
@@ -257,7 +251,10 @@ export function PreFlightModal({
                 <input
                   type="text"
                   value={graphPathDraft}
-                  onChange={(event) => setGraphPathDraft(event.target.value)}
+                  onChange={(event) => {
+                    setGraphPathTouched(true)
+                    setGraphPathOverride(event.target.value)
+                  }}
                   placeholder="/Users/you/Documents/my-logseq-vault"
                   className={GRAPH_INPUT_CLASS}
                   spellCheck={false}

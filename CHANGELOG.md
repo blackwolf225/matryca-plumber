@@ -17,7 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Documentation** — ROADMAP, ARCHITECTURE, PROJECT_DIARY, Ironclad Shield checklist, and openspec (`runtime-bootstrap`, `link-verification`, `security-sandbox`, `llm-performance`) updated for v1.9.10 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)).
-- **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, frontend Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment, doc sync to v1.9.15 (721+ tests).
+- **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, frontend ESLint/Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment, doc sync to v1.9.15 (721+ tests).
+
+### Fixed
+
+- **Frontend ESLint (react-hooks v7)** — Sovereign UI hooks/components refactored to derived state, `useSyncExternalStore` hydration, and deferred mount fetches; config module exempt from fast-refresh export rule.
+- **Flaky xdist test** — `test_bootstrap_harvest_uses_stateless_messages_when_compression_enabled` isolates `LOGSEQ_GRAPH_PATH` and identity injection so parallel workers get deterministic `_completion_messages` output.
 
 ### Security
 
