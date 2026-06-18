@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.9.15 (strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract + live telemetry + agent DX)  
+**Version:** 1.10.0 (catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -50,7 +50,7 @@ flowchart TB
   Locks --> Vault
 ```
 
-**Quality bar:** **721+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
+**Quality bar:** **720+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; slow perf tests via `make perf` (`pytest -m slow`).
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
@@ -64,7 +64,7 @@ flowchart TB
 
 **v1.9.5 focus:** **LLM OS agent contract** — two-tier Gardener vs Cognitive Agent discipline, Master Index **Soft Gate** (Human-in-the-Loop), `read_graph_data` / `bootstrap_status` Phase 1 semaphore, Safe-Sync read/write rules. Spec: [`openspec/llm-os-instructions.md`](openspec/llm-os-instructions.md); cognitive law in [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md) § "LLM OS".
 
-**Unreleased (v1.9.x perfection track):** **Journal Phase-2 bypass** — daily notes under `journals/` receive structural indexing only (AST cache, link registry, OCC `mtime` ledger); semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — all `# type: ignore` suppressions removed from `src/`; strict typing via Protocols, `cast()`, and runtime narrowing. **Master catalog & link registry integrity (v1.9.10 — unreleased)** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1910-unreleased), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
+**v1.10.0 focus:** **Catalog & registry integrity** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). **Journal Phase-2 bypass (v1.9.15)** — daily notes under `journals/` receive structural indexing only; semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — zero `# type: ignore` in `src/`. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1100), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 ---
 
@@ -393,7 +393,7 @@ Local LLM inference is **slow** (seconds to minutes). Logseq users keep editing 
 
 Cognitive modules (`apply_semantic_page_result`, `property_hygiene`, `auto_split`, `append_page_alias_line`, …) thread `baseline_mtime` through this gate. After Plumber’s **own** intermediate write in the same request, callers may **`OCCSnapshot.refresh_after_own_write()`** to re-baseline multi-step edits.
 
-**Bootstrap harvest (v1.9.10 unreleased — #37):** Phase-1 `harvest_page_into_catalog` calls `_append_minimal_semantic_index` after LLM inference. When OCC aborts (mtime drift or failed `atomic_write_bytes_if_unchanged`), the catalog **must not** upsert a summary absent from the `.md` body — the harvest returns `pending_llm` and retries on a later scan. See [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md#master-catalog-persistence-v1910-unreleased).
+**Bootstrap harvest (v1.10.0 — #37):** Phase-1 `harvest_page_into_catalog` calls `_append_minimal_semantic_index` after LLM inference. When OCC aborts (mtime drift or failed `atomic_write_bytes_if_unchanged`), the catalog **must not** upsert a summary absent from the `.md` body — the harvest returns `pending_llm` and retries on a later scan. See [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md#master-catalog-persistence-v1100).
 
 **Phase 2 daemon (`_process_llm_cycle_file`):** For **`pages/`** only (not `journals/`), the maintenance daemon does **not** hold `page_rmw_lock` during cognitive lint or `index_page` LLM inference. It snapshots mtime, reads content, runs modules and the LLM (each cognitive write acquires its own short lock scope), re-checks drift, then commits only inside **`apply_semantic_page_result`** — matching the sequence diagram below. Journal paths delegate to `_settle_journal_structural_cycle_file` before any LLM work. Holding the page lock across multi-minute inference would block Logseq saves and other writers without adding OCC value.
 
@@ -536,7 +536,7 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | Path traversal | `path_sandbox.assert_path_within_graph` |
 | Graph UTF-8 reads | `read_graph_file_text()` — CI `sandbox-read-check` blocks raw `Path.read_text()` in graph/agent/rag (v1.9.9) |
 | Bounded JSON sidecars | `read_bounded_json()` + `MATRYCA_JSON_MAX_BYTES` on catalog/registry/daemon/cache loaders (v1.9.9) |
-| JSON sidecar flock + atomic save | `cross_process_json_flock` + `atomic_write_bytes` on master catalog ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), link registry ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); harvest catalog/page parity on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) — v1.9.10 unreleased |
+| JSON sidecar flock + atomic save | `cross_process_json_flock` + `atomic_write_bytes` on master catalog ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), link registry ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); harvest catalog/page parity on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) — v1.10.0 |
 | Link registry tamper | `link_verification` validates registry `page_relpath` and asset refs before read (v1.9.9) |
 | LLM debug NDJSON | `agent_debug_log` path allowlist + secret redaction when `MATRYCA_LLM_DEBUG_*` enabled (v1.9.9) |
 | Credential leakage into graph | `quality_gate.outline_security_violations` |
@@ -549,11 +549,11 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | MCP stdio exposure | `MATRYCA_MCP_ENABLED` gate in `plumber_entry.py` (default off) |
 | MCP error leakage | `mcp_tool_guard._public_tool_error_message` unless `MATRYCA_DEBUG` |
 | Daemon exclusivity | `.matryca_plumber_daemon.lock` (POSIX flock / Windows `msvcrt`); PID sidecar published at lock acquisition; CI `# sandbox-read-ok` allowlist for pid/lock reads only |
-| Ledger durability | `save_daemon_state` tmp + fsync + replace + `.bak` + `json_flock`; master catalog merge-on-save + flock load (v1.9.10 unreleased) |
+| Ledger durability | `save_daemon_state` tmp + fsync + replace + `.bak` + `json_flock`; master catalog merge-on-save + flock load (v1.10.0) |
 
-### JSON sidecar concurrency (v1.9.10 — unreleased)
+### JSON sidecar concurrency (v1.10.0)
 
-Graph-local JSON checkpoints share **`cross_process_json_flock`** sidecars and **`atomic_write_bytes`**. v1.9.9 bounded reads prevent memory DoS; v1.9.10 closes torn-read and last-writer-wins gaps on the hottest sidecars.
+Graph-local JSON checkpoints share **`cross_process_json_flock`** sidecars and **`atomic_write_bytes`**. v1.9.9 bounded reads prevent memory DoS; v1.10.0 closes torn-read and last-writer-wins gaps on the hottest sidecars.
 
 | Sidecar | Load | Save |
 |---------|------|------|
@@ -563,7 +563,7 @@ Graph-local JSON checkpoints share **`cross_process_json_flock`** sidecars and *
 
 **Bootstrap (#37):** Catalog upsert after LLM harvest only when the semantic index block was written or already on disk; OCC abort → `pending_llm`, no catalog/page drift.
 
-Detail: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md#master-catalog-persistence-v1910-unreleased), [`docs/openspec/link-verification.md`](openspec/link-verification.md), [`docs/openspec/security-sandbox.md`](openspec/security-sandbox.md).
+Detail: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md#master-catalog-persistence-v1100), [`docs/openspec/link-verification.md`](openspec/link-verification.md), [`docs/openspec/security-sandbox.md`](openspec/security-sandbox.md).
 
 ---
 
@@ -938,7 +938,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.8 round 4** | Pre-release audit | Stateless graph insights, compression persist sanitize, 8k block catalog, Phase 2 lock-on-write-only, `id::` excluded from property matchers |
 | **1.9** | Structural graph hygiene | Link verification sidecar, Journey Log, CLI `--json`, `context load`, `read subtree` |
 | **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
-| **Unreleased** | v1.9.10 catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)) |
+| **1.10.0** | Catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); OSS CI maturity |
 | **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
 
 ---

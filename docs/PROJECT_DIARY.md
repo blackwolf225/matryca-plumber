@@ -1,6 +1,6 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.9.15** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.9.15]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.0** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.0]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
@@ -10,21 +10,23 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
-## [2026-06-18] Unreleased — v1.9.10 catalog & registry integrity (#35–#37, #41)
+## [2026-06-18] v1.10.0 — Catalog integrity & OSS maturity (#35–#37, #41)
 
 ### Context
 
-The v1.9.10 **Concurrency & Data Integrity** milestone had open audit items on JSON sidecars: torn reads during concurrent saves, last-writer-wins on `master_catalog.json`, non-atomic link registry writes, and catalog rows claiming LLM summaries never written to `.md` after OCC abort.
+Ship the v1.9.10 **Concurrency & Data Integrity** milestone under semver **1.10.0** (minor bump: closes a multi-issue data-plane milestone plus maintainer-facing OSS hardening). JSON sidecars (`master_catalog.json`, `.matryca_link_registry.json`) had torn reads, last-writer-wins merges, and catalog rows claiming LLM summaries never written to `.md` after OCC abort.
 
 ### Shipped
 
-1. **Master catalog load flock (#35)** — `_load_catalog_payload_from_disk` and `.bak` restore read under `cross_process_json_flock`, matching save path and `backlink_index` load pattern.
+1. **Master catalog load flock (#35)** — `_load_catalog_payload_from_disk` and `.bak` restore read under `cross_process_json_flock`.
 2. **Master catalog merge-on-save (#36)** — `MasterCatalog.save()` reloads disk under flock and merges page rows by `last_mtime`; `save(replace=True)` for prune; `remove()` deltas propagate via `_pending_removals`.
 3. **Harvest catalog drift guard (#37)** — `_append_minimal_semantic_index` returns `bool`; `harvest_page_into_catalog` skips `catalog.upsert` on OCC abort (`pending_llm`).
-4. **Link registry atomic save (#41)** — `_save_registry_unlocked` uses `atomic_write_bytes` instead of direct `write_text`.
-5. **Dependency advisories** — Transitive bumps for `starlette`, `aiohttp`, `cryptography`, `python-multipart`, and frontend toolchain (`vite`, `esbuild`, `@babel/core`).
+4. **Link registry atomic save (#41)** — `_save_registry_unlocked` uses `atomic_write_bytes`.
+5. **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, CodeQL, dependency-review, npm Dependabot, release verify job, version-consistency guard, frontend ESLint in CI, PyPI metadata.
+6. **Dependency advisories** — Transitive bumps for Python and frontend toolchain.
+7. **Docs** — README, `llms.txt`, ROADMAP, ARCHITECTURE, OpenSpec index harmonized for v1.10.0.
 
-**Suite:** 719+ tests green · mypy strict · ruff clean.
+**Suite:** 720+ tests green · mypy strict · ruff clean · frontend ESLint clean.
 
 ---
 

@@ -104,7 +104,7 @@ This follows *create on first meaningful write* for stateful JSON so checkpoints
 
 ---
 
-## Master catalog persistence (v1.9.10 — unreleased)
+## Master catalog persistence (v1.10.0)
 
 **File:** `.matryca_semantic_cache/master_catalog.json`  
 **Module:** [`src/graph/master_catalog.py`](../../src/graph/master_catalog.py)

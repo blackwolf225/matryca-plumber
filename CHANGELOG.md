@@ -7,22 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-06-18
+
+**Catalog Integrity & OSS Maturity**
+
 ### Fixed
 
 - **Harvest catalog drift guard (#37)** — `catalog.upsert` runs only when `_append_minimal_semantic_index` confirms the page write (or the header is already present); OCC abort returns `pending_llm` without catalog/page drift.
 - **Link registry atomic save (#41)** — `_save_registry_unlocked` uses `atomic_write_bytes`, matching backlink index and daemon state persistence.
 - **Master catalog merge-on-save (#36)** — `MasterCatalog.save()` reloads disk state under flock and merges page rows by `last_mtime` (with explicit `replace=True` for prune); pending `remove()` deltas propagate on merge so harvest and daemon writers no longer clobber each other.
 - **Master catalog load flock (#35)** — `load_master_catalog` reads `master_catalog.json` (and `.bak` restore) under `cross_process_json_flock`, matching the save path and `backlink_index` load pattern; backup refresh also runs under flock.
+- **Frontend ESLint (react-hooks v7)** — Sovereign UI hooks/components refactored to derived state, `useSyncExternalStore` hydration, and deferred mount fetches; config module exempt from fast-refresh export rule.
+- **Flaky xdist test** — `test_bootstrap_harvest_uses_stateless_messages_when_compression_enabled` isolates `LOGSEQ_GRAPH_PATH` and identity injection so parallel workers get deterministic `_completion_messages` output.
 
 ### Changed
 
-- **Documentation** — ROADMAP, ARCHITECTURE, PROJECT_DIARY, Ironclad Shield checklist, and openspec (`runtime-bootstrap`, `link-verification`, `security-sandbox`, `llm-performance`) updated for v1.9.10 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)).
-- **OSS / GitHub hygiene** — PR template, CODEOWNERS, SUPPORT.md, frontend ESLint/Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment, doc sync to v1.9.15 (721+ tests).
-
-### Fixed
-
-- **Frontend ESLint (react-hooks v7)** — Sovereign UI hooks/components refactored to derived state, `useSyncExternalStore` hydration, and deferred mount fetches; config module exempt from fast-refresh export rule.
-- **Flaky xdist test** — `test_bootstrap_harvest_uses_stateless_messages_when_compression_enabled` isolates `LOGSEQ_GRAPH_PATH` and identity injection so parallel workers get deterministic `_completion_messages` output.
+- **Documentation** — README, `llms.txt`, ROADMAP, ARCHITECTURE, PROJECT_DIARY, OpenSpec index, and Ironclad Shield checklist harmonized for v1.10.0 catalog/registry integrity ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)).
+- **OSS / GitHub hygiene** — PR template, CODEOWNERS, [`SUPPORT.md`](SUPPORT.md), frontend ESLint/Vitest in CI, CodeQL, dependency-review on PRs, npm Dependabot, release verify job, version-consistency guard (`scripts/check_version_consistency.py`), PyPI metadata enrichment (720+ tests).
 
 ### Security
 

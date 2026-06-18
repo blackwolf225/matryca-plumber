@@ -1,6 +1,6 @@
 # Resilient structured output — TRIZ applied to local LLMs
 
-**Status:** Shipped (see [`CHANGELOG.md`](../CHANGELOG.md) under `[Unreleased]` / recent releases).  
+**Status:** Shipped (see [`CHANGELOG.md`](../CHANGELOG.md) under `[1.10.0]` / recent releases).  
 **Modules:** [`json_repair.py`](../src/utils/json_repair.py), [`llm_client.py`](../src/agent/llm_client.py), [`plumber_config.py`](../src/agent/plumber_config.py)  
 **Related:** [`openspec/llm-performance.md`](openspec/llm-performance.md), [`v1.8-SOFTWARE-EDGE-PLAN.md`](v1.8-SOFTWARE-EDGE-PLAN.md)
 
