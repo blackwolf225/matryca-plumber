@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.5] - 2026-06-19
+
+**Logseq Matryca Parser 1.3.1 alignment**
+
+### Changed
+
+- **`logseq-matryca-parser`** — minimum dependency raised to **1.3.1** (from `>=1.1.1`); inherits graph parity from 1.2.x (YAML frontmatter, case-insensitive page routing, asset extraction, round-trip fixes) and the 1.3.0 public API surface (`LogosParser`, `SessionAliasRegistry`, `discover_graph_files` at package root).
+- **Parser import alignment** — `src/rag/matryca_hooks.py`, `src/agent/ingestion.py`, and `tests/conftest.py` use root-level parser exports; `src/daemon/ast_cache.py` counts bootstrap files via `discover_graph_files` (parser path exclusions).
+
 ## [1.10.4] - 2026-06-19
 
 **Dependency maintenance & CI toolchain**

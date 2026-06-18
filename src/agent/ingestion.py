@@ -11,9 +11,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from logseq_matryca_parser import logseq_markdown
+from logseq_matryca_parser import LogosParser
 from logseq_matryca_parser.logos_core import LogseqNode, LogseqPage
-from logseq_matryca_parser.logos_parser import LogosParser
+from logseq_matryca_parser.logseq_markdown import serialize_logseq_page
 from loguru import logger
 
 from ..graph.graph_path_validate import validate_logseq_graph_path
@@ -126,7 +126,7 @@ def _indent_as_children(markdown_body: str, *, extra: str = "  ") -> str:
 
 def _build_ingest_section(source_name: str, stamped_page: LogseqPage) -> tuple[str, str]:
     """Wrap serialized blocks under a dated ingest container bullet."""
-    body = logseq_markdown.serialize_logseq_page(stamped_page).strip()
+    body = serialize_logseq_page(stamped_page).strip()
     section_uuid = str(uuid.uuid4())
     indented = _indent_as_children(body)
     section = f"- Ingested: **{source_name}**\n  id:: {section_uuid}\n"

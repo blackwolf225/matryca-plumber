@@ -7,7 +7,7 @@ import uuid as uuid_module
 from pathlib import Path
 from typing import Any, cast
 
-from logseq_matryca_parser.agent_writer import _deepest_line_end
+from logseq_matryca_parser.agent_writer import _insertion_line_after_node
 from logseq_matryca_parser.graph import LogseqGraph
 from logseq_matryca_parser.logos_core import LogseqNode, LogseqPage
 from loguru import logger
@@ -326,7 +326,7 @@ def _headless_append_child(
         if target_node is None:
             msg = f"No node registered for uuid={parent_uuid_resolved}"
             raise ValueError(msg)
-        insert_after_line = _deepest_line_end(target_node)
+        insert_after_line = _insertion_line_after_node(target_node)
         child_level = target_node.indent_level + 1
         bullet_indent = " " * (child_level * graph.tab_size)
         body_indent = " " * ((child_level + 1) * graph.tab_size)

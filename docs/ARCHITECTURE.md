@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.10.4 (CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
+**Version:** 1.10.5 (parser 1.3.1 alignment + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -67,6 +67,8 @@ flowchart TB
 **v1.10.0 focus:** **Catalog & registry integrity** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). **Journal Phase-2 bypass (v1.9.15)** — daily notes under `journals/` receive structural indexing only; semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — zero `# type: ignore` in `src/`. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1100), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 **v1.10.3 focus:** **Sovereign UI resilience & LLM contract hardening** — config/graph-path saves offloaded from the FastAPI event loop (`asyncio.to_thread`); rotating Loguru at UI startup; Pydantic `extra="forbid"` on plumber/outline structured models; recursive OpenAI strict JSON Schema generation; adaptive `max_tokens` / `max_completion_tokens`; flock sidecar files created as `0o600`. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md#v1103-non-blocking-config-saves), [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md).
+
+**v1.10.5 focus:** **Logseq Matryca Parser 1.3.1 alignment** — minimum dependency `logseq-matryca-parser>=1.3.1`; root-level public API imports; AST cache bootstrap telemetry via `discover_graph_files`; inherits parser graph parity (YAML frontmatter, case-insensitive page routing, asset extraction, round-trip fixes from 1.2.x).
 
 **v1.10.4 focus:** **Dependency maintenance** — GitHub Actions toolchain refresh (`actions/checkout@v7`, `dependency-review-action@v5`, `astral-sh/setup-uv@v8.2.0`); Sovereign UI frontend npm patch/minor bumps; Dependabot weekly groups for `github-actions` and `frontend-npm`.
 
@@ -316,7 +318,7 @@ Spec detail: [`openspec/llm-performance.md`](openspec/llm-performance.md#journal
 
 ### Parser-backed spatial truth
 
-**[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)** (`>=1.1.1`) owns block hierarchy, indentation, and `id::` semantics. **`src/rag/matryca_hooks.py`** adapts `read_logseq_page` for agent consumption.
+**[logseq-matryca-parser](https://github.com/MarcoPorcellato/logseq-matryca-parser)** (`>=1.3.1`) owns block hierarchy, indentation, and `id::` semantics. From **1.2.0** onward the parser also handles YAML frontmatter page properties, case-insensitive page routing, and multimodal asset extraction; **1.3.0** consolidates the public root API (`LogosParser`, `LogseqGraph`, `discover_graph_files`, …). **`src/rag/matryca_hooks.py`** adapts `read_logseq_page` for agent consumption.
 
 Disk mutators that perform line surgery (`property_line_edit`, `tag_unify`, `reparent_blocks`, …) combine:
 
@@ -944,6 +946,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
 | **1.10.0** | Catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); OSS CI maturity |
 | **1.10.3** | UI/LLM hardening | Non-blocking Sovereign UI config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` |
+| **1.10.5** | Parser 1.3.1 alignment | `logseq-matryca-parser>=1.3.1`; root public API imports; AST cache `discover_graph_files`; graph parity 1.2.x inherited |
 | **1.10.4** | CI/deps maintenance | GitHub Actions toolchain refresh; Sovereign UI frontend npm bumps; Dependabot weekly groups |
 | **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
 

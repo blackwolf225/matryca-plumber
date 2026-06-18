@@ -1,12 +1,27 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.4** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.4]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.5** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.5]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-19] v1.10.5 — Logseq Matryca Parser 1.3.1 alignment
+
+### Context
+
+Matryca Plumber pinned `logseq-matryca-parser` at `>=1.1.1` since early 2026. Parser **1.3.1** consolidates graph parity (1.2.x) and a stable root public API (1.3.0). Plumber import paths and AST bootstrap telemetry were aligned without changing the headless OCC mutation contract.
+
+### Shipped
+
+1. **Dependency** — `logseq-matryca-parser>=1.3.1,<2.0.0` in `pyproject.toml` / `uv.lock`.
+2. **Import cleanup** — `LogosParser` from package root in `matryca_hooks`, `ingestion`, `conftest`; `serialize_logseq_page` explicit import.
+3. **AST cache** — bootstrap file count via parser `discover_graph_files` (same exclusions as graph load).
+4. **Headless splice** — `graph_dispatch` uses parser `_insertion_line_after_node` for line-index parity with 1.3.1.
 
 ---
 

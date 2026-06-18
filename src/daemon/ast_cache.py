@@ -9,6 +9,7 @@ from typing import Literal, cast
 
 from logseq_matryca_parser.graph import LogseqGraph
 from logseq_matryca_parser.logos_core import LogseqNode
+from logseq_matryca_parser.logseq_paths import discover_graph_files
 from loguru import logger
 
 FileEventKind = Literal["created", "modified", "deleted"]
@@ -18,14 +19,9 @@ _caches: dict[str, GraphAstCache] = {}
 
 
 def count_graph_markdown_files(graph_root: Path) -> int:
-    """Count ``pages/`` and ``journals/`` Markdown files for bootstrap telemetry."""
+    """Count sovereign Markdown files under ``pages/`` and ``journals/`` (parser exclusions)."""
     root = graph_root.expanduser().resolve(strict=False)
-    total = 0
-    for subdir in ("pages", "journals"):
-        base = root / subdir
-        if base.is_dir():
-            total += sum(1 for _ in base.rglob("*.md"))
-    return total
+    return len(discover_graph_files(root))
 
 
 class GraphAstCache:

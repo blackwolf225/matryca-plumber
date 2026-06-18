@@ -22,28 +22,7 @@ from ..graph.page_path import page_title_to_filename
 from ..graph.path_sandbox import assert_path_within_graph
 
 try:
-    import logseq_matryca_parser
-
-    # Package layout varies: ``LogosParser`` may be re-exported at top level, or only
-    # live under the ``logos_parser`` submodule (where ``logos_parser`` is a module,
-    # not the class — calling it would raise "'module' object is not callable").
-    _LogosParser: type[Any] | None = None
-    _pkg_lp = getattr(logseq_matryca_parser, "LogosParser", None)
-    if _pkg_lp is not None and callable(_pkg_lp):
-        _LogosParser = cast(type[Any], _pkg_lp)
-
-    if _LogosParser is None:
-        _logo = getattr(logseq_matryca_parser, "logos_parser", None)
-        if _logo is not None:
-            if isinstance(_logo, type):
-                _LogosParser = _logo
-            else:
-                _nested = getattr(_logo, "LogosParser", None)
-                if _nested is not None and callable(_nested):
-                    _LogosParser = cast(type[Any], _nested)
-
-    if _LogosParser is None:
-        raise ImportError("Could not resolve LogosParser class from logseq_matryca_parser")
+    from logseq_matryca_parser import LogosParser as _LogosParser
 except ImportError as e:  # pragma: no cover - exercised when optional dep missing
     _LogosParser = None
     import logging
@@ -63,7 +42,7 @@ def _require_logos_parser() -> type[Any]:
             "Install the `logseq-matryca-parser` package to enable spatial page reads."
         )
         raise ImportError(msg)
-    return _LogosParser
+    return cast(type[Any], _LogosParser)
 
 
 def get_spatial_context(file_path: str) -> Any:
