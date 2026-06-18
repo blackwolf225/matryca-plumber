@@ -286,6 +286,92 @@ def test_load_master_catalog_serializes_reads_under_concurrent_save(graph_root: 
     assert len(final.pages) >= 8
 
 
+def test_save_merges_concurrent_page_deltas_without_clobber(graph_root: Path) -> None:
+    """Stale in-process writers must not drop rows saved by another writer (#36)."""
+    writer_a = load_master_catalog(graph_root)
+    writer_a.upsert(
+        "PageA",
+        CatalogEntry(
+            summary="Alpha v1",
+            domain="risorsa",
+            tags=["a"],
+            last_mtime=10,
+            orphan=False,
+        ),
+    )
+    writer_a.save()
+
+    writer_b = load_master_catalog(graph_root, force_reload=True)
+    writer_b.upsert(
+        "PageB",
+        CatalogEntry(
+            summary="Beta",
+            domain="risorsa",
+            tags=["b"],
+            last_mtime=20,
+            orphan=False,
+        ),
+    )
+    writer_b.save()
+
+    writer_a.upsert(
+        "PageA",
+        CatalogEntry(
+            summary="Alpha v2",
+            domain="risorsa",
+            tags=["a"],
+            last_mtime=30,
+            orphan=False,
+        ),
+    )
+    writer_a.save()
+
+    merged = load_master_catalog(graph_root, force_reload=True)
+    assert merged.pages["PageA"].summary == "Alpha v2"
+    assert merged.pages["PageB"].summary == "Beta"
+
+
+def test_save_replace_mode_drops_pages_for_prune(graph_root: Path) -> None:
+    catalog = load_master_catalog(graph_root)
+    catalog.upsert(
+        "Keep",
+        CatalogEntry(summary="keep", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.upsert(
+        "Drop",
+        CatalogEntry(summary="drop", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.save()
+
+    catalog.remove("Drop")
+    catalog.save(replace=True)
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    assert "Keep" in reloaded.pages
+    assert "Drop" not in reloaded.pages
+
+
+def test_save_applies_pending_removals_on_merge(graph_root: Path) -> None:
+    catalog = load_master_catalog(graph_root)
+    catalog.upsert(
+        "Stale",
+        CatalogEntry(summary="stale", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.upsert(
+        "Fresh",
+        CatalogEntry(summary="fresh", domain="", tags=[], last_mtime=2, orphan=False),
+    )
+    catalog.save()
+
+    stale_ref = load_master_catalog(graph_root)
+    stale_ref.remove("Stale")
+    stale_ref.save()
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    assert "Stale" not in reloaded.pages
+    assert reloaded.pages["Fresh"].summary == "fresh"
+
+
 def test_needs_refresh_detects_mtime_drift(graph_root: Path) -> None:
     path = _write_page(graph_root, "Fresh", _indexed_body())
     catalog = load_master_catalog(graph_root)

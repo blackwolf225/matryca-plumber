@@ -87,6 +87,7 @@ class MasterCatalog:
     alias_to_page: dict[str, str] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
     persist_allowed: bool = True
+    _pending_removals: set[str] = field(default_factory=set, repr=False, compare=False)
 
     @staticmethod
     def catalog_path(graph_root: Path) -> Path:
@@ -116,8 +117,14 @@ class MasterCatalog:
             pages=pages,
         )
 
-    def save(self) -> None:
-        """Persist catalog atomically under the graph root."""
+    def save(self, *, replace: bool = False) -> None:
+        """Persist catalog atomically under the graph root.
+
+        When ``replace`` is false (default), reload disk state under flock and merge
+        pending page rows by ``last_mtime`` so concurrent writers do not clobber each
+        other. When ``replace`` is true, write ``self.pages`` as the full catalog
+        (used after ``prune_missing_pages``).
+        """
         if not self.persist_allowed:
             logger.error(
                 "Refusing to save master catalog for {}: load did not succeed "
@@ -128,24 +135,39 @@ class MasterCatalog:
         path = self.catalog_path(self.graph_root)
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
-            self.updated_at = datetime.now(tz=UTC).isoformat()
+            pending = dict(self.pages)
+            removals = set(self._pending_removals)
+            version = self.version
+        updated_at = datetime.now(tz=UTC).isoformat()
+        with cross_process_json_flock(path):
+            if replace:
+                merged_pages = pending
+            else:
+                disk_pages = _load_catalog_pages_unlocked(path, self.graph_root)
+                merged_pages = _merge_catalog_page_deltas(disk_pages, pending)
+                for title in removals:
+                    merged_pages.pop(title, None)
             payload = {
-                "version": self.version,
-                "updated_at": self.updated_at,
-                "pages": {title: entry.to_json() for title, entry in sorted(self.pages.items())},
+                "version": version,
+                "updated_at": updated_at,
+                "pages": {
+                    title: entry.to_json() for title, entry in sorted(merged_pages.items())
+                },
             }
             data = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-            with cross_process_json_flock(path):
-                atomic_write_bytes(
-                    path,
-                    data.encode("utf-8"),
-                    graph_root=self.graph_root,
-                    validate_block_refs=False,
-                )
-            with contextlib.suppress(OSError):
-                _catalog_mtime_ns[str(self.graph_root.expanduser().resolve(strict=False))] = (
-                    path.stat().st_mtime_ns
-                )
+            atomic_write_bytes(
+                path,
+                data.encode("utf-8"),
+                graph_root=self.graph_root,
+                validate_block_refs=False,
+            )
+        with self._lock:
+            self.pages = merged_pages
+            self.updated_at = updated_at
+            self._pending_removals.clear()
+        cache_key = str(self.graph_root.expanduser().resolve(strict=False))
+        with _lock, contextlib.suppress(OSError):
+            _catalog_mtime_ns[cache_key] = path.stat().st_mtime_ns
 
     def upsert(self, page_title: str, entry: CatalogEntry) -> None:
         with self._lock:
@@ -192,6 +214,7 @@ class MasterCatalog:
     def remove(self, page_title: str) -> None:
         with self._lock:
             self.pages.pop(page_title, None)
+            self._pending_removals.add(page_title)
 
     def needs_refresh(self, page_title: str, mtime_ns: int) -> bool:
         """Return True when the on-disk page is newer than the catalog row."""
@@ -223,6 +246,32 @@ class MasterCatalog:
 
 def _catalog_backup_path(catalog_path: Path) -> Path:
     return catalog_path.with_suffix(catalog_path.suffix + ".bak")
+
+
+def _load_catalog_pages_unlocked(path: Path, root: Path) -> dict[str, CatalogEntry]:
+    """Read catalog page rows from disk without acquiring flock."""
+    if not path.is_file():
+        return {}
+    try:
+        payload = read_bounded_json(path)
+    except BoundedJsonError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return dict(MasterCatalog.from_json(root, payload).pages)
+
+
+def _merge_catalog_page_deltas(
+    disk_pages: dict[str, CatalogEntry],
+    pending: dict[str, CatalogEntry],
+) -> dict[str, CatalogEntry]:
+    """Merge pending rows into disk state without dropping unseen concurrent writers."""
+    merged = dict(disk_pages)
+    for title, entry in pending.items():
+        existing = merged.get(title)
+        if existing is None or entry.last_mtime >= existing.last_mtime:
+            merged[title] = entry
+    return merged
 
 
 def _quarantine_corrupt_catalog(catalog_path: Path) -> Path:
