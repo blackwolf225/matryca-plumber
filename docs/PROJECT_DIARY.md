@@ -1,12 +1,26 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.3** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.3]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.4** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.4]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-19] v1.10.4 — Dependency maintenance & CI toolchain
+
+### Context
+
+Eight stale Dependabot PRs (#75–#82) failed CI on an outdated base (`ruff format-check` on `master_catalog.py`), not on the bumps themselves. Consolidated into [#83](https://github.com/MarcoPorcellato/matryca-plumber/pull/83) and shipped as a patch release.
+
+### Shipped
+
+1. **GitHub Actions** — `actions/checkout@v7` across all workflows (metrics-saver from v4); `dependency-review-action@v5`; `astral-sh/setup-uv@v8.2.0`.
+2. **Sovereign UI frontend** — npm patch/minor: `react-dom`, Tailwind CSS 4.3.1 stack, `lucide-react`, `eslint-plugin-react-refresh`.
+3. **Dependabot groups** — weekly batch PRs for `github-actions` and `frontend-npm` ecosystems.
 
 ---
 

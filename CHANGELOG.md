@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.4] - 2026-06-19
+
+**Dependency maintenance & CI toolchain**
+
+### Changed
+
+- **CI / GitHub Actions** — `actions/checkout@v7` (all workflows, including metrics-saver from v4), `dependency-review-action@v5`, `astral-sh/setup-uv@v8.2.0`.
+- **Sovereign UI frontend** — npm patch/minor bumps: `react-dom` 19.2.7, Tailwind CSS 4.3.1 stack, `lucide-react` 1.21.0, `eslint-plugin-react-refresh` 0.5.3.
+- **Dependabot** — weekly groups for `github-actions` and `frontend-npm` to reduce PR flood (supersedes Dependabot PRs #75–#82).
+
 ## [1.10.3] - 2026-06-18
 
 **Infrastructure hardening & Sovereign UI resilience**
