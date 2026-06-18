@@ -23,7 +23,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
 
   ironclad-gatekeeper:
     name: Ironclad Gatekeeper
@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v6
@@ -41,7 +41,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install uv and Python 3.12
-        uses: astral-sh/setup-uv@v8.1.0
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
           python-version: "3.12"
