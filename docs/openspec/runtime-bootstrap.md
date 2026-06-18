@@ -104,6 +104,24 @@ This follows *create on first meaningful write* for stateful JSON so checkpoints
 
 ---
 
+## Master catalog persistence (v1.10.0)
+
+**File:** `.matryca_semantic_cache/master_catalog.json`  
+**Module:** [`src/graph/master_catalog.py`](../../src/graph/master_catalog.py)
+
+| Operation | Contract |
+|-----------|----------|
+| **Load** | `load_master_catalog` / `_load_catalog_payload_from_disk` read under `cross_process_json_flock` ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)); `.bak` restore and quarantine also under flock |
+| **Save (default)** | `MasterCatalog.save()` reloads disk rows under flock and **merge-on-save** by `last_mtime` ([#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)) — daemon Phase-2 sync, harvest CLI, and graceful shutdown no longer clobber concurrent writers |
+| **Save (prune)** | `save(replace=True)` after `prune_missing_pages()` — intentional full replace of stale ghost rows |
+| **Remove during harvest** | `catalog.remove()` queues `_pending_removals` applied on next merge save |
+
+**Bootstrap harvest (#37):** After LLM inference, `_append_minimal_semantic_index` returns `bool`. Catalog upsert runs only when the semantic index block was written (or header already present). OCC abort → `pending_llm` status, no catalog/page drift; page retries on next incremental harvest.
+
+**Operator invariant:** Tier-2 agents read the compiled **`[[Matryca Master Index]]`** page — not the JSON file directly ([`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md)).
+
+---
+
 ## Related specs
 
 - [`l1-l2-routing.md`](l1-l2-routing.md) — How L1 content is loaded into agent context vs L2 graph reads.

@@ -63,7 +63,8 @@ Protected lines (fenced code, queries) are excluded via `compute_page_protected_
 ## Sidecar schema
 
 **Path:** `{LOGSEQ_GRAPH_PATH}/.matryca_link_registry.json`  
-**Locking:** `cross_process_json_flock` (same family as daemon state)
+**Locking:** `cross_process_json_flock` on load and save (same family as daemon state)  
+**Persistence (v1.10.0 — #41):** `_save_registry_unlocked` writes via `atomic_write_bytes` (temp → `fsync` → `os.replace`) so a crash mid-write cannot leave truncated JSON. Merge-on-save in `_persist_checked_registry_updates` reloads fresh entries under flock before applying verification deltas.
 
 ```json
 {

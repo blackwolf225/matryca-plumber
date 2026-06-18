@@ -16,6 +16,7 @@ from src.graph.link_verification import (
     load_link_registry,
     merge_page_links_into_registry,
     register_page_links_from_path,
+    save_link_registry,
     verify_registry_batch,
 )
 
@@ -293,3 +294,34 @@ def test_extract_links_from_page_handles_star_bullet(tmp_path: Path) -> None:
     content = page.read_text(encoding="utf-8")
     entries = extract_links_from_page(root, page, content)
     assert any(e.kind == "url" and e.target == "https://example.com/star" for e in entries)
+
+
+def test_save_link_registry_uses_atomic_write_bytes(graph_with_page: tuple[Path, Path]) -> None:
+    root, _page = graph_with_page
+    entries = {
+        "https://example.com/ok": LinkRegistryEntry(
+            kind="url",
+            target="https://example.com/ok",
+            page_relpath="pages/demo.md",
+            block_uuid=BLOCK,
+        ),
+    }
+    captured: list[tuple[Path, bytes, Path]] = []
+
+    def _capture(path: Path, data: bytes, *, graph_root: Path, **kwargs: object) -> None:
+        _ = kwargs
+        captured.append((path, data, graph_root))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+    with patch("src.graph.link_verification.atomic_write_bytes", side_effect=_capture):
+        save_link_registry(root, entries)
+
+    assert len(captured) == 1
+    path, data, graph_root = captured[0]
+    assert path == link_registry_path(root)
+    assert graph_root == root
+    payload = json.loads(data.decode("utf-8"))
+    assert payload["entries"]["https://example.com/ok"]["target"] == "https://example.com/ok"
+    loaded = load_link_registry(root)
+    assert loaded["https://example.com/ok"].target == "https://example.com/ok"

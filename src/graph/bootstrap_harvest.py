@@ -136,23 +136,23 @@ def _append_minimal_semantic_index(
     summary: BootstrapSummaryResult,
     *,
     baseline_mtime: float | None = None,
-) -> None:
+) -> bool:
     if baseline_mtime is None and page_path.is_file():
         baseline_mtime = read_file_mtime(page_path)
     if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
-        return
+        return False
     with page_rmw_lock(page_path):
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
-            return
+            return False
         if page_path.is_file():
             prev = read_graph_page_text(page_path, graph_root, errors="replace")
         else:
             prev = ""
             baseline_mtime = None
         if not prev.strip():
-            return
+            return False
         if SEMANTIC_INDEX_HEADER in prev:
-            return
+            return True
         body = prev.rstrip("\n") + _format_minimal_index_section(summary)
         if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
             page_path,
@@ -160,10 +160,11 @@ def _append_minimal_semantic_index(
             graph_root=graph_root,
             baseline_mtime=baseline_mtime,
         ):
-            return
+            return False
         if baseline_mtime is None:
             atomic_write_bytes(page_path, body.encode("utf-8"), graph_root=graph_root)
     patch_generational_caches_for_paths(graph_root, [page_path])
+    return True
 
 
 def _catalog_entry_from_harvest(
@@ -259,12 +260,13 @@ def harvest_page_into_catalog(
     if not domain and summary_result.domain:
         domain = _normalize_domain(summary_result.domain)
 
-    _append_minimal_semantic_index(
+    if not _append_minimal_semantic_index(
         graph_root,
         page_path,
         summary_result,
         baseline_mtime=baseline_mtime,
-    )
+    ):
+        return "pending_llm", False, True
     entry = _catalog_entry_from_harvest(
         summary=summary_result.summary,
         tags=summary_result.suggested_tags,

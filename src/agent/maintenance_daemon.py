@@ -2284,7 +2284,7 @@ class MaintenanceDaemon:
             pruned = catalog.prune_missing_pages()
             alias_purged = gc_generational_alias_cache(self.graph_root)
             if pruned > 0:
-                catalog.save()
+                catalog.save(replace=True)
             if pruned > 0 or alias_purged > 0:
                 logger.debug(
                     "Catalog GC pruned {} catalog row(s) and {} alias cache row(s)",

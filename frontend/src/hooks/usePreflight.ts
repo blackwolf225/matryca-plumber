@@ -35,7 +35,9 @@ export function usePreflight() {
 
   useEffect(() => {
     mountedRef.current = true
-    void refreshPreflight()
+    queueMicrotask(() => {
+      void refreshPreflight()
+    })
     return () => {
       mountedRef.current = false
     }

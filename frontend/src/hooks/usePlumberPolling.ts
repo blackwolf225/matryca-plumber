@@ -238,7 +238,9 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
     [applyConnectionFromPoll, cycleMs, pollGraphAnalytics, pollLogs, pollState],
   )
 
-  runTelemetryCycleRef.current = runTelemetryCycle
+  useEffect(() => {
+    runTelemetryCycleRef.current = runTelemetryCycle
+  }, [runTelemetryCycle])
 
   const startTelemetryLoop = useCallback(() => {
     clearCycleTimer()
@@ -248,7 +250,9 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
 
   useEffect(() => {
     mountedRef.current = true
-    void pollFrozenSnapshot()
+    queueMicrotask(() => {
+      void pollFrozenSnapshot()
+    })
     return () => {
       mountedRef.current = false
       cycleGenerationRef.current += 1
@@ -314,7 +318,9 @@ export function usePlumberPolling(cycleMs = POLL_CYCLE_MS): PlumberPollSnapshot 
   }, [])
 
   useEffect(() => {
-    void refreshConfig()
+    queueMicrotask(() => {
+      void refreshConfig()
+    })
   }, [refreshConfig])
 
   const startEngine = useCallback(async () => {

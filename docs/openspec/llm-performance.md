@@ -61,7 +61,7 @@ When semantic clustering is active, `inject_cluster_focus_context()` seeds neigh
 |-----------|----------------|
 | **BM25** (`generational_cache.py`) | `doc_term_freqs` per page (postings-lite); `MATRYCA_BM25_MODE=resident\|ondemand`; `release_bm25_corpus()` on Phase 1 teardown |
 | **Semantic cache** (`semantic_cache_router.py`) | Disk TTL + in-process LRU (`MATRYCA_SEMANTIC_CACHE_MEMORY_ENTRIES`); purge skips reserved JSON (`master_catalog.json`, `backlink_counts.json`, `semantic_clusters.json`) |
-| **Master catalog** (`master_catalog.py`) | `unload_master_catalog()` after bootstrap teardown |
+| **Master catalog** (`master_catalog.py`) | `unload_master_catalog()` after bootstrap teardown; flock load + merge-on-save under concurrent writers (v1.10.0 — [#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)) |
 | **Memory budget** (`memory_budget.py`) | `release_phase1_memory()`, `snapshot()`, `maybe_release_after_cycle()` |
 
 After successful Phase 1 bootstrap, the daemon calls `release_phase1_memory()` (clear generational caches, release BM25, trim semantic RAM, unload catalog, `gc.collect()`), precomputes semantic clusters, then enters Phase 2 polling.

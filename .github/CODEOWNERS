@@ -1,0 +1,5 @@
+# Default reviewers for sensitive mutation and automation paths.
+/src/graph/ @MarcoPorcellato
+/src/agent/ @MarcoPorcellato
+/.github/workflows/ @MarcoPorcellato
+/SECURITY.md @MarcoPorcellato

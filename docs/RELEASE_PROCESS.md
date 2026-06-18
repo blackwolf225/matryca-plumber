@@ -20,7 +20,7 @@ Replace `X.Y.Z` with the semver you are shipping (no `v` prefix in `pyproject.to
 - [ ] Leave an empty `## [Unreleased]` section at the top
 - [ ] Set `version = "X.Y.Z"` in `pyproject.toml`
 - [ ] Run `uv lock`
-- [ ] Run `make check` on CI-equivalent paths, or for a fast local gate before tag: `make test-fast` plus `uv run ruff check src tests` and `uv run mypy src tests` (see `make test-fast` — no coverage, skips `test_security_remediation.py` hang)
+- [ ] Run `make check` on CI-equivalent paths, or for a fast local gate before tag: `make test-fast` plus `uv run ruff check src tests` and `uv run mypy src tests` (see `make test-fast` — default 4 workers, no coverage, skips `tests/slow/` and `test_security_remediation.py`; override with `NUM_WORKERS=auto make test-fast`)
 - [ ] For performance-heavy releases (e.g. **1.8.x**): optionally run `make perf` (`pytest -m slow`, no coverage gate) and note results in the GitHub release; see [`v1.8-OPTIMIZATION-PLAN.md`](v1.8-OPTIMIZATION-PLAN.md#verification-matrix)
 - [ ] If CLI subcommands or flags changed: sync [`llms.txt`](../llms.txt) and [`.well-known/llms.txt`](../.well-known/llms.txt) (must stay identical); see [`openspec/agent-onboarding.md`](openspec/agent-onboarding.md)
 

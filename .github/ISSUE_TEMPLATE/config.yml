@@ -1,1 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question (Discussions)
+    url: https://github.com/MarcoPorcellato/matryca-plumber/discussions
+    about: RFCs, architecture debate, and community Q&A
+  - name: Security advisory (private)
+    url: https://github.com/MarcoPorcellato/matryca-plumber/security/advisories/new
+    about: Report vulnerabilities privately — do not open public issues

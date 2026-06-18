@@ -17,6 +17,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+
   ironclad-gatekeeper:
     name: Ironclad Gatekeeper
     runs-on: ubuntu-latest
@@ -44,10 +52,15 @@ jobs:
       - name: Sync Python dependencies
         run: uv sync --locked --extra dev
 
+      - name: Version consistency (pyproject.toml vs llms.txt)
+        run: uv run python scripts/check_version_consistency.py
+
       - name: Build React cockpit
         working-directory: frontend
         run: |
           npm ci
+          npm run lint
+          npm run test
           npm run build
 
       - name: Run CI gate (format check, Ruff, Mypy, Pytest)

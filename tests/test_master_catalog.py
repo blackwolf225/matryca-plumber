@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -214,6 +215,161 @@ def test_load_and_save_master_catalog(graph_root: Path) -> None:
 
     reloaded = load_master_catalog(graph_root, force_reload=True)
     assert reloaded.pages["Demo"].domain == "mappa"
+
+
+def test_load_master_catalog_serializes_reads_under_concurrent_save(graph_root: Path) -> None:
+    """Concurrent reloads must not observe torn JSON during atomic catalog saves (#35)."""
+    baseline = load_master_catalog(graph_root)
+    baseline.upsert(
+        "Alpha",
+        CatalogEntry(
+            summary="Alpha baseline",
+            domain="risorsa",
+            tags=["alpha"],
+            last_mtime=1,
+            orphan=False,
+        ),
+    )
+    baseline.save()
+
+    parse_errors: list[str] = []
+    corrupt_loads: list[bool] = []
+    stop_event = threading.Event()
+
+    def reader_loop() -> None:
+        while not stop_event.is_set():
+            try:
+                reloaded = load_master_catalog(graph_root, force_reload=True)
+            except CatalogLoadError:
+                continue
+            if not reloaded.persist_allowed:
+                corrupt_loads.append(True)
+            catalog_path = MasterCatalog.catalog_path(graph_root)
+            try:
+                raw = catalog_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not raw.strip():
+                continue
+            try:
+                json.loads(raw)
+            except json.JSONDecodeError:
+                parse_errors.append(raw[:120])
+
+    readers = [threading.Thread(target=reader_loop, daemon=True) for _ in range(4)]
+    for thread in readers:
+        thread.start()
+
+    try:
+        for index in range(120):
+            writer = load_master_catalog(graph_root)
+            writer.upsert(
+                f"Page{index % 8}",
+                CatalogEntry(
+                    summary=f"Summary {index}",
+                    domain="risorsa",
+                    tags=["concurrent"],
+                    last_mtime=index,
+                    orphan=False,
+                ),
+            )
+            writer.save()
+    finally:
+        stop_event.set()
+        for thread in readers:
+            thread.join(timeout=2.0)
+
+    assert parse_errors == []
+    assert corrupt_loads == []
+    final = load_master_catalog(graph_root, force_reload=True)
+    assert final.persist_allowed is True
+    assert len(final.pages) >= 8
+
+
+def test_save_merges_concurrent_page_deltas_without_clobber(graph_root: Path) -> None:
+    """Stale in-process writers must not drop rows saved by another writer (#36)."""
+    writer_a = load_master_catalog(graph_root)
+    writer_a.upsert(
+        "PageA",
+        CatalogEntry(
+            summary="Alpha v1",
+            domain="risorsa",
+            tags=["a"],
+            last_mtime=10,
+            orphan=False,
+        ),
+    )
+    writer_a.save()
+
+    writer_b = load_master_catalog(graph_root, force_reload=True)
+    writer_b.upsert(
+        "PageB",
+        CatalogEntry(
+            summary="Beta",
+            domain="risorsa",
+            tags=["b"],
+            last_mtime=20,
+            orphan=False,
+        ),
+    )
+    writer_b.save()
+
+    writer_a.upsert(
+        "PageA",
+        CatalogEntry(
+            summary="Alpha v2",
+            domain="risorsa",
+            tags=["a"],
+            last_mtime=30,
+            orphan=False,
+        ),
+    )
+    writer_a.save()
+
+    merged = load_master_catalog(graph_root, force_reload=True)
+    assert merged.pages["PageA"].summary == "Alpha v2"
+    assert merged.pages["PageB"].summary == "Beta"
+
+
+def test_save_replace_mode_drops_pages_for_prune(graph_root: Path) -> None:
+    catalog = load_master_catalog(graph_root)
+    catalog.upsert(
+        "Keep",
+        CatalogEntry(summary="keep", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.upsert(
+        "Drop",
+        CatalogEntry(summary="drop", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.save()
+
+    catalog.remove("Drop")
+    catalog.save(replace=True)
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    assert "Keep" in reloaded.pages
+    assert "Drop" not in reloaded.pages
+
+
+def test_save_applies_pending_removals_on_merge(graph_root: Path) -> None:
+    catalog = load_master_catalog(graph_root)
+    catalog.upsert(
+        "Stale",
+        CatalogEntry(summary="stale", domain="", tags=[], last_mtime=1, orphan=False),
+    )
+    catalog.upsert(
+        "Fresh",
+        CatalogEntry(summary="fresh", domain="", tags=[], last_mtime=2, orphan=False),
+    )
+    catalog.save()
+
+    stale_ref = load_master_catalog(graph_root)
+    stale_ref.remove("Stale")
+    stale_ref.save()
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    assert "Stale" not in reloaded.pages
+    assert reloaded.pages["Fresh"].summary == "fresh"
 
 
 def test_needs_refresh_detects_mtime_drift(graph_root: Path) -> None:

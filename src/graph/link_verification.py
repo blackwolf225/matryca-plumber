@@ -24,6 +24,7 @@ from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .global_fence_scanner import compute_page_protected_line_indices
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import (
+    atomic_write_bytes,
     atomic_write_bytes_if_unchanged,
     block_property_insert_index,
     bullet_indent_unit,
@@ -183,7 +184,8 @@ def _save_registry_unlocked(path: Path, entries: dict[str, LinkRegistryEntry]) -
         "entries": {key: entry.to_json() for key, entry in entries.items()},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    data = (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    atomic_write_bytes(path, data, graph_root=path.parent)
 
 
 def load_link_registry(graph_root: Path) -> dict[str, LinkRegistryEntry]:
