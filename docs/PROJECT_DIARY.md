@@ -1,12 +1,31 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.0** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.0]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.3** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.3]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-18] v1.10.3 — Infrastructure hardening & Sovereign UI resilience
+
+### Context
+
+Post–v1.10.0 catalog integrity work exposed operator-facing friction: saving settings in the Sovereign UI blocked the single Uvicorn worker during `.env` writes and `prepare_matryca_runtime()`, freezing the 5s telemetry poll. LLM structured-output schemas for nested outline nodes only enforced `additionalProperties: false` at the top level, and the UI process never registered Loguru’s rotating file sink.
+
+### Shipped
+
+1. **Non-blocking UI config saves** — `POST /api/config` and graph-path endpoints offload persistence + bootstrap via `asyncio.to_thread`.
+2. **Strict LLM contracts** — Pydantic `extra="forbid"` on plumber/outline structured models; recursive strict JSON Schema via OpenAI SDK helper; adaptive `max_tokens` / `max_completion_tokens`.
+3. **UI observability** — `configure_loguru()` at control-room startup (parity with MCP/daemon).
+4. **httpx model discovery** — `GET /api/lm-models` replaces urllib with redirect-refused httpx client.
+5. **Flock sidecar permissions** — `json_flock`, page RMW locks, daemon lock files created as `0o600` (CodeQL `py/overly-permissive-file`).
+6. **Docs** — README, `llms.txt`, ARCHITECTURE, OpenSpec security/telemetry/resilience notes, GitHub release template.
+
+**Suite:** 725 tests green · mypy strict · ruff clean · coverage ≥70%.
 
 ---
 

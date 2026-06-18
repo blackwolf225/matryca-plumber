@@ -9,5 +9,6 @@ Actionable checklist for global fence scanning, transactional writes, and genera
 - [x] **Link registry atomic save (v1.10.0 — #41)** — `_save_registry_unlocked` in `link_verification.py` uses `atomic_write_bytes` under existing `cross_process_json_flock`.
 - [x] **Master catalog flock + merge-on-save (v1.10.0 — #35, #36)** — `load_master_catalog` reads under flock; `MasterCatalog.save()` merge-on-save by `last_mtime`.
 - [x] **Harvest catalog/page parity (v1.10.0 — #37)** — Bootstrap skips catalog upsert when semantic index append OCC-aborts.
+- [x] **Flock sidecar permissions (v1.10.3)** — `json_flock`, page RMW locks, and daemon process lock files created as `0o600` (CodeQL `py/overly-permissive-file`).
 - [x] **Generational mtime cache** — `src/graph/generational_cache.py` for `build_alias_index` and BM25/keyword corpus in `local_query.py`; MCP uses cached alias build.
 - [x] **Tests** — Fence edges, atomic swap behavior, cache hit/invalidate; `make check` green (90+ tests).

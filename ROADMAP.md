@@ -6,7 +6,7 @@ Matryca Plumber is local data infrastructure for headless AI agents working with
 
 Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](https://github.com/MarcoPorcellato/matryca-plumber/discussions/19).
 
-*Status as of v1.10.0 — issue numbers link to GitHub; scope may shift as milestones close.*
+*Status as of v1.10.3 — issue numbers link to GitHub; scope may shift as milestones close.*
 
 ---
 
@@ -92,6 +92,7 @@ Not backlog — context for where we are today:
 | v1.9.14 | Contributor readiness (#62/#64 tech debt), journal-aware Phase 2 clustering, good-first issue blueprints (710+ tests) |
 | v1.9.15 | Mypy strict `#60` (zero `src/` ignores); journal Phase-2 semantic bypass with Phase-1 AST/OCC preserved (712+ tests) |
 | v1.10.0 | Catalog/registry integrity (#35–#37, #41); OSS/GitHub hygiene (PR template, CodeQL, frontend ESLint); `make test-fast` local gate; dependency advisory bumps (720+ tests) |
+| v1.10.3 | Sovereign UI non-blocking config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` (725+ tests) |
 
 ---
 

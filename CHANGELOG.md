@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.3] - 2026-06-18
+
+**Infrastructure hardening & Sovereign UI resilience**
+
 ### Changed
 
 - **Sovereign UI API** — `POST /api/config` and graph-path saves offload `.env` I/O and `prepare_matryca_runtime()` to a worker thread so telemetry polling stays responsive during configuration writes; LM Studio model discovery uses `httpx` (no redirects) instead of `urllib`; control-room startup calls `configure_loguru()` for rotating file logs.

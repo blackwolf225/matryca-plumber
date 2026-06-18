@@ -70,6 +70,17 @@ sequenceDiagram
 | Client timeout | `MATRYCA_GRAPH_ANALYTICS_TIMEOUT_MS` = **60s** for `/api/graph-analytics` |
 | Poll failure | UI merges `graph_analytics.status: offline` instead of silent no-op |
 
+## v1.10.3 non-blocking config saves
+
+| Change | Detail |
+|--------|--------|
+| Problem | `POST /api/config` and graph-path saves ran synchronous `.env` I/O + `prepare_matryca_runtime()` on the Uvicorn worker, stalling the 5s telemetry poll during settings edits |
+| Fix | Handlers are `async def`; persistence/bootstrap run in `asyncio.to_thread` (`_persist_config_update`, `_persist_graph_path_update`) |
+| Logging | `run_ui_server()` calls `configure_loguru()` so the control room writes rotating file logs like MCP/daemon |
+| Model list | `GET /api/lm-models` uses `httpx` with `follow_redirects=False` (SSRF-aligned) |
+
+**Follow-up (not in v1.10.3):** `POST /api/provision-l1` remains synchronous; large vault bootstrap inside that handler can still block the worker briefly.
+
 ## Related specs
 
 - [`llm-performance.md`](llm-performance.md) — bootstrap yield/checkpoint cadence  

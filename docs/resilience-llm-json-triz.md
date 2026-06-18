@@ -1,6 +1,6 @@
 # Resilient structured output — TRIZ applied to local LLMs
 
-**Status:** Shipped (see [`CHANGELOG.md`](../CHANGELOG.md) under `[1.10.0]` / recent releases).  
+**Status:** Shipped (see [`CHANGELOG.md`](../CHANGELOG.md) under `[1.10.3]` / recent releases).  
 **Modules:** [`json_repair.py`](../src/utils/json_repair.py), [`llm_client.py`](../src/agent/llm_client.py), [`plumber_config.py`](../src/agent/plumber_config.py)  
 **Related:** [`openspec/llm-performance.md`](openspec/llm-performance.md), [`v1.8-SOFTWARE-EDGE-PLAN.md`](v1.8-SOFTWARE-EDGE-PLAN.md)
 
@@ -197,6 +197,18 @@ Most “LLM wrappers” bolt on `json.loads` and hope. Matryca Plumber uses TRIZ
 That process produced a **resilience specification** that ships in `json_repair.py` and `llm_client.py` and is referenced across architecture docs — so the next contributor extends the **system**, not a comment in a PR.
 
 **Enterprise distinction:** A wrapper asks the model to behave. **Infrastructure governs** the model, documents failure modes, and keeps the Logseq graph pristine when it does not.
+
+---
+
+## v1.10.3 — Strict schema & validation layer
+
+| Layer | v1.10.3 behavior |
+|-------|------------------|
+| Pydantic models | `ConfigDict(extra="forbid")` on plumber cognitive payloads and MCP `OutlineNode` — unknown LLM keys fail validation instead of silent drop |
+| OpenAI Path A | `pydantic_to_strict_json_schema()` delegates to OpenAI SDK recursive helper — nested `$ref` objects get `additionalProperties: false` |
+| Token caps | `llm_completion_token_limit_kwargs()` emits `max_completion_tokens` for o-series/gpt-5 ids and `max_tokens` for local LM Studio/Ollama servers |
+
+**Note:** `SemanticIndexResult` (daemon Phase 2) is not yet on `extra="forbid"` — follow-up for a future patch.
 
 ---
 

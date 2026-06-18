@@ -45,6 +45,8 @@ Beyond size bounds, hot sidecars use **`cross_process_json_flock`** so readers n
 
 Bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) so catalog rows cannot claim summaries absent from page bodies.
 
+**v1.10.3 sidecar permissions:** flock sidecar files (`*.flock`, page RMW locks, daemon process lock) are created with mode **`0o600`** so other OS users cannot read lock metadata on shared hosts.
+
 See [`runtime-bootstrap.md`](runtime-bootstrap.md#master-catalog-persistence-v1100) and [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ---
