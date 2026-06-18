@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-06-18
+
+**Fast test gate & CI fixes**
+
+### Fixed
+
+- **CI mypy** — `test_semantic_cache_router` patches `time.time` via dotted module path so strict mypy passes (`attr-defined` clean).
+
 ### Changed
 
 - **`make test-fast`** — skips `@pytest.mark.integration` subprocess/bootstrap tests; removes real sleeps from TTL and I/O-retry unit tests; adds `make test-integration` for the excluded slice (~4–5s local gate on typical hardware).

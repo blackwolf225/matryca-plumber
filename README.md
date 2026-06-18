@@ -54,7 +54,7 @@
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
 > Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.10.0** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, catalog/registry integrity, journal Phase-2 semantic bypass, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-> **Current: v1.10.0** — **Catalog Integrity & OSS Maturity:** closes v1.9.10 concurrency milestone (#35–#37, #41); GitHub Community Profile complete (PR template, CodeQL, frontend ESLint in CI); `make test-fast` local gate (~5s); dependency advisory bumps — **720+ passing tests**. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
+> **Current: v1.10.2** — **Fast test gate & CI fixes:** `make test-fast` (~5s) skips integration subprocess tests; `make test-integration` for that slice; CI mypy clean on semantic cache router tests — builds on v1.10.0 catalog/registry integrity. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 > "Logseq is building the best local outliner database. But AI Agent memory is at the very bottom of their roadmap. Matryca Plumber gives you that future today, safely bridging your local agents to your Logseq graph without waiting years." - Marco Porcellato - Matryca.ai chief architect and co-founder
 
@@ -368,8 +368,8 @@ make perf
 | Document | Description |
 |----------|-------------|
 | [`SUPPORT.md`](SUPPORT.md) | Where to get help (Discussions vs Issues vs private security advisories). |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history; canonical source for GitHub Release notes (current: **v1.10.0**). |
-| [`docs/releases/v1.10.0-GITHUB.md`](docs/releases/v1.10.0-GITHUB.md) | Copy-paste GitHub Release body for v1.10.0. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history; canonical source for GitHub Release notes (current: **v1.10.2**). |
+| [`docs/releases/v1.10.2-GITHUB.md`](docs/releases/v1.10.2-GITHUB.md) | Copy-paste GitHub Release body for v1.10.2. |
 | [`ROADMAP.md`](ROADMAP.md) | Short/medium/long-term path to v2.0 Shadow DB & Safe-Sync; links open milestones and issues. |
 | [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) | Six curated good-first issues with copy-paste GitHub contributor comments (v1.9.14). |
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
