@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency advisories** — Bump transitive Python packages (`starlette` 1.3.1, `aiohttp` 3.14.1, `cryptography` 49.0.0, `python-multipart` 0.0.32) and frontend toolchain (`vite` 8.0.16+, `esbuild` 0.28.1+, `@babel/core` 7.29.7) to clear open Dependabot alerts.
+
 ## [1.9.15] - 2026-06-12
 
 **Strict Mypy Compliance & Journal Phase-2 Bypass**
