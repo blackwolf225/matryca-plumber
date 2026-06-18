@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CodeQL** — workflow query suite narrowed from `security-and-quality` to `security-extended` so Code Scanning reports security findings only (drops maintainability noise such as cyclic-import and unused-variable alerts).
+
 ## [1.10.2] - 2026-06-18
 
 **Fast test gate & CI fixes**
