@@ -327,7 +327,12 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 
 **Templates:** [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) — `feature_request.yml`, `bug_report.yml`, `epic.yml`, `question.yml`.
 
-**Good first issues (v1.9.14):** [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) lists six curated audit issues (#45, #53, #56, #69, #71, and a `#62` Literal dedup slice) with copy-paste welcome comments — paste onto the GitHub issue when inviting external contributors.
+**Good first issues:** [open issues labeled `good first issue`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — currently #45, #53, #56, #69, #71, and [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) (`BootstrapHarvestStatus` Literal dedup, slice of #62). Maintainer context and verify commands: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md). Welcome comments are already on each GitHub thread.
+
+| Label | When |
+|-------|------|
+| `good first issue` | Scoped fix, existing tests, no OCC/flock expertise required |
+| `help wanted` | Maintainer welcomes external PRs on this issue |
 
 ---
 

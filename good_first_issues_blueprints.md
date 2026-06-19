@@ -1,6 +1,6 @@
 # Good First Issues — Contributor Blueprints
 
-**Shipped in v1.9.14** — six open issues selected from the v1.9.x perfection audit backlog as the easiest, most self-contained entry points for external contributors. Each section includes a ready-to-paste GitHub comment.
+**Updated v1.10.5 backlog hygiene** — six open issues tagged [`good first issue`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) + [`help wanted`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22help+wanted%22) on GitHub (#45, #53, #56, #69, #71, [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85)). Welcome comments are already posted on each issue thread.
 
 **Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `fix(link): use file_mtime_drifted in link_verification (#45)`).
 
@@ -8,7 +8,7 @@
 
 ## Issue #45 — [Bug] link_verification compares mtime with `!=` instead of `file_mtime_drifted`
 
-**Difficulty:** 2/10
+**Difficulty:** 2/10 · [GitHub #45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45)
 
 **Exact Contribution Guide Comment:**
 
@@ -32,9 +32,9 @@
 
 ---
 
-## Issue #62 (sub-task) — Deduplicate `BootstrapHarvestStatus` Literal
+## Issue #85 — Deduplicate `BootstrapHarvestStatus` Literal (slice of #62)
 
-**Difficulty:** 2/10
+**Difficulty:** 2/10 · [GitHub #85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) · parent [#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62)
 
 **Exact Contribution Guide Comment:**
 
@@ -60,7 +60,7 @@
 
 ## Issue #56 — [Performance] harvest_page_into_catalog decodes full mmap after successful regex extract
 
-**Difficulty:** 3/10
+**Difficulty:** 3/10 · [GitHub #56](https://github.com/MarcoPorcellato/matryca-plumber/issues/56)
 
 **Exact Contribution Guide Comment:**
 
@@ -86,13 +86,13 @@
 
 ## Issue #53 — [Performance] Phase-2 reads same page twice per cognitive lint cycle
 
-**Difficulty:** 3/10
+**Difficulty:** 3/10 · [GitHub #53](https://github.com/MarcoPorcellato/matryca-plumber/issues/53)
 
 **Exact Contribution Guide Comment:**
 
 > Hi! Welcome — this issue is a straightforward I/O dedup inside the maintenance daemon.
 >
-> **What to fix:** In `src/agent/maintenance_daemon.py`, method `_process_llm_cycle_file` reads the same page twice when cognitive lint is active (two separate `read_graph_file_text` calls around lines 2542 and 2571 per the issue description).
+> **What to fix:** In `src/agent/maintenance_daemon.py`, method `_process_llm_cycle_file` reads the same page twice when cognitive lint is active (two separate `read_graph_file_text` calls around lines 2613 and 2642).
 >
 > **Steps:**
 > 1. Open `src/agent/maintenance_daemon.py` and locate `_process_llm_cycle_file`.
@@ -112,7 +112,7 @@
 
 ## Issue #69 — [Performance] Skip cluster-focus injection for single-page cluster groups
 
-**Difficulty:** 3/10
+**Difficulty:** 3/10 · [GitHub #69](https://github.com/MarcoPorcellato/matryca-plumber/issues/69)
 
 **Exact Contribution Guide Comment:**
 
@@ -121,9 +121,9 @@
 > **What to fix:** In `src/agent/maintenance_daemon.py`, method `run_cycle` injects a `[CLUSTER FOCUS: NEIGHBORHOOD MAP]` prefix via `_begin_cluster_context()` for every multi-page cluster group. For singleton clusters (`len(cluster_paths) == 1`), the neighborhood map duplicates per-page context already in the batch — pure token waste.
 >
 > **Steps:**
-> 1. Open `src/agent/maintenance_daemon.py` and find the `uses_cluster_focus` guard in `run_cycle` (around line 2915).
+> 1. Open `src/agent/maintenance_daemon.py` and find the `uses_cluster_focus` guard in `run_cycle` (around line 2977).
 > 2. Extend the condition so cluster focus is skipped when `len(cluster_paths) == 1`, similar to how `CLUSTER_IDS_WITHOUT_FOCUS` is handled.
-> 3. Ensure `reset_history_after` for single-page groups matches the no-focus path (see the `cluster_id in CLUSTER_IDS_WITHOUT_FOCUS` branch around line 2947).
+> 3. Ensure `reset_history_after` for single-page groups matches the no-focus path (see the `cluster_id in CLUSTER_IDS_WITHOUT_FOCUS` branch).
 > 4. Read `_begin_cluster_context` to confirm you understand what gets skipped.
 >
 > **Verify your fix:**
@@ -138,7 +138,7 @@
 
 ## Issue #71 — [Tech Debt] Centralize journal page detection in graph layer
 
-**Difficulty:** 4/10
+**Difficulty:** 4/10 · [GitHub #71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71)
 
 **Exact Contribution Guide Comment:**
 
@@ -159,3 +159,13 @@
 > ```
 >
 > Keep the diff surgical — move + re-export, no behavior change. Comment here when you claim it. Glad to have you on board!
+
+---
+
+## Recently closed (no longer good-first candidates)
+
+| Issue | Shipped in | Summary |
+|-------|------------|---------|
+| [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67) | v1.9.15 | Journal Phase-2 structural settle — no semantic LLM |
+| [#68](https://github.com/MarcoPorcellato/matryca-plumber/issues/68) | v1.9.14 | Entity consolidation skips journal/date wikilink pairs |
+| [#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70) | v1.9.15 | Phase-2 progress denominator excludes `journals/` |

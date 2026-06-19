@@ -18,7 +18,7 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - Agent surface: [`llms.txt`](llms.txt), [`.well-known/llms.txt`](.well-known/llms.txt), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)
 - Operator workflow in [CONTRIBUTING.md](CONTRIBUTING.md) — Discussions for RFCs, issues for trackable work
 - “Test vault first” guidance in README (clone graph before pointing at production)
-- Good-first issue blueprints — [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) (six curated audit issues with contributor comments)
+- Good-first issues live on GitHub — [open `good first issue` label](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#45, #53, #56, #69, #71, #85); maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md)
 
 ### Tech debt & integrity (prerequisite for v2.0)
 
@@ -28,15 +28,18 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - ~~Atomic JSON writes for link registry and daemon state~~ — **done (v1.10.0):** link registry `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); daemon state already atomic
 - ~~Catalog cache coherence under concurrent disk writers~~ — **done (v1.10.0):** master catalog load flock ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)), merge-on-save ([#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), harvest catalog/page drift guard on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37))
 
-**[v1.9.11 — Performance & I/O](https://github.com/MarcoPorcellato/matryca-plumber/milestone/7)** ([#46](https://github.com/MarcoPorcellato/matryca-plumber/issues/46)–[#56](https://github.com/MarcoPorcellato/matryca-plumber/issues/56), [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67)–[#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70))
+**[v1.9.11 — Performance & I/O](https://github.com/MarcoPorcellato/matryca-plumber/milestone/7)** ([#46](https://github.com/MarcoPorcellato/matryca-plumber/issues/46)–[#56](https://github.com/MarcoPorcellato/matryca-plumber/issues/56), [#69](https://github.com/MarcoPorcellato/matryca-plumber/issues/69))
 
 - Incremental AST reload instead of full-vault rescans
 - Catalog and alias hot-path optimizations; checkpoint debounce
-- ~~Skip Phase 2 LLM work on daily journals; UI progress denominator fixes~~ — **done** (journal structural-only settle + Phase-2 vault metrics exclude `journals/`)
+- ~~Skip Phase 2 LLM work on daily journals~~ — **done (v1.9.15):** [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67) closed
+- ~~Entity consolidation journal skip~~ — **done (v1.9.14):** [#68](https://github.com/MarcoPorcellato/matryca-plumber/issues/68) closed
+- ~~Phase-2 progress denominator excludes journals~~ — **done (v1.9.15):** [#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70) closed
 
-**[v1.9.12 — Code Perfection & Tech Debt](https://github.com/MarcoPorcellato/matryca-plumber/milestone/8)** ([#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57)–[#64](https://github.com/MarcoPorcellato/matryca-plumber/issues/64), [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
+**[v1.9.12 — Code Perfection & Tech Debt](https://github.com/MarcoPorcellato/matryca-plumber/milestone/8)** ([#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57)–[#64](https://github.com/MarcoPorcellato/matryca-plumber/issues/64), [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71), [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85))
 
 - Split `maintenance_daemon.py`; handler registry for `graph_dispatch.py`
+- `BootstrapHarvestStatus` Literal dedup ([#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85), good-first slice of [#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62))
 - Centralize env parsing; ~~eliminate `type: ignore` suppressions~~ — **done** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60); zero `# type: ignore` in `src/`)
 - ~~Public API on `SessionAliasRegistry`~~ — scoped v1.9.14 helpers in `alias_state.py` (#64 partial); full upstream API deferred to v2.0
 - Journal page detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
@@ -102,4 +105,4 @@ Not backlog — context for where we are today:
 
 - **RFCs & architecture:** [GitHub Discussions](https://github.com/MarcoPorcellato/matryca-plumber/discussions)
 - **Trackable work:** open [Issues](https://github.com/MarcoPorcellato/matryca-plumber/issues) — link PRs with `Fixes #N`
-- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) · [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) · `make check` before opening a PR
+- **Good first issues:** [GitHub label filter](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) · [CONTRIBUTING.md](CONTRIBUTING.md) · [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) · `make check` before opening a PR
