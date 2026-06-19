@@ -282,27 +282,31 @@ def purge_expired_semantic_cache(graph_root: Path) -> int:
         if path.name in _RESERVED_CACHE_JSON:
             continue
         try:
-            raw = read_bounded_json(path)
-        except BoundedJsonError:
-            path.unlink(missing_ok=True)
-            removed += 1
+            with cross_process_json_flock(path):
+                try:
+                    raw = read_bounded_json(path)
+                except BoundedJsonError:
+                    path.unlink(missing_ok=True)
+                    removed += 1
+                    continue
+                if not isinstance(raw, dict):
+                    path.unlink(missing_ok=True)
+                    removed += 1
+                    continue
+                if "payload" not in raw or "namespace" not in raw:
+                    continue
+                try:
+                    created = float(raw.get("created_at", 0.0))
+                    ttl = int(raw.get("ttl_seconds", _env_ttl()))
+                except (TypeError, ValueError):
+                    path.unlink(missing_ok=True)
+                    removed += 1
+                    continue
+                if now - created > ttl:
+                    path.unlink(missing_ok=True)
+                    removed += 1
+        except OSError:
             continue
-        if not isinstance(raw, dict):
-            path.unlink(missing_ok=True)
-            removed += 1
-            continue
-        if "payload" not in raw or "namespace" not in raw:
-            continue
-        try:
-            created = float(raw.get("created_at", 0.0))
-            ttl = int(raw.get("ttl_seconds", _env_ttl()))
-        except (TypeError, ValueError):
-            path.unlink(missing_ok=True)
-            removed += 1
-            continue
-        if now - created > ttl:
-            path.unlink(missing_ok=True)
-            removed += 1
     return removed
 
 
