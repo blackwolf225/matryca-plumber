@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **JSON sidecar flock parity (#40)** — `cross_process_json_flock` shares `src/utils/platform_lock.py` with page RMW locks: non-blocking acquire with exponential backoff, blocking fallback after NB exhaustion, `MATRYCA_ALLOW_FLOCK_DEGRADATION`, and thread-local reentrancy depth tracking (fixes nested catalog/registry deadlocks and reduces pytest-xdist lock thrashing).
+- **Hub page OCC (#34)** — `write_master_index_page` and `write_graph_insights_page` use `page_rmw_lock`, pre-compile `occ_snapshot`, and `atomic_write_bytes_if_unchanged`; concurrent edits during compile log a graceful skip (derived pages regenerate on the next daemon cycle).
 
 ### Changed
 

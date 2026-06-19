@@ -11,6 +11,7 @@ from pathlib import Path
 from ..agent.plumber_llm import GraphInsightsLLMResult, InsightsLLM
 from ..agent.prompt_constraints import finalize_system_prompt
 from .alias_index import iter_alias_source_paths, page_title_from_path
+from .generated_hub_write import write_generated_hub_page
 from .generational_cache import patch_generational_caches_for_paths
 from .link_tag_hop import (
     _WIKILINK,
@@ -18,7 +19,7 @@ from .link_tag_hop import (
     _resolve_target_to_stem,
     _tags_prop_values,
 )
-from .markdown_blocks import atomic_write_bytes
+from .markdown_blocks import occ_snapshot
 from .master_catalog import MasterCatalog, load_master_catalog
 from .page_path import filename_to_page_title
 from .path_sandbox import graph_safe_page_path, read_graph_file_text
@@ -353,11 +354,22 @@ def format_graph_insights_markdown(
 def write_graph_insights_page(
     graph_root: Path,
     markdown: str,
+    *,
+    baseline_mtime: float | None = None,
 ) -> Path:
+    """Write Graph Insights hub page with OCC; pass ``baseline_mtime`` before compile."""
     path = graph_safe_page_path(graph_root, GRAPH_INSIGHTS_TITLE)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_bytes(path, markdown.encode("utf-8"), graph_root=graph_root)
-    return path
+    pre_mtime = baseline_mtime
+    if pre_mtime is None and path.is_file():
+        pre_mtime = occ_snapshot(path)
+    result = write_generated_hub_page(
+        graph_root,
+        GRAPH_INSIGHTS_TITLE,
+        markdown,
+        baseline_mtime=pre_mtime,
+        robot_commit_summary="recompiled Matryca Graph Insights hub page",
+    )
+    return result.path
 
 
 def run_graph_insights_engine(
@@ -369,6 +381,8 @@ def run_graph_insights_engine(
     """Compute topology metrics and write ``pages/Matryca Graph Insights.md``."""
     started = time.perf_counter()
     root = graph_root.expanduser().resolve(strict=False)
+    insights_path = graph_safe_page_path(root, GRAPH_INSIGHTS_TITLE)
+    baseline_mtime = occ_snapshot(insights_path) if insights_path.is_file() else None
     catalog = catalog or load_master_catalog(root, force_reload=True)
     metrics = compute_topology_metrics(root, catalog)
 
@@ -384,7 +398,11 @@ def run_graph_insights_engine(
         llm_result = _fallback_insights(metrics)
 
     markdown = format_graph_insights_markdown(metrics, llm_result)
-    output_path = write_graph_insights_page(root, markdown)
+    output_path = write_graph_insights_page(
+        root,
+        markdown,
+        baseline_mtime=baseline_mtime,
+    )
     patch_generational_caches_for_paths(root, [output_path])
 
     return InsightsRunResult(

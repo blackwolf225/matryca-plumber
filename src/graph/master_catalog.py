@@ -16,8 +16,9 @@ from loguru import logger
 
 from ..utils.bounded_json import BoundedJsonError, read_bounded_json
 from .alias_index import build_alias_index, iter_alias_source_paths, page_title_from_path
+from .generated_hub_write import write_generated_hub_page
 from .json_flock import cross_process_json_flock
-from .markdown_blocks import atomic_write_bytes
+from .markdown_blocks import atomic_write_bytes, occ_snapshot
 from .markdown_io import MmapTextView, read_graph_page_text
 from .path_sandbox import read_graph_file_text
 
@@ -561,11 +562,17 @@ def write_master_index_page(graph_root: Path, catalog: MasterCatalog) -> Path:
     """Write the compiled master index page under ``pages/``."""
     from .path_sandbox import graph_safe_page_path
 
+    path = graph_safe_page_path(graph_root, MASTER_INDEX_PAGE_TITLE)
+    baseline_mtime = occ_snapshot(path) if path.is_file() else None
     md = build_master_index_markdown(catalog)
-    path = graph_safe_page_path(graph_root, "Matryca Master Index")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_bytes(path, md.encode("utf-8"), graph_root=graph_root)
-    return path
+    result = write_generated_hub_page(
+        graph_root,
+        MASTER_INDEX_PAGE_TITLE,
+        md,
+        baseline_mtime=baseline_mtime,
+        robot_commit_summary="recompiled Matryca Master Index hub page",
+    )
+    return result.path
 
 
 __all__ = [
