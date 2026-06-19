@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hub page OCC (#34)** — `write_master_index_page` and `write_graph_insights_page` use `page_rmw_lock`, pre-compile `occ_snapshot`, and `atomic_write_bytes_if_unchanged`; concurrent edits during compile log a graceful skip (derived pages regenerate on the next daemon cycle).
+
 ### Changed
 
 - **GitHub backlog hygiene** — Closed shipped audit issues #35, #36, #37, #41, #67, #68, #70; tagged six good-first issues (#45, #53, #56, #69, #71, #85) with `good first issue` + `help wanted` and welcome comments; opened [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) for `BootstrapHarvestStatus` Literal dedup (slice of #62). Docs: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`ROADMAP.md`](ROADMAP.md).
