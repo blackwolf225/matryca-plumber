@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
+from ..utils.platform_lock import (
+    _fcntl,
+    cross_process_sidecar_lock,
+    probe_exclusive_flock,
+)
 from .io_retry import (
     IO_RETRY_ATTEMPTS,
     IO_RETRY_INITIAL_DELAY_S,
@@ -21,21 +24,9 @@ from .io_retry import (
     PageLockUnavailableError,
 )
 
-_fcntl: Any
-try:
-    import fcntl as _fcntl
-except ImportError:  # pragma: no cover - Windows and other non-Unix platforms
-    _fcntl = None
-
 _registry_guard = threading.Lock()
 _page_locks: OrderedDict[str, threading.RLock] = OrderedDict()
 _MAX_PAGE_LOCK_REGISTRY = 4096
-_flock_depth_local = threading.local()
-
-
-def _flock_degradation_allowed() -> bool:
-    raw = os.environ.get("MATRYCA_ALLOW_FLOCK_DEGRADATION", "").strip().lower()
-    return raw in {"1", "true", "yes", "on"}
 
 
 def normalize_page_lock_key(page_path: str | Path) -> str:
@@ -47,14 +38,6 @@ def _sidecar_lock_path(page_path: str | Path) -> Path:
     """Return a hidden lock file adjacent to the target (same directory, one volume)."""
     path = Path(page_path).expanduser().resolve(strict=False)
     return path.parent / f".{path.name}.matryca.lock"
-
-
-def _flock_depths() -> dict[str, int]:
-    depths = getattr(_flock_depth_local, "depths", None)
-    if depths is None:
-        depths = {}
-        _flock_depth_local.depths = depths
-    return depths
 
 
 def _lock_for_key(key: str) -> threading.RLock:
@@ -81,86 +64,17 @@ def _lock_for_key(key: str) -> threading.RLock:
         return lock
 
 
-def _acquire_cross_process_flock(fd: int, lock_path: Path) -> bool:
-    """Acquire exclusive flock with backoff; return False when flock is unsupported."""
-    delay = IO_RETRY_INITIAL_DELAY_S
-    for attempt in range(IO_RETRY_ATTEMPTS):
-        try:
-            _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
-            return True
-        except BlockingIOError:
-            if attempt >= IO_RETRY_ATTEMPTS - 1:
-                logger.warning(
-                    "Page lock sidecar still held after {} retries: {}",
-                    IO_RETRY_ATTEMPTS - 1,
-                    lock_path,
-                )
-                raise PageLockUnavailableError(
-                    f"Could not acquire page lock for {lock_path} after retries",
-                ) from None
-            time.sleep(min(IO_RETRY_MAX_DELAY_S, delay))
-            delay = min(IO_RETRY_MAX_DELAY_S, delay * 2)
-        except OSError as exc:
-            if not _flock_degradation_allowed():
-                raise PageLockUnavailableError(
-                    f"Cross-process page lock unavailable for {lock_path}: {exc}",
-                ) from exc
-            logger.info(
-                "[LOCK FILE SYSTEM DEGRADATION] Shared process lock not supported by "
-                "filesystem ({}), falling back to pure in-process thread locking.",
-                exc,
-            )
-            return False
-    return False
-
-
 @contextmanager
 def _cross_process_file_lock(page_path: str | Path) -> Iterator[None]:
     """Exclusive ``fcntl.flock`` on a sidecar lock file (no-op when ``fcntl`` is unavailable)."""
     key = normalize_page_lock_key(page_path)
-    depths = _flock_depths()
-    nested = depths.get(key, 0)
-    if nested > 0:
-        depths[key] = nested + 1
-        try:
-            yield
-        finally:
-            depths[key] -= 1
-        return
-
-    if _fcntl is None:
-        depths[key] = 1
-        try:
-            yield
-        finally:
-            depths.pop(key, None)
-        return
-
     lock_path = _sidecar_lock_path(page_path)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        acquired = _acquire_cross_process_flock(fd, lock_path)
-        if not acquired and _fcntl is not None and not _flock_degradation_allowed():
-            raise PageLockUnavailableError(
-                f"Could not acquire cross-process page lock for {lock_path}",
-            )
-        if not acquired:
-            depths[key] = 1
-            try:
-                yield
-            finally:
-                depths.pop(key, None)
-            return
-        depths[key] = 1
-        try:
-            yield
-        finally:
-            depths.pop(key, None)
-            with suppress(OSError):
-                _fcntl.flock(fd, _fcntl.LOCK_UN)
-    finally:
-        os.close(fd)
+    with cross_process_sidecar_lock(
+        lock_path,
+        depth_key=key,
+        unavailable_label="page lock",
+    ):
+        yield
 
 
 def probe_page_rmw_lock(page_path: str | Path) -> None:
@@ -176,28 +90,10 @@ def probe_page_rmw_lock(page_path: str | Path) -> None:
             f"Could not probe in-process page lock for {page_path}",
         )
     try:
-        if _fcntl is None:
-            return
-        lock_path = _sidecar_lock_path(page_path)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
-        try:
-            try:
-                _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise PageLockUnavailableError(
-                    f"Could not probe cross-process page lock for {lock_path}",
-                ) from exc
-            except OSError as exc:
-                if not _flock_degradation_allowed():
-                    raise PageLockUnavailableError(
-                        f"Cross-process page lock unavailable for {lock_path}: {exc}",
-                    ) from exc
-                return
-            with suppress(OSError):
-                _fcntl.flock(fd, _fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
+        probe_exclusive_flock(
+            _sidecar_lock_path(page_path),
+            unavailable_label="page lock",
+        )
     finally:
         thread_lock.release()
 

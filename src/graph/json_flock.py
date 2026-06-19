@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
-_fcntl: Any
-try:
-    import fcntl as _fcntl
-except ImportError:  # pragma: no cover - Windows
-    _fcntl = None
+from ..utils.platform_lock import cross_process_sidecar_lock
 
 
 def flock_sidecar_path(target: Path) -> Path:
@@ -23,22 +17,14 @@ def flock_sidecar_path(target: Path) -> Path:
 @contextmanager
 def cross_process_json_flock(target: Path) -> Iterator[None]:
     """Hold an exclusive flock for one JSON read/write critical section."""
-    if _fcntl is None:
-        yield
-        return
-
     lock_path = flock_sidecar_path(target)
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        _fcntl.flock(fd, _fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            with suppress(OSError):
-                _fcntl.flock(fd, _fcntl.LOCK_UN)
-    finally:
-        os.close(fd)
+    depth_key = str(lock_path.expanduser().resolve(strict=False))
+    with cross_process_sidecar_lock(
+        lock_path,
+        depth_key=depth_key,
+        unavailable_label="JSON sidecar lock",
+    ):
+        yield
 
 
 __all__ = ["cross_process_json_flock", "flock_sidecar_path"]

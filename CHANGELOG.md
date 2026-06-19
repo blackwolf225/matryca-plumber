@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **JSON sidecar flock parity (#40)** — `cross_process_json_flock` shares `src/utils/platform_lock.py` with page RMW locks: non-blocking acquire with exponential backoff, blocking fallback after NB exhaustion, `MATRYCA_ALLOW_FLOCK_DEGRADATION`, and thread-local reentrancy depth tracking (fixes nested catalog/registry deadlocks and reduces pytest-xdist lock thrashing).
+
 ### Changed
 
 - **GitHub backlog hygiene** — Closed shipped audit issues #35, #36, #37, #41, #67, #68, #70; tagged six good-first issues (#45, #53, #56, #69, #71, #85) with `good first issue` + `help wanted` and welcome comments; opened [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) for `BootstrapHarvestStatus` Literal dedup (slice of #62). Docs: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`ROADMAP.md`](ROADMAP.md).
