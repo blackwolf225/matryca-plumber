@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **GitHub backlog hygiene** — Closed shipped audit issues #35, #36, #37, #41, #67, #68, #70; tagged six good-first issues (#45, #53, #56, #69, #71, #85) with `good first issue` + `help wanted` and welcome comments; opened [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) for `BootstrapHarvestStatus` Literal dedup (slice of #62). Docs: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`ROADMAP.md`](ROADMAP.md).
+- **`llms.txt` contributor discovery** — Good-first issue filter and scoped task table for agents asking how to contribute to the codebase (`llms.txt`, `.well-known/llms.txt`).
 
 ## [1.10.5] - 2026-06-19
 

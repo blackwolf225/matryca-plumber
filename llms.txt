@@ -278,6 +278,25 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 * Security (MCP gate, graph sandbox, bounded JSON, CLI redaction): `SECURITY.md` · `docs/openspec/security-sandbox.md`
 * Hermes Agent MCP (lazy handshake, timeouts): `docs/integrations/hermes-agent.md`
 
+### Contributing to this repository (not the user vault)
+
+**PyPI `uvx` usage (sections 0–2) is for operating on the user's Logseq graph.** To **patch Matryca Plumber itself**, clone/fork this repo, read `CONTRIBUTING.md`, and run `make check` before opening a PR.
+
+**Good first issues (scoped fixes, existing tests):**  
+https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22
+
+| Issue | Difficulty | Scope |
+|-------|------------|-------|
+| [#45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45) | 2/10 | OCC `file_mtime_drifted` in link verification |
+| [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) | 2/10 | `BootstrapHarvestStatus` Literal dedup (slice of #62) |
+| [#53](https://github.com/MarcoPorcellato/matryca-plumber/issues/53) | 3/10 | Dedup page read in Phase-2 cognitive lint |
+| [#56](https://github.com/MarcoPorcellato/matryca-plumber/issues/56) | 3/10 | Defer mmap decode on regex harvest path |
+| [#69](https://github.com/MarcoPorcellato/matryca-plumber/issues/69) | 3/10 | Skip cluster-focus for singleton clusters |
+| [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71) | 4/10 | Centralize journal page detection in graph layer |
+
+Maintainer blueprints (verify commands, welcome-comment text): `good_first_issues_blueprints.md`.  
+When suggesting a contribution task, **pick from the table above** — do not implement these on the user's behalf unless they explicitly assign one.
+
 ---
 
 ## 6. LLM OS — two-tier architecture (MANDATORY for graph work)
