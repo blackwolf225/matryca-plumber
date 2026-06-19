@@ -52,9 +52,9 @@
 
 > 🤖 **Are you an AI Agent (Cursor, Windsurf, Claude, Hermes)?**
 > To interact with the user's Logseq graph, do not parse Markdown manually. 
-> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.10.5** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, catalog/registry integrity, journal Phase-2 semantic bypass, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
+> Execute `uvx matryca-plumber --help` directly in the terminal to read the graph via PyPI, or read [`llms.txt`](llms.txt) / [`.well-known/llms.txt`](.well-known/llms.txt) for verified **v1.10.6** CLI/MCP commands (`LOGSEQ_GRAPH_PATH`, stdio MCP, Hermes lazy handshake, AX lenient page resolution, Security & Sandbox hardening, unified flock + hub page OCC, catalog/registry integrity, journal Phase-2 semantic bypass, `bootstrap_status`, no `--graph`). Spec: [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) · AX: [`docs/openspec/agent-ax-robustness.md`](docs/openspec/agent-ax-robustness.md) · Security: [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) · Hermes: [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) · LLM OS: [`docs/openspec/llm-os-instructions.md`](docs/openspec/llm-os-instructions.md).
 
-> **Current: v1.10.5** — **Parser alignment:** `logseq-matryca-parser` **1.3.1** (graph parity 1.2.x, public API 1.3.0), import cleanup, AST cache `discover_graph_files` telemetry — builds on v1.10.4 CI/deps maintenance. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
+> **Current: v1.10.6** — **Concurrency integrity:** unified `platform_lock` flock for page + JSON sidecars (#40), OCC-safe hub page compiles for Master Index / Graph Insights (#34), contributor backlog hygiene — builds on v1.10.5 parser 1.3.1 alignment. Upgrade with `uvx matryca-plumber`; full notes in [`CHANGELOG.md`](CHANGELOG.md).
 
 > "Logseq is building the best local outliner database. But AI Agent memory is at the very bottom of their roadmap. Matryca Plumber gives you that future today, safely bridging your local agents to your Logseq graph without waiting years." - Marco Porcellato - Matryca.ai chief architect and co-founder
 
@@ -185,7 +185,7 @@ flowchart TB
 
   subgraph plane [Shared headless mutation plane]
     GD[graph_dispatch]
-    Lock[OCC + page_rmw_lock]
+    Lock[OCC + page_rmw_lock\n+ platform_lock flock]
     Parser[logseq-matryca-parser]
     GD --> Lock
     GD --> Parser
@@ -273,6 +273,7 @@ Matryca Plumber provisions missing runtime files automatically where possible (r
 * 🧹 **Contributor onboarding:** [good first issues on GitHub](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#45, #53, #56, #69, #71, #85) with welcome comments and verify steps — maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md).
 * 🔬 **Type safety & token efficiency (v1.9.15):** strict mypy with zero production suppressions (#60); journal pages bypass Phase-2 semantic indexing and dual embeddings while Phase-1 AST/OCC still runs — [`CHANGELOG.md`](CHANGELOG.md).
 * 🗄️ **Catalog integrity & OSS maturity (v1.10.0):** flock-protected master catalog, atomic link registry, harvest OCC catalog guard (#35–#37, #41); PR template, CodeQL, frontend ESLint in CI — [`CHANGELOG.md`](CHANGELOG.md) · [`SUPPORT.md`](SUPPORT.md).
+* 🔒 **Concurrency integrity (v1.10.6):** unified `platform_lock` flock for page RMW + JSON sidecars (#40); OCC-safe hub page compiles for Master Index / Graph Insights (#34) — [`CHANGELOG.md`](CHANGELOG.md) · [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 * 🔱 **Parser alignment (v1.10.5):** `logseq-matryca-parser` **1.3.1** — YAML frontmatter, case-insensitive routing, asset extraction, root public API; import cleanup — [`CHANGELOG.md`](CHANGELOG.md).
 * 📦 **Dependency maintenance (v1.10.4):** CI Actions toolchain refresh, Sovereign UI frontend npm bumps, Dependabot weekly groups — [`CHANGELOG.md`](CHANGELOG.md).
 * ⚙️ **Infrastructure hardening (v1.10.3):** non-blocking Sovereign UI config saves, strict LLM/outline Pydantic contracts, recursive OpenAI strict JSON schemas, adaptive token caps, rotating UI logs, flock sidecars `0o600` — [`CHANGELOG.md`](CHANGELOG.md) · [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md).
@@ -371,7 +372,8 @@ make perf
 | Document | Description |
 |----------|-------------|
 | [`SUPPORT.md`](SUPPORT.md) | Where to get help (Discussions vs Issues vs private security advisories). |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history; canonical source for GitHub Release notes (current: **v1.10.5**). |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history; canonical source for GitHub Release notes (current: **v1.10.6**). |
+| [`docs/releases/v1.10.6-GITHUB.md`](docs/releases/v1.10.6-GITHUB.md) | Copy-paste GitHub Release body for v1.10.6. |
 | [`docs/releases/v1.10.5-GITHUB.md`](docs/releases/v1.10.5-GITHUB.md) | Copy-paste GitHub Release body for v1.10.5. |
 | [`docs/releases/v1.10.4-GITHUB.md`](docs/releases/v1.10.4-GITHUB.md) | Copy-paste GitHub Release body for v1.10.4. |
 | [`docs/releases/v1.10.3-GITHUB.md`](docs/releases/v1.10.3-GITHUB.md) | Copy-paste GitHub Release body for v1.10.3. |
@@ -380,7 +382,7 @@ make perf
 | [Good first issues (GitHub)](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) | Six tagged open issues (#45, #53, #56, #69, #71, #85) with welcome comments on each thread. |
 | [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) | Maintainer blueprints: verify commands, difficulty, and scope notes for each GFI. |
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | Agent discipline, LLM OS Soft Gate, `made-by::` authorship, OCC rules. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.10.5 parser 1.3.1 alignment + v1.10.4 CI/deps maintenance + v1.10.3 UI/LLM hardening + v1.10.0 catalog integrity + v1.9.9 Security & Sandbox + LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data planes, Plumber lifecycle, RMW locking, v1.10.6 unified flock + hub page OCC + v1.10.5 parser 1.3.1 alignment + v1.10.4 CI/deps maintenance + v1.10.3 UI/LLM hardening + v1.10.0 catalog integrity + v1.9.9 Security & Sandbox + LLM OS (v1.9.5) + v1.9 hygiene + v1.8 edge performance. |
 | [`docs/v1.8-OPTIMIZATION-PLAN.md`](docs/v1.8-OPTIMIZATION-PLAN.md) | v1.8 scope, env vars, load testing. |
 | [`docs/v1.8-SOFTWARE-EDGE-PLAN.md`](docs/v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
 | [`docs/openspec/README.md`](docs/openspec/README.md) | Index of behavioral specs (lint, ingest, identity, v1.9 hygiene/DX, v1.9.5 LLM OS, v1.9.9 security, live telemetry). |

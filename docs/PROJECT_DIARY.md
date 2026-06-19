@@ -1,12 +1,27 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.5** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.5]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.6** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.6]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-19] v1.10.6 — Concurrency integrity (unified flock + hub page OCC)
+
+### Context
+
+v1.10.0 closed catalog/registry torn-write gaps with flock + atomic save, but page RMW locks and JSON sidecar locks still used divergent flock implementations — nested harvest + checkpoint + registry passes could deadlock under pytest-xdist and concurrent daemon writers ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)). Hub pages (Master Index, Graph Insights) compiled expensive markdown without pre-compile OCC, risking overwrite of human edits during multi-second compiles ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)).
+
+### Shipped
+
+1. **`platform_lock.py`** — shared NB flock + exponential backoff + blocking fallback + thread-local reentrancy; consumed by `page_write_lock` and `json_flock`.
+2. **`generated_hub_write.py`** — `write_generated_hub_page`: baseline mtime before compile, graceful skip on drift, `atomic_write_bytes_if_unchanged` at commit.
+3. **Tests** — `test_hubs.py` (hub OCC scenarios), expanded `test_json_flock.py`.
+4. **Docs** — ARCHITECTURE Mermaid diagrams for unified flock layer and hub compile sequence; README/llms.txt/ROADMAP harmonized.
 
 ---
 

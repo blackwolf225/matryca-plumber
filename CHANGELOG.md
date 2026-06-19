@@ -7,13 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.6] - 2026-06-19
+
+**Concurrency integrity — unified flock + hub page OCC**
+
 ### Fixed
 
 - **JSON sidecar flock parity (#40)** — `cross_process_json_flock` shares `src/utils/platform_lock.py` with page RMW locks: non-blocking acquire with exponential backoff, blocking fallback after NB exhaustion, `MATRYCA_ALLOW_FLOCK_DEGRADATION`, and thread-local reentrancy depth tracking (fixes nested catalog/registry deadlocks and reduces pytest-xdist lock thrashing).
-- **Hub page OCC (#34)** — `write_master_index_page` and `write_graph_insights_page` use `page_rmw_lock`, pre-compile `occ_snapshot`, and `atomic_write_bytes_if_unchanged`; concurrent edits during compile log a graceful skip (derived pages regenerate on the next daemon cycle).
+- **Hub page OCC (#34)** — `write_generated_hub_page` in `src/graph/generated_hub_write.py` wraps Master Index and Graph Insights compiles: pre-compile `occ_snapshot`, `page_rmw_lock`, and `atomic_write_bytes_if_unchanged`; concurrent human edits during compile log a graceful skip (derived pages regenerate on the next daemon cycle).
 
 ### Changed
 
+- **Documentation** — README, `llms.txt`, ROADMAP, ARCHITECTURE, PROJECT_DIARY harmonized for v1.10.6; new Mermaid diagrams for unified `platform_lock` and hub-page compile writes ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34), [#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)).
 - **GitHub backlog hygiene** — Closed shipped audit issues #35, #36, #37, #41, #67, #68, #70; tagged six good-first issues (#45, #53, #56, #69, #71, #85) with `good first issue` + `help wanted` and welcome comments; opened [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) for `BootstrapHarvestStatus` Literal dedup (slice of #62). Docs: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`ROADMAP.md`](ROADMAP.md).
 - **`llms.txt` contributor discovery** — Good-first issue filter and scoped task table for agents asking how to contribute to the codebase (`llms.txt`, `.well-known/llms.txt`).
 

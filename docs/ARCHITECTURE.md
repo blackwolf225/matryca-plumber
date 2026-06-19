@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.10.5 (parser 1.3.1 alignment + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
+**Version:** 1.10.6 (unified flock + hub page OCC + parser 1.3.1 alignment + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -35,7 +35,7 @@ flowchart TB
   subgraph plane [Shared headless mutation plane]
     Dispatch[graph_dispatch.py]
     Parser[logseq-matryca-parser]
-    Locks[OCC plus page_rmw_lock]
+    Locks[OCC plus page_rmw_lock\nplus platform_lock flock]
   end
 
   Vault[(LOGSEQ_GRAPH_PATH\npages journals cache ledgers)]
@@ -67,6 +67,8 @@ flowchart TB
 **v1.10.0 focus:** **Catalog & registry integrity** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). **Journal Phase-2 bypass (v1.9.15)** — daily notes under `journals/` receive structural indexing only; semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — zero `# type: ignore` in `src/`. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1100), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 **v1.10.3 focus:** **Sovereign UI resilience & LLM contract hardening** — config/graph-path saves offloaded from the FastAPI event loop (`asyncio.to_thread`); rotating Loguru at UI startup; Pydantic `extra="forbid"` on plumber/outline structured models; recursive OpenAI strict JSON Schema generation; adaptive `max_tokens` / `max_completion_tokens`; flock sidecar files created as `0o600`. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md#v1103-non-blocking-config-saves), [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md).
+
+**v1.10.6 focus:** **Concurrency integrity** — shared cross-process flock in `src/utils/platform_lock.py` unifies page RMW locks and JSON sidecar locks (NB acquire + exponential backoff + blocking fallback + thread-local reentrancy; fixes nested catalog/registry deadlocks, #40); OCC-safe hub page writes via `write_generated_hub_page` for Master Index and Graph Insights compiles (pre-compile mtime snapshot, graceful skip on human edit during compile, #34).
 
 **v1.10.5 focus:** **Logseq Matryca Parser 1.3.1 alignment** — minimum dependency `logseq-matryca-parser>=1.3.1`; root-level public API imports; AST cache bootstrap telemetry via `discover_graph_files`; inherits parser graph parity (YAML frontmatter, case-insensitive page routing, asset extraction, round-trip fixes from 1.2.x).
 
@@ -443,6 +445,86 @@ sequenceDiagram
 
 **Complement, not duplicate:** `fcntl.flock` stops two writers from corrupting the same file mid-splice; OCC stops one writer from promoting a payload computed on obsolete bytes.
 
+### Unified cross-process flock (`platform_lock`, v1.10.6)
+
+Page RMW locks (`.{page}.matryca.lock`) and JSON sidecar locks (`.{json}.matryca.json.lock`) delegate to **`src/utils/platform_lock.py`**. One implementation prevents semantic drift between markdown writers and catalog/registry writers — the root cause of nested deadlocks when harvest, daemon checkpoint, and link-registry passes interleave ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)).
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **Non-blocking acquire** | `LOCK_EX \| LOCK_NB` with exponential backoff (`IO_RETRY_*`) |
+| **Blocking fallback** | After NB exhaustion, blocking `flock` with warning log |
+| **Reentrancy** | Thread-local depth map keyed by lock identity — same thread may re-enter nested catalog/registry scopes |
+| **Degradation** | `MATRYCA_ALLOW_FLOCK_DEGRADATION=true` → thread-only when OS flock unsupported (iCloud/Dropbox) |
+
+```mermaid
+flowchart TB
+  subgraph callers [Lock consumers]
+    PageLock[page_rmw_lock\nmarkdown RMW]
+    JsonLock[cross_process_json_flock\nmaster_catalog link_registry daemon_state]
+  end
+
+  subgraph platform [src/utils/platform_lock.py]
+    NB[NB flock plus exponential backoff]
+    Block[Blocking fallback after NB exhaustion]
+    Depth[Thread-local reentrancy depth]
+    Degrade[MATRYCA_ALLOW_FLOCK_DEGRADATION]
+  end
+
+  subgraph sidecars [Sidecar files 0o600]
+    PageSidecar[".{page}.matryca.lock"]
+    JsonSidecar[".{json}.matryca.json.lock"]
+  end
+
+  PageLock --> NB
+  JsonLock --> NB
+  NB --> Block
+  NB --> Depth
+  NB --> Degrade
+  PageLock --> PageSidecar
+  JsonLock --> JsonSidecar
+```
+
+### Hub page compile writes (v1.10.6)
+
+Daemon-generated **hub pages** (`Matryca Master Index`, `Matryca Graph Insights`) are expensive to compile (catalog scan + markdown assembly). Holding a page lock across compile would block Logseq saves; writing without OCC would overwrite human edits made during compile.
+
+**`write_generated_hub_page`** (`src/graph/generated_hub_write.py`) captures **`baseline_mtime` before compile**, then under `page_rmw_lock`:
+
+1. Re-check `file_mtime_drifted` — if human edited during compile → **graceful skip** (`written=False`, INFO log).
+2. Re-snapshot mtime inside lock.
+3. Commit via `atomic_write_bytes_if_unchanged` — final OCC gate at `os.replace`.
+
+Skipped writes are safe: the next daemon cycle recompiles from fresh catalog state ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant D as MaintenanceDaemon
+    participant Cat as master_catalog.json
+    participant FS as Hub page .md
+    participant Hub as write_generated_hub_page
+    participant Lock as page_rmw_lock
+
+    D->>FS: occ_snapshot() → baseline_mtime
+    D->>Cat: compile markdown (seconds…)
+    Note over FS: Human edits hub page in Logseq
+
+    D->>Hub: write_generated_hub_page(baseline_mtime=…)
+    Hub->>Lock: acquire exclusive RMW lock
+    Hub->>FS: file_mtime_drifted(baseline_mtime)?
+    alt drifted during compile
+        Hub->>Lock: release
+        Hub-->>D: written=False graceful skip
+    else still stable
+        Hub->>FS: atomic_write_bytes_if_unchanged
+        alt OCC abort at commit
+            Hub-->>D: written=False
+        else committed
+            Hub-->>D: written=True
+        end
+    end
+```
+
 ---
 
 ## Trust & Safety levels
@@ -518,9 +600,9 @@ Settings persistence uses **`_atomic_write_text`** in `ui_server.py`: `mkstemp` 
 
 ### Page-lock registry with LRU eviction
 
-**`page_write_lock.py`** keeps an in-process `OrderedDict` of `threading.Lock` instances keyed by normalized absolute paths (cap **`_MAX_PAGE_LOCK_REGISTRY = 4096`**). When the cap is reached, **unlocked** entries are evicted LRU-style instead of clearing the entire registry — preserving hot-path lock stability on large vaults without unbounded memory growth.
+**`page_write_lock.py`** keeps an in-process `OrderedDict` of `threading.RLock` instances keyed by normalized absolute paths (cap **`_MAX_PAGE_LOCK_REGISTRY = 4096`**). When the cap is reached, **unlocked** entries are evicted LRU-style instead of clearing the entire registry — preserving hot-path lock stability on large vaults without unbounded memory growth.
 
-Cross-process exclusivity uses a `.matryca.lock` sidecar with retried non-blocking `flock`. **`MATRYCA_ALLOW_FLOCK_DEGRADATION=true`** permits thread-only locking on iCloud/Dropbox filesystems that reject `flock` (at operator risk). **`PageLockUnavailableError`** causes the daemon to **skip** the file without marking it processed — no false success, no torn write.
+Cross-process exclusivity delegates to **`platform_lock.cross_process_sidecar_lock`** (`.matryca.lock` sidecar beside each page). Same NB/backoff/blocking/reentrancy semantics as JSON sidecar flock (v1.10.6). **`MATRYCA_ALLOW_FLOCK_DEGRADATION=true`** permits thread-only locking on iCloud/Dropbox filesystems that reject `flock` (at operator risk). **`PageLockUnavailableError`** causes the daemon to **skip** the file without marking it processed — no false success, no torn write.
 
 ### Thread-safe Loguru → MCP logging bridge
 
@@ -542,7 +624,7 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | Path traversal | `path_sandbox.assert_path_within_graph` |
 | Graph UTF-8 reads | `read_graph_file_text()` — CI `sandbox-read-check` blocks raw `Path.read_text()` in graph/agent/rag (v1.9.9) |
 | Bounded JSON sidecars | `read_bounded_json()` + `MATRYCA_JSON_MAX_BYTES` on catalog/registry/daemon/cache loaders (v1.9.9) |
-| JSON sidecar flock + atomic save | `cross_process_json_flock` + `atomic_write_bytes` on master catalog ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), link registry ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); harvest catalog/page parity on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) — v1.10.0 |
+| JSON sidecar flock + atomic save | `cross_process_json_flock` via **`platform_lock.py`** (NB + backoff + reentrancy, v1.10.6) + `atomic_write_bytes` on master catalog ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), link registry ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); harvest catalog/page parity on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)) — v1.10.0 |
 | Link registry tamper | `link_verification` validates registry `page_relpath` and asset refs before read (v1.9.9) |
 | LLM debug NDJSON | `agent_debug_log` path allowlist + secret redaction when `MATRYCA_LLM_DEBUG_*` enabled (v1.9.9) |
 | Credential leakage into graph | `quality_gate.outline_security_violations` |
@@ -557,9 +639,9 @@ Unless **`MATRYCA_DEBUG=true`**, UUIDs and payload-like markers are redacted bef
 | Daemon exclusivity | `.matryca_plumber_daemon.lock` (POSIX flock / Windows `msvcrt`); PID sidecar published at lock acquisition; CI `# sandbox-read-ok` allowlist for pid/lock reads only |
 | Ledger durability | `save_daemon_state` tmp + fsync + replace + `.bak` + `json_flock`; master catalog merge-on-save + flock load (v1.10.0) |
 
-### JSON sidecar concurrency (v1.10.0)
+### JSON sidecar concurrency (v1.10.0 → v1.10.6)
 
-Graph-local JSON checkpoints share **`cross_process_json_flock`** sidecars and **`atomic_write_bytes`**. v1.9.9 bounded reads prevent memory DoS; v1.10.0 closes torn-read and last-writer-wins gaps on the hottest sidecars.
+Graph-local JSON checkpoints share **`cross_process_json_flock`** sidecars and **`atomic_write_bytes`**. v1.9.9 bounded reads prevent memory DoS; v1.10.0 closes torn-read and last-writer-wins gaps on the hottest sidecars; **v1.10.6** unifies flock semantics with page locks via **`platform_lock.py`** (NB acquire, exponential backoff, blocking fallback, thread-local reentrancy — fixes nested catalog/registry deadlocks under pytest-xdist and concurrent harvest).
 
 | Sidecar | Load | Save |
 |---------|------|------|
@@ -908,7 +990,9 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/cli/ui_server.py` | FastAPI monolith + static SPA + daemon control |
 | `src/cli/ui_auth.py` | Bearer token resolution and verification |
 | `src/agent/graph_dispatch.py` | Headless writes, OCC-aware block resolution |
-| `src/graph/page_write_lock.py` | Per-page RMW lock + LRU registry |
+| `src/graph/page_write_lock.py` | Per-page RMW lock + LRU registry; delegates OS flock to `platform_lock` |
+| `src/utils/platform_lock.py` | Shared cross-process flock: NB + backoff + reentrancy (v1.10.6) |
+| `src/graph/generated_hub_write.py` | OCC-safe Master Index / Graph Insights compile writes (v1.10.6) |
 | `src/graph/markdown_blocks.py` | `atomic_write_bytes*`, OCC helpers |
 | `src/agent/mcp_server.py` | `@mcp.tool()` handlers |
 | `src/agent/ingestion.py` | `ingest_document` / `process_ingestion` |
@@ -946,6 +1030,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
 | **1.10.0** | Catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); OSS CI maturity |
 | **1.10.3** | UI/LLM hardening | Non-blocking Sovereign UI config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` |
+| **1.10.6** | Concurrency integrity | Unified `platform_lock` flock for page + JSON sidecars ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)); hub page OCC via `write_generated_hub_page` ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)); contributor backlog hygiene |
 | **1.10.5** | Parser 1.3.1 alignment | `logseq-matryca-parser>=1.3.1`; root public API imports; AST cache `discover_graph_files`; graph parity 1.2.x inherited |
 | **1.10.4** | CI/deps maintenance | GitHub Actions toolchain refresh; Sovereign UI frontend npm bumps; Dependabot weekly groups |
 | **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
