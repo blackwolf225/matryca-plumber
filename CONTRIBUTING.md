@@ -307,6 +307,8 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 4. Confirm **`make check`** passes locally.
 5. Use the PR template checklist (OCC, CRLF, `make check`) in [`.github/pull_request_template.md`](.github/pull_request_template.md).
 
+If an overarching audit issue is closed by a maintainer while your PR is open, please **rebase against `main`** and update your tests/docs accordingly to match the new architecture.
+
 ---
 
 ## GitHub Issues workflow
@@ -327,7 +329,7 @@ User-facing changes belong in [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]
 
 **Templates:** [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) — `feature_request.yml`, `bug_report.yml`, `epic.yml`, `question.yml`.
 
-**Good first issues:** [open issues labeled `good first issue`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — currently #45, #53, #56, #69, #71, and [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) (`BootstrapHarvestStatus` Literal dedup, slice of #62). Maintainer context and verify commands: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md). Welcome comments are already on each GitHub thread.
+**Good first issues:** [open issues labeled `good first issue`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — includes #43, #44, #45 (test-only), #52, #53, #56, #69, #71, [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85), [#89](https://github.com/MarcoPorcellato/matryca-plumber/issues/89)–[#93](https://github.com/MarcoPorcellato/matryca-plumber/issues/93) (Tier B). Maintainer context and verify commands: [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md). Welcome comments are on each GitHub thread.
 
 | Label | When |
 |-------|------|

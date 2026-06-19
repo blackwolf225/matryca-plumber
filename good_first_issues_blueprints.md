@@ -1,34 +1,154 @@
 # Good First Issues — Contributor Blueprints
 
-**Updated v1.10.5 backlog hygiene** — six open issues tagged [`good first issue`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) + [`help wanted`](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22help+wanted%22) on GitHub (#45, #53, #56, #69, #71, [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85)). Welcome comments are already posted on each issue thread.
+**Updated v1.10.6 backlog expansion** — Tier A (#43, #44, #52) tagged and welcomed; #45 retitled (test-only); Tier B created as [#89](https://github.com/MarcoPorcellato/matryca-plumber/issues/89)–[#93](https://github.com/MarcoPorcellato/matryca-plumber/issues/93) via [`scripts/populate_gfi_backlog.sh`](scripts/populate_gfi_backlog.sh).
 
-**Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `fix(link): use file_mtime_drifted in link_verification (#45)`).
+**Active good-first candidates:** #43, #44, #45 (test-only, in progress), #52, #53, #56, #69, #71, #85, [#89](https://github.com/MarcoPorcellato/matryca-plumber/issues/89), [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90), [#91](https://github.com/MarcoPorcellato/matryca-plumber/issues/91), [#92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92), [#93](https://github.com/MarcoPorcellato/matryca-plumber/issues/93). Welcome comments are on each GitHub thread.
+
+**Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `test(link): nanosecond OCC guards in link_verification (#45)`).
+
+If a maintainer closes an overarching audit issue while your PR is open, **rebase on `main`** and update tests/docs to match the new architecture (see CONTRIBUTING § Pull request workflow).
 
 ---
 
-## Issue #45 — [Bug] link_verification compares mtime with `!=` instead of `file_mtime_drifted`
+## In progress — Issue #45 (test-only, nanosecond OCC)
 
 **Difficulty:** 2/10 · [GitHub #45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45)
 
+**Title (updated):** `[Test] Add nanosecond OCC regression tests for link_verification`
+
+**Context:** Production fix (`file_mtime_drifted()` in `link_verification.py`) shipped via v1.9.10 nanosecond OCC (#38). Float-based mocks (`1.0`, `1.0 + 5e-7`) are obsolete — `file_mtime_drifted()` compares exact `st_mtime_ns` integers.
+
 **Exact Contribution Guide Comment:**
 
-> Hi! Thanks for your interest in contributing to Matryca Plumber — we'd love your help on this one.
+> Hi! Thanks for your interest in contributing to Matryca Plumber.
 >
-> **What to fix:** Inside `src/graph/link_verification.py`, the function that verifies a block before rewriting it compares file modification time with a raw `!=` check (`read_file_mtime(page_path) != baseline_mtime` around line 560). The rest of the codebase uses `file_mtime_drifted()` from `src/graph/markdown_blocks.py` to avoid float representation edge cases.
+> **What to add:** Regression tests in `tests/test_link_verification.py` using integer nanosecond mocks. No production changes expected after rebase on current `main`.
 >
-> **Steps:**
-> 1. Open `src/graph/link_verification.py` and locate the `page_rmw_lock` block where `read_file_mtime(page_path) != baseline_mtime` appears.
-> 2. Import `file_mtime_drifted` from `src/graph/markdown_blocks.py` (or reuse an existing import if already present).
-> 3. Replace the `!=` comparison with `file_mtime_drifted(page_path, baseline_mtime)`.
-> 4. Skim `file_mtime_drifted` in `markdown_blocks.py` to confirm the guard semantics match other OCC call sites.
+> **Suggested tests:**
+> 1. `test_flag_block_proceeds_when_mtime_unchanged_ns` — baseline == current → write proceeds.
+> 2. `test_flag_block_aborts_on_one_nanosecond_mtime_drift` — `1_000_000_000` vs `1_000_000_001` → write aborted.
 >
 > **Verify your fix:**
+> ```bash
+> uv run pytest tests/test_link_verification.py -q --no-cov
+> make check
+> ```
+>
+> Rebase on latest `main` before opening/updating the PR. Welcome aboard!
+
+---
+
+## Tier A — Promoted audit issues (#52, #44, #43)
+
+Tagged `good first issue` + `help wanted` by `scripts/populate_gfi_backlog.sh`. Full welcome comments are on each GitHub thread.
+
+| Issue | Summary | Difficulty |
+|-------|---------|------------|
+| [#52](https://github.com/MarcoPorcellato/matryca-plumber/issues/52) | `MmapTextView` avoids full `mmap[:]` copy | 2/10 |
+| [#44](https://github.com/MarcoPorcellato/matryca-plumber/issues/44) | Daemon shutdown logs flush errors instead of `suppress(Exception)` | 2/10 |
+| [#43](https://github.com/MarcoPorcellato/matryca-plumber/issues/43) | `page_rmw_lock` on `matryca-config.md` seed race | 3/10 |
+
+---
+
+## Issue #89 — bootstrap_harvest `st_mtime_ns` (B1)
+
+**Difficulty:** 2/10 · [GitHub #89](https://github.com/MarcoPorcellato/matryca-plumber/issues/89)
+
+**Exact Contribution Guide Comment:**
+
+> Hi! Thanks for your interest — this aligns harvest catalog entries with nanosecond OCC (#38).
+>
+> **What to fix:** `bootstrap_harvest.py` still uses `int(page_path.stat().st_mtime)` (~lines 207, 274). Replace with `st_mtime_ns` and align with `CatalogEntry.last_mtime`.
+>
+> **Steps:**
+> 1. Read `normalize_stored_mtime_ns()` in `markdown_blocks.py` / `master_catalog.py`.
+> 2. Update harvest entry builders to use nanoseconds.
+> 3. Extend `tests/test_bootstrap_yield.py`.
+>
+> **Verify:**
+> ```bash
+> uv run pytest tests/test_bootstrap_yield.py tests/test_master_catalog.py -q
+> make check
+> ```
+
+---
+
+## Issue #90 — deduplicate `_env_bool` in link_verification (B2)
+
+**Difficulty:** 2/10 · [GitHub #90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90) · slice of [#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57)
+
+**Exact Contribution Guide Comment:**
+
+> Hi! Small DRY cleanup — great first PR.
+>
+> **What to fix:** Remove local `_env_bool` in `src/graph/link_verification.py`; import from `plumber_config`.
+>
+> **Verify:**
 > ```bash
 > uv run pytest tests/test_link_verification.py -q
 > make check
 > ```
 >
-> A one-line surgical change is perfect — no drive-by refactors needed. Comment here when you pick this up so we don't duplicate effort. Welcome aboard!
+> Do not migrate other modules in the same PR.
+
+---
+
+## Issue #91 — deduplicate env parsers in markdown_io (B3)
+
+**Difficulty:** 2/10 · [GitHub #91](https://github.com/MarcoPorcellato/matryca-plumber/issues/91) · slice of [#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57)
+
+**Exact Contribution Guide Comment:**
+
+> Hi! Pair with B2 in a **separate PR** to avoid conflicts.
+>
+> **What to fix:** Remove local `_env_bool` / `_env_int` in `src/graph/markdown_io.py`; import from `plumber_config`.
+>
+> **Verify:**
+> ```bash
+> uv run pytest tests/test_markdown_io.py -q
+> make check
+> ```
+
+---
+
+## Issue #92 — harvest semantic-index abort regression test (B5)
+
+**Difficulty:** 2/10 · [GitHub #92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92) · test-only (audit #11 behavior)
+
+**Exact Contribution Guide Comment:**
+
+> Hi! Test-only PR — documents existing OCC-safe behavior.
+>
+> **What to add:** In `tests/test_bootstrap_yield.py`, mock `_append_minimal_semantic_index` → `False` and assert `catalog.upsert` is not called.
+>
+> **Verify:**
+> ```bash
+> uv run pytest tests/test_bootstrap_yield.py -q
+> make check
+> ```
+
+---
+
+## Issue #93 — purge_expired_semantic_cache without json flock (B6)
+
+**Difficulty:** 3/10 · [GitHub #93](https://github.com/MarcoPorcellato/matryca-plumber/issues/93) · slice of [#42](https://github.com/MarcoPorcellato/matryca-plumber/issues/42)
+
+**Exact Contribution Guide Comment:**
+
+> Hi! Scoped concurrency slice — read one existing flock call site first.
+>
+> **What to fix:** `purge_expired_semantic_cache` in `semantic_cache_router.py` reads/deletes cache files without `cross_process_json_flock`, while `cache_put` writes under flock.
+>
+> **Steps:**
+> 1. Read `cache_put` for the flock pattern.
+> 2. Wrap per-file read/delete in `purge_expired_semantic_cache` with `cross_process_json_flock(path)`.
+> 3. Extend `tests/test_semantic_cache_router.py`.
+>
+> **Verify:**
+> ```bash
+> uv run pytest tests/test_semantic_cache_router.py -q
+> make check
+> ```
 
 ---
 
@@ -169,3 +289,4 @@
 | [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67) | v1.9.15 | Journal Phase-2 structural settle — no semantic LLM |
 | [#68](https://github.com/MarcoPorcellato/matryca-plumber/issues/68) | v1.9.14 | Entity consolidation skips journal/date wikilink pairs |
 | [#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70) | v1.9.15 | Phase-2 progress denominator excludes `journals/` |
+| [#45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45) prod fix | v1.9.10 (#38) | `file_mtime_drifted()` in link_verification — issue retained for **tests only** |
