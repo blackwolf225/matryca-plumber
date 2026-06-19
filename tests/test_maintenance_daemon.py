@@ -1728,6 +1728,10 @@ def test_run_cycle_persists_cluster_file_progress(
 def test_structured_completion_logs_tokens_to_shared_logger(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "src.agent.llm_client.inject_identity_into_system_prompt",
+        lambda system_prompt, **_: system_prompt,
+    )
     logger = TokenLogger(log_path=Path("logs/test_structured_tokens.log"))
     client = InstructorLLMClient(
         base_url="http://localhost:1234/v1",
