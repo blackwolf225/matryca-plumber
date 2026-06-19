@@ -6,9 +6,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from src.graph.io_retry import PageLockUnavailableError
 from src.graph.json_flock import cross_process_json_flock
+from src.utils.platform_lock import clear_flock_depths
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32",
@@ -49,3 +52,61 @@ def test_in_process_json_flock_context_manager(tmp_path: Path) -> None:
     with cross_process_json_flock(target):
         target.write_text('{"ok": true}', encoding="utf-8")
     assert json.loads(target.read_text(encoding="utf-8")) == {"ok": True}
+
+
+def test_nested_json_flock_same_thread_reentrant(tmp_path: Path) -> None:
+    clear_flock_depths()
+    target = tmp_path / "nested.json"
+    target.write_text("{}", encoding="utf-8")
+    with cross_process_json_flock(target), cross_process_json_flock(target):  # noqa: SIM117
+        target.write_text('{"nested": true}', encoding="utf-8")
+    assert json.loads(target.read_text(encoding="utf-8")) == {"nested": True}
+
+
+def test_json_flock_raises_when_blocking_acquire_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_flock_depths()
+    target = tmp_path / "contended.json"
+    target.write_text("{}", encoding="utf-8")
+
+    import fcntl
+
+    def _contended_flock(fd: int, op: int) -> None:
+        _ = fd
+        if op & fcntl.LOCK_NB:
+            raise BlockingIOError()
+        raise OSError(95, "flock blocked")
+
+    monkeypatch.delenv("MATRYCA_ALLOW_FLOCK_DEGRADATION", raising=False)
+    monkeypatch.setattr("src.utils.platform_lock.IO_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr("src.utils.platform_lock.IO_RETRY_INITIAL_DELAY_S", 0.01)
+    monkeypatch.setattr("src.utils.platform_lock.IO_RETRY_MAX_DELAY_S", 0.02)
+    with (
+        patch("src.utils.platform_lock._fcntl.flock", side_effect=_contended_flock),
+        pytest.raises(PageLockUnavailableError),
+        cross_process_json_flock(target),
+    ):
+        pass
+
+
+def test_json_flock_degradation_on_unsupported_fs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_flock_depths()
+    target = tmp_path / "cloud.json"
+    target.write_text("{}", encoding="utf-8")
+
+    def _reject_flock(fd: int, op: int) -> None:
+        _ = (fd, op)
+        raise OSError(95, "flock not supported on this filesystem")
+
+    monkeypatch.setenv("MATRYCA_ALLOW_FLOCK_DEGRADATION", "true")
+    with (
+        patch("src.utils.platform_lock._fcntl.flock", side_effect=_reject_flock),
+        cross_process_json_flock(target),
+    ):
+        target.write_text('{"degraded": true}', encoding="utf-8")
+    assert json.loads(target.read_text(encoding="utf-8")) == {"degraded": True}

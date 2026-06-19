@@ -17,13 +17,13 @@ from src.agent.quality_gate import (
     markdown_append_bounds_violations,
     outline_bounds_violations,
 )
-from src.graph import page_write_lock as page_write_lock_mod
 from src.graph.markdown_blocks import atomic_write_bytes
 from src.graph.page_write_lock import (
     clear_page_write_locks,
     cross_process_lock_available,
     page_rmw_lock,
 )
+from src.utils import platform_lock as platform_lock_mod
 
 
 def test_outline_bounds_rejects_too_many_nodes() -> None:
@@ -93,7 +93,7 @@ def test_flock_oserror_falls_back_to_thread_lock(
         raise OSError(95, msg)
 
     monkeypatch.setenv("MATRYCA_ALLOW_FLOCK_DEGRADATION", "true")
-    monkeypatch.setattr(page_write_lock_mod._fcntl, "flock", _reject_flock)
+    monkeypatch.setattr(platform_lock_mod._fcntl, "flock", _reject_flock)
     with page_rmw_lock(target):
         target.write_text("updated\n", encoding="utf-8")
     assert target.read_text(encoding="utf-8") == "updated\n"
