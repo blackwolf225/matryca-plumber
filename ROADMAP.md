@@ -18,13 +18,14 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - Agent surface: [`llms.txt`](llms.txt), [`.well-known/llms.txt`](.well-known/llms.txt), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)
 - Operator workflow in [CONTRIBUTING.md](CONTRIBUTING.md) — Discussions for RFCs, issues for trackable work
 - “Test vault first” guidance in README (clone graph before pointing at production)
-- Good-first issues live on GitHub — [open `good first issue` label](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#45, #53, #56, #69, #71, #85); maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md)
+- Good-first issues live on GitHub — [open `good first issue` label](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#38, #43, #52, #53, #56, #69, #71, #85, #90–#92, #101–#105); maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md)
 
 ### Tech debt & integrity (prerequisite for v2.0)
 
 **[v1.9.10 — Concurrency & Data Integrity](https://github.com/MarcoPorcellato/matryca-plumber/milestone/6)** ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)–[#45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45))
 
 - ~~OCC gaps on hub pages, `json_flock` parity with `page_rmw_lock`~~ — **done (v1.10.6):** hub page OCC via `write_generated_hub_page` ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)); unified `platform_lock` flock ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40))
+- ~~Daemon shutdown suppresses final save errors~~ — **done (main):** [#44](https://github.com/MarcoPorcellato/matryca-plumber/issues/44) via [#100](https://github.com/MarcoPorcellato/matryca-plumber/pull/100) (@gaoflow)
 - ~~Atomic JSON writes for link registry and daemon state~~ — **done (v1.10.0):** link registry `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); daemon state already atomic
 - ~~Catalog cache coherence under concurrent disk writers~~ — **done (v1.10.0):** master catalog load flock ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)), merge-on-save ([#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)), harvest catalog/page drift guard on OCC abort ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37))
 

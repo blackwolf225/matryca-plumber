@@ -10,11 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **v2.0 roadmaps** — Maintainer checklists for Shadow DB ([#24](https://github.com/MarcoPorcellato/matryca-plumber/issues/24)) and Nacre-inspired biological memory layer: [`docs/roadmaps/ROADMAP_V2_SHADOW_DB.md`](docs/roadmaps/ROADMAP_V2_SHADOW_DB.md), [`docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md`](docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md); cross-links in [`ROADMAP.md`](ROADMAP.md) and [`docs/openspec/README.md`](docs/openspec/README.md).
-- **v2.0 shadow schema** — [`src/shadow/schema.py`](src/shadow/schema.py) DDL for Logseq read cache (`pages`, `blocks`, `block_refs`, `blocks_fts`) plus biological memory tables (`memory_nodes` through `memory_snapshots`); `apply_shadow_schema()` helper and [`tests/test_shadow_schema.py`](tests/test_shadow_schema.py).
+- **v2.0 biological memory decay (Epic #99, Phase A)** — [`src/memory/decay.py`](src/memory/decay.py) Ebbinghaus pure math (`calculate_decayed_weight`, `calculate_stability`, `MemoryEdgeState`) ported from Nacre with numerical parity tests in [`tests/test_decay.py`](tests/test_decay.py).
 
 ### Fixed
 
 - **Core:** `link_verification` now correctly uses `file_mtime_drifted()` with exact nanosecond precision for OCC checks (thanks to @gaoflow in #88).
+- **Daemon shutdown (#44):** Final catalog and daemon state save failures now log exception details instead of being silently suppressed during graceful shutdown (thanks to @gaoflow in #100).
+
+### Changed
+
+- **Contributor onboarding:** Five new good-first issues ([#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105)) plus promoted [#38](https://github.com/MarcoPorcellato/matryca-plumber/issues/38); shipped #44 closed via #100 — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
 
 ## [1.10.6] - 2026-06-19
 
