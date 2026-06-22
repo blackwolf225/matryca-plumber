@@ -280,9 +280,7 @@ MEMORY_GRAPH_DDL: tuple[str, ...] = (
 
 SHADOW_DDL: tuple[str, ...] = SHADOW_READ_DDL + MEMORY_GRAPH_DDL
 
-SHADOW_META_SEED: tuple[tuple[str, str], ...] = (
-    ("schema_version", str(SHADOW_SCHEMA_VERSION)),
-)
+SHADOW_META_SEED: tuple[tuple[str, str], ...] = (("schema_version", str(SHADOW_SCHEMA_VERSION)),)
 
 
 def apply_shadow_schema(connection: sqlite3.Connection) -> None:
