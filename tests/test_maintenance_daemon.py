@@ -639,6 +639,34 @@ def test_graceful_shutdown_logs_final_save_errors(
     ]
 
 
+def test_daemon_signal_handler_logs_token_shutdown_errors(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logged: list[str] = []
+
+    def fail_log_daemon_shutdown(_signum: int) -> None:
+        raise OSError("ops log unavailable")
+
+    def capture_exception(message: str, *args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+        logged.append(message)
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    monkeypatch.setattr(daemon.token_logger, "log_daemon_shutdown", fail_log_daemon_shutdown)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        capture_exception,
+    )
+
+    daemon._handle_daemon_graceful_shutdown(15, None)
+
+    assert daemon._shutdown_in_progress is True
+    assert daemon._stop_requested is True
+    assert daemon._shutdown_event.is_set() is True
+    assert logged == ["Daemon shutdown token log failed during graceful shutdown"]
+
+
 def test_collect_snapshot_reports_metrics(graph_root: Path) -> None:
     _write_page(graph_root, "Snap", "- snap\n")
     snap = collect_snapshot(
