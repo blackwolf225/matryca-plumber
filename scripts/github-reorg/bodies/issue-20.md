@@ -33,6 +33,13 @@ Full contract: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) § "LLM OS" / Safe-Sync ·
 | #25 | Safe-Sync write path (Logseq DB CLI bridge — OG path done) |
 | #23 | Hardware profiler & LLM recommender (DX; independent) |
 
+## Maintainer roadmaps (in-repo)
+
+| Document | Scope |
+|----------|-------|
+| [`docs/roadmaps/ROADMAP_V2_SHADOW_DB.md`](docs/roadmaps/ROADMAP_V2_SHADOW_DB.md) | Shadow DB schema, FTS5, sync tasks — DDL in `src/shadow/schema.py` |
+| [`docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md`](docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md) | Nacre-inspired memory graph (decay, recall, procedures) on top of Shadow DB |
+
 ## v2.0 rollout
 
 | Track | Target |

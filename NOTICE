@@ -3,3 +3,5 @@ Copyright 2026 Marco Porcellato and Matryca.ai
 
 This product includes software developed by Marco Porcellato and Matryca.ai.
 The Matryca Plumber daemon, Logseq Matryca Parser integration, and the atomic-block outliner paradigm are intellectual property linked to the Matryca ecosystem.
+
+This product incorporates memory graph algorithms ported from Nacre (https://github.com/marcusschimizzi/nacre), Copyright 2026 Marcus Sullivan, licensed under the Apache License 2.0.

@@ -51,6 +51,7 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 | Initiative | Issue | Goal |
 |------------|-------|------|
 | Shadow DB read path | [#24](https://github.com/MarcoPorcellato/matryca-plumber/issues/24) | `shadow.sqlite`, FTS5, CTEs, background sync from Markdown |
+| Biological memory layer | Epic [#20](https://github.com/MarcoPorcellato/matryca-plumber/issues/20) | Nacre-inspired decay/recall in `shadow.sqlite` — [`ROADMAP_V2_BIOLOGICAL_MEMORY.md`](docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md) |
 | GraphRepository abstraction | [#17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) | Coexistent Markdown / SQLite backends |
 | Hardware Profiler & LLM Recommender | [#23](https://github.com/MarcoPorcellato/matryca-plumber/issues/23) | Sovereign UI guidance for 16 GB CPU-only laptops |
 | **v2.0.0-alpha** | Epic [#20](https://github.com/MarcoPorcellato/matryca-plumber/issues/20) | Experimental `shadow.sqlite` behind opt-in env flag |
@@ -59,6 +60,8 @@ Deeper maintainer checklists (completed or in flight):
 
 - [`docs/roadmaps/ROADMAP_LLM_WIKI.md`](docs/roadmaps/ROADMAP_LLM_WIKI.md) — LLM-Wiki baseline (done)
 - [`docs/roadmaps/ROADMAP_IRONCLAD_SHIELD.md`](docs/roadmaps/ROADMAP_IRONCLAD_SHIELD.md) — resilience and safety hardening
+- [`docs/roadmaps/ROADMAP_V2_SHADOW_DB.md`](docs/roadmaps/ROADMAP_V2_SHADOW_DB.md) — v2.0 Shadow DB read path ([#24](https://github.com/MarcoPorcellato/matryca-plumber/issues/24))
+- [`docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md`](docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md) — v2.0 biological memory layer (Nacre-inspired, depends on Shadow DB)
 
 ---
 
