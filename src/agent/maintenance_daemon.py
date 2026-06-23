@@ -2039,8 +2039,10 @@ class MaintenanceDaemon:
         self._stop_requested = True
         self._shutdown_event.set()
 
-        with contextlib.suppress(Exception):
+        try:
             self.token_logger.log_daemon_shutdown(signum)
+        except OSError:
+            logger.exception("Daemon shutdown token log failed during graceful shutdown")
 
     def _begin_phase2_write(self) -> None:
         with self._inflight_writes:
