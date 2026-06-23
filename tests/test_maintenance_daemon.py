@@ -667,6 +667,49 @@ def test_daemon_signal_handler_logs_token_shutdown_errors(
     assert logged == ["Daemon shutdown token log failed during graceful shutdown"]
 
 
+def test_graceful_shutdown_cleanup_runs_after_final_save_errors(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingCatalog:
+        def save(self) -> None:
+            raise OSError("catalog unavailable")
+
+    stopped_watchers: list[bool] = []
+
+    def fail_save_daemon_state(_graph_root: Path, _state: DaemonState) -> None:
+        raise OSError("state unavailable")
+
+    def capture_exception(_message: str, *args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    def stop_file_watcher() -> None:
+        stopped_watchers.append(True)
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.load_master_catalog",
+        lambda _graph_root: FailingCatalog(),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.save_daemon_state",
+        fail_save_daemon_state,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        capture_exception,
+    )
+
+    write_pid_file(graph_root)
+    assert read_pid_file(graph_root) is not None
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    monkeypatch.setattr(daemon, "_stop_file_watcher", stop_file_watcher)
+
+    daemon._finalize_graceful_shutdown(DaemonState())
+
+    assert stopped_watchers == [True]
+    assert read_pid_file(graph_root) is None
+
+
 def test_collect_snapshot_reports_metrics(graph_root: Path) -> None:
     _write_page(graph_root, "Snap", "- snap\n")
     snap = collect_snapshot(
