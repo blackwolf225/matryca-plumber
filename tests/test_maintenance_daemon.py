@@ -2133,6 +2133,40 @@ def test_run_cycle_journal_phase1_only_skips_semantic_indexing(
     assert "SemanticTopic" in dual_embed_titles
 
 
+def test_journal_structural_settle_logs_link_registry_merge_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    journal_dir = graph_root / "journals"
+    journal_dir.mkdir(parents=True)
+    journal_path = journal_dir / "2026_06_10.md"
+    journal_path.write_text(f"- daily note\n  id:: {BLOCK_UUID}\n", encoding="utf-8")
+    journal_key = graph_relative_path_key(journal_path, graph_root)
+    logged_messages: list[str] = []
+
+    def fail_link_registry_merge(*_args: object, **_kwargs: object) -> None:
+        raise OSError("registry sidecar unavailable")
+
+    def capture_exception(message: str, *_args: object, **_kwargs: object) -> None:
+        logged_messages.append(message)
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: True)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.merge_page_links_into_registry",
+        fail_link_registry_merge,
+    )
+    monkeypatch.setattr("src.agent.maintenance_daemon.logger.exception", capture_exception)
+
+    state = DaemonState(bootstrap_complete=True)
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+
+    result = daemon._settle_journal_structural_cycle_file(journal_path, state)
+
+    assert result is False
+    assert state.files[journal_key].status == "processed"
+    assert logged_messages == ["Journal structural settle link registry merge failed"]
+
+
 def test_page_needs_phase2_cognitive_journal_settles_without_semantic_requeue(
     graph_root: Path,
 ) -> None:

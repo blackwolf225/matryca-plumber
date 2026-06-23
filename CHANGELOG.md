@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Journal settle (#128):** Link registry merge failures during journal structural settle now log exception details while preserving the existing non-blocking settle flow.
+
 ### Changed
 
 - **Repomix pack** — `repomix.config.json` now uses an `include` allowlist aligned with code-graph clusters (Graph, Agent, Daemon, Cli, Semantic, Tana, Frontend, Tests); `.repomixignore` deduplicated and scoped to vault/runtime/maintainer noise; pack header documents entry points and reading order.
