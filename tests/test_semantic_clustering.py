@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from types import TracebackType
 
+import pytest
 from src.graph.master_catalog import clear_master_catalog_cache
 from src.graph.semantic_clustering import (
     DEFAULT_MAX_CLUSTER_SIZE,
@@ -96,6 +98,41 @@ def test_save_and_load_semantic_clusters(tmp_path: Path) -> None:
     assert payload["clusters"]["cluster_001"] == ["Alpha", "Beta"]
     loaded = load_semantic_clusters(tmp_path)
     assert loaded == clusters
+
+
+def test_load_semantic_clusters_uses_json_flock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_master_catalog_cache(tmp_path)
+    clusters = {"cluster_001": ["Alpha", "Beta"]}
+    save_semantic_clusters(tmp_path, clusters)
+    locked_paths: list[Path] = []
+
+    class RecordingFlock:
+        def __init__(self, path: Path) -> None:
+            locked_paths.append(path)
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> None:
+            _ = (exc_type, exc, traceback)
+
+    monkeypatch.setattr(
+        "src.graph.semantic_clustering.cross_process_json_flock",
+        RecordingFlock,
+    )
+
+    loaded = load_semantic_clusters(tmp_path)
+
+    assert loaded == clusters
+    assert locked_paths == [semantic_clusters_path(tmp_path)]
 
 
 def test_load_or_compute_semantic_clusters_uses_cache(tmp_path: Path) -> None:
