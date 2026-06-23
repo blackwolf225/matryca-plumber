@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Repository hygiene (TRIZ separation-in-space)** — Vendor-specific graph indexer tooling moved under gitignored `.local/`; public wrappers `scripts/provision-local-workspace.sh` and `scripts/reindex-code-graph.sh` delegate via `LOCAL_GRAPH_ANALYZER_NPM_PACKAGE` / `CODE_GRAPH_CLI` with no vendor names in the OSS tree.
+
 ## [1.11.1] - 2026-06-23
 
 **Logseq Matryca Parser 1.4.0 alignment**

@@ -1,6 +1,6 @@
 NUM_WORKERS ?= 4
 
-.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-integration test-resilience check clean version-check
+.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-integration test-resilience check clean version-check provision-local reindex-graph
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -51,6 +51,12 @@ format-check: ## Verify formatting without modifying files
 check: lint typecheck sandbox-read-check version-check test ## Run linting, typechecking, sandbox read gate, version sync, and tests
 
 ci: format-check lint typecheck sandbox-read-check version-check test ## CI gate: format check + lint + types + sandbox + version + tests
+
+provision-local: ## Scaffold .local/ graph indexer (requires LOCAL_GRAPH_ANALYZER_NPM_PACKAGE)
+	@bash scripts/provision-local-workspace.sh
+
+reindex-graph: ## Re-index repo with local hybrid embeddings (.local/ maintainer tooling)
+	@bash scripts/reindex-code-graph.sh
 
 clean: ## Remove python caches, virtual envs, and build artifacts
 	rm -rf .venv/
