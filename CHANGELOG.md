@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Core:** `link_verification` now correctly uses `file_mtime_drifted()` with exact nanosecond precision for OCC checks (thanks to @gaoflow in #88).
 - **Daemon shutdown (#44):** Final catalog and daemon state save failures now log exception details instead of being silently suppressed during graceful shutdown (thanks to @gaoflow in #100).
+- **TUI dashboard (#102):** Token activity tail and daemon state refresh I/O failures now log exception details while preserving the existing fallback UI.
 
 ### Changed
 
