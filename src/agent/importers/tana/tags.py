@@ -83,9 +83,7 @@ class TanaTagsExtractor:
         self._graph = graph
         self._journal_format = journal_page_title_format
         self._field_defs = _build_field_def_index(graph)
-        self._field_defs_by_key = {
-            spec.normalized_key: spec for spec in self._field_defs.values()
-        }
+        self._field_defs_by_key = {spec.normalized_key: spec for spec in self._field_defs.values()}
 
     def extract_for_node(self, node_id: str) -> NodeFieldExtraction:
         """Extract supertags and field properties for a Tana data node."""

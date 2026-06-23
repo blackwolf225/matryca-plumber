@@ -350,10 +350,7 @@ def _append_ledger_entry(graph_root: Path, *, report: TanaWriteReport) -> None:
         f"blocks_written:: {report.blocks_written}, "
         f"occ_conflicts:: {report.occ_conflicts}"
     )
-    section = (
-        f"- Tana import **{source}** at {report.export_ts}\n"
-        f"  {counters}\n"
-    )
+    section = f"- Tana import **{source}** at {report.export_ts}\n  {counters}\n"
     ledger_path = graph_safe_page_path(graph_root, TANA_LEDGER_PAGE)
     _append_markdown_file(
         graph_root,

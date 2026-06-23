@@ -124,9 +124,7 @@ def test_depth_split_creates_split_page_and_link() -> None:
     result = convert_tana_graph(graph, max_depth=4)
 
     split_pages = [
-        page
-        for page in result.pages
-        if page.page_properties.get(PROP_TANA_DEPTH_SPLIT) == "true"
+        page for page in result.pages if page.page_properties.get(PROP_TANA_DEPTH_SPLIT) == "true"
     ]
     assert len(split_pages) == 1
     assert split_pages[0].page_title == "Tana/Split/Level 3"

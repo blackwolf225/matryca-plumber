@@ -39,7 +39,7 @@ def _build_field_graph() -> TanaWorkspaceGraph:
         ),
         "LBL_STATUS": NodeDump(
             id="LBL_STATUS",
-            props={"name": '<span>Target Date</span>'},
+            props={"name": "<span>Target Date</span>"},
             children=[],
         ),
         "VAL_STATUS": NodeDump(id="VAL_STATUS", props={"name": "In progress"}, children=[]),

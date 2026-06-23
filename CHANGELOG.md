@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-06-23
+
+**Logseq Matryca Parser 1.4.0 alignment**
+
+### Changed
+
+- **`logseq-matryca-parser`** — minimum dependency raised to **1.4.0** (from `>=1.3.1`); inherits parser **1.3.x** public API and graph parity, plus **1.4.0** robustness: 31 bug-hunt fixes, canonical page iteration, case-insensitive tag/search, live watcher delete/move handling, SYNAPSE embed safety.
+- **Ruff format** — `tags.py`, `write.py`, `test_tana_convert.py`, `test_tana_tags.py` aligned with `make ci` format-check.
+
 ## [1.11.0] - 2026-06-23
 
 **Tana → Logseq OG migration**
