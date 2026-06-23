@@ -123,6 +123,7 @@ ehthumbs.db
 repomix-output.xml
 repomix-output.txt
 repomix-output.json
+repomix-output.md
 .repomix-cache/
 .cursor/*
 !.cursor/rules/
