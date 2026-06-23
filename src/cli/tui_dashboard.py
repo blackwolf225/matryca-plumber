@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from loguru import logger as loguru_logger
 
 from ..agent.control_room_progress import resolve_control_room_progress
 from ..agent.maintenance_daemon import (
@@ -177,8 +178,10 @@ def collect_snapshot(
         last_file = Path(state.last_file).name
 
     activity_lines: list[str] = []
-    with contextlib.suppress(Exception):
+    try:
         activity_lines = logger.tail_activity_summaries(5)
+    except OSError:
+        loguru_logger.exception("TUI dashboard failed to load token activity summaries")
 
     control_room = resolve_control_room_progress(state)
 
@@ -231,8 +234,10 @@ def collect_snapshot_safe(
         ), last_good_state
 
     if root is not None:
-        with contextlib.suppress(Exception):
+        try:
             last_good_state = load_daemon_state(root)
+        except OSError:
+            loguru_logger.exception("TUI dashboard failed to refresh last good daemon state")
     return snapshot, last_good_state
 
 

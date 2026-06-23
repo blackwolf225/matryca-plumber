@@ -1380,6 +1380,22 @@ def test_run_cycle_prunes_deleted_pages_from_catalog(graph_root: Path) -> None:
     _ = live
 
 
+def test_sync_catalog_after_page_write_stores_nanosecond_mtime(graph_root: Path) -> None:
+    path = _write_page(
+        graph_root,
+        "PrecisePage",
+        f"- type:: risorsa\n- body\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: precise\n",
+    )
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+
+    daemon._sync_catalog_after_page_write(path, "PrecisePage")
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    stored_mtime = reloaded.pages["PrecisePage"].last_mtime
+    assert stored_mtime == path.stat().st_mtime_ns
+    assert stored_mtime != int(path.stat().st_mtime)
+
+
 def test_bootstrap_pipeline_sets_complete_only_after_master_index(
     graph_root: Path,
     monkeypatch: pytest.MonkeyPatch,

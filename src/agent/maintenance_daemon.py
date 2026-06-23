@@ -2308,7 +2308,7 @@ class MaintenanceDaemon:
         """Upsert catalog row from on-disk semantic index immediately after a page write."""
         try:
             new_text = read_graph_file_text(path, self.graph_root, errors="replace")
-            mtime = int(path.stat().st_mtime)
+            mtime = path.stat().st_mtime_ns
         except OSError as exc:
             self.token_logger.log_structural_lint_warning(
                 target_file=path,
