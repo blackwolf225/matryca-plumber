@@ -6,7 +6,10 @@ from pathlib import Path
 
 from ...agent.plumber_config import PlumberLintConfig, apply_thermal_pause_cognitive
 from ...graph.alias_index import normalize_concept_key, should_skip_entity_overlap_pair
-from ...graph.generational_cache import patch_generational_caches_for_paths
+from ...graph.generational_cache import (
+    cached_build_alias_index,
+    patch_generational_caches_for_paths,
+)
 from ...graph.markdown_blocks import graph_safe_page_path, occ_snapshot
 from ...graph.property_line_edit import append_page_alias_line
 from ._shared import ModuleOutcome, extract_wikilink_targets, page_file_exists
@@ -29,6 +32,7 @@ def run_entity_consolidation(
         return outcome
 
     seen_pairs: set[tuple[str, str]] = set()
+    alias_index = cached_build_alias_index(graph_root)
 
     llm_body = llm_context if llm_context is not None else content
 
@@ -44,7 +48,12 @@ def run_entity_consolidation(
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
-        if should_skip_entity_overlap_pair(graph_root, page_title, target):
+        if should_skip_entity_overlap_pair(
+            graph_root,
+            page_title,
+            target,
+            alias_index=alias_index,
+        ):
             continue
 
         baselines: dict[str, float | None] = {}

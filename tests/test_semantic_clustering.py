@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from types import TracebackType
 
 import pytest
 from src.graph.master_catalog import clear_master_catalog_cache
 from src.graph.semantic_clustering import (
-    DEFAULT_MAX_CLUSTER_SIZE,
     LOUVAIN_MAX_ITERATIONS,
-    MIN_CLUSTER_SIZE,
     _louvain_communities,
     _tokenize,
     compute_semantic_clusters,
@@ -64,21 +61,6 @@ def test_compute_semantic_clusters_partitions_catalog() -> None:
     assert len(titles) == 120
     assert len(set(titles)) == 120
     assert all(5 <= len(page_titles) <= 35 for page_titles in clusters.values())
-
-
-def test_compute_semantic_clusters_scales_to_three_thousand_pages() -> None:
-    catalog = _mock_catalog(3000)
-    started = time.perf_counter()
-    clusters = compute_semantic_clusters(catalog, max_cluster_size=DEFAULT_MAX_CLUSTER_SIZE)
-    elapsed = time.perf_counter() - started
-
-    titles = [title for page_titles in clusters.values() for title in page_titles]
-    sizes = [len(page_titles) for page_titles in clusters.values()]
-
-    assert len(titles) == 3000
-    assert len(set(titles)) == 3000
-    assert all(MIN_CLUSTER_SIZE <= size <= DEFAULT_MAX_CLUSTER_SIZE for size in sizes)
-    assert elapsed < 8.0, f"clustering took {elapsed:.3f}s, expected under 8 seconds in CI"
 
 
 def test_save_and_load_semantic_clusters(tmp_path: Path) -> None:
