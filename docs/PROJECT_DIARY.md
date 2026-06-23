@@ -1,6 +1,6 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.10.6** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.10.6]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.11.0** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.11.0]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
@@ -10,7 +10,7 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
-## [2026-06-23] Unreleased — Tana workspace JSON import
+## [2026-06-23] v1.11.0 — Tana workspace JSON import
 
 ### Context
 
@@ -25,7 +25,7 @@ Operators migrating from Tana Outliner need a **local, offline** path into Logse
 5. **Surfaces** — `run_tana_import()`; CLI `matryca import tana --file … [--apply]` (dry-run warning on stderr); MCP `import_tana(dry_run=True)`.
 6. **Docs** — [`docs/openspec/tana-import.md`](openspec/tana-import.md) v1.0; README, `llms.txt`, ARCHITECTURE, CONTRIBUTING harmonized.
 
-**Suite:** 874 tests green · mypy strict · ruff clean · coverage ≥70%.
+**Suite:** 879 tests green · mypy strict · ruff clean · coverage ≥70%.
 
 ---
 

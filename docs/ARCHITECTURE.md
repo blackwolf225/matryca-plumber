@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.10.6 (unified flock + hub page OCC + parser 1.3.1 alignment + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
+**Version:** 1.11.0 (Tana workspace JSON import + unified flock + hub page OCC + parser 1.3.1 alignment + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -50,7 +50,7 @@ flowchart TB
   Locks --> Vault
 ```
 
-**Quality bar:** **720+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; local iteration via `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); slow perf tests via `make perf` (`pytest -m slow`).
+**Quality bar:** **879+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; local iteration via `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); slow perf tests via `make perf` (`pytest -m slow`).
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
@@ -67,6 +67,8 @@ flowchart TB
 **v1.10.0 focus:** **Catalog & registry integrity** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). **Journal Phase-2 bypass (v1.9.15)** — daily notes under `journals/` receive structural indexing only; semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — zero `# type: ignore` in `src/`. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1100), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 **v1.10.3 focus:** **Sovereign UI resilience & LLM contract hardening** — config/graph-path saves offloaded from the FastAPI event loop (`asyncio.to_thread`); rotating Loguru at UI startup; Pydantic `extra="forbid"` on plumber/outline structured models; recursive OpenAI strict JSON Schema generation; adaptive `max_tokens` / `max_completion_tokens`; flock sidecar files created as `0o600`. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md#v1103-non-blocking-config-saves), [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md).
+
+**v1.11.0 focus:** **Tana → Logseq OG migration** — streaming `ijson` loader over Tana workspace JSON exports; hybrid entity placement under `Tana/`; `#day` journal routing via `logseq/config.edn`; depth-split at configurable limit; in-flight + catalog wikilink resolution; `tana-id::` idempotent OCC writes; CLI `matryca import tana` and MCP `import_tana` (dry-run default). Spec: [`openspec/tana-import.md`](openspec/tana-import.md).
 
 **v1.10.6 focus:** **Concurrency integrity** — shared cross-process flock in `src/utils/platform_lock.py` unifies page RMW locks and JSON sidecar locks (NB acquire + exponential backoff + blocking fallback + thread-local reentrancy; fixes nested catalog/registry deadlocks, #40); OCC-safe hub page writes via `write_generated_hub_page` for Master Index and Graph Insights compiles (pre-compile mtime snapshot, graceful skip on human edit during compile, #34).
 
@@ -1043,10 +1045,11 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
 | **1.10.0** | Catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); OSS CI maturity |
 | **1.10.3** | UI/LLM hardening | Non-blocking Sovereign UI config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` |
+| **1.11.0** | Tana → Logseq OG import | `ijson` streaming loader; hybrid placement; `config.edn` journals; depth-split; `tana-id` idempotency; CLI + MCP `import_tana` (879+ tests) |
 | **1.10.6** | Concurrency integrity | Unified `platform_lock` flock for page + JSON sidecars ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)); hub page OCC via `write_generated_hub_page` ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)); contributor backlog hygiene |
 | **1.10.5** | Parser 1.3.1 alignment | `logseq-matryca-parser>=1.3.1`; root public API imports; AST cache `discover_graph_files`; graph parity 1.2.x inherited |
 | **1.10.4** | CI/deps maintenance | GitHub Actions toolchain refresh; Sovereign UI frontend npm bumps; Dependabot weekly groups |
-| **Unreleased** | Master RFC Phases 1–3 + Tana import | Identity + ingest + optional dual embedding + Tana workspace JSON pipeline (`identity-config.md`, `ingest.md`, `dual-embedding.md`, `tana-import.md`) |
+| **Unreleased** | Master RFC Phases 1–3 (remaining) | Identity + ingest + optional dual embedding shipped; biological memory decay Phase A in tree |
 
 ---
 

@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-06-23
+
+**Tana → Logseq OG migration**
+
 ### Added
 
-- **Tana workspace JSON import** — Full pipeline: [`src/agent/importers/tana/`](src/agent/importers/tana/) (`ijson` streaming, `logseq/config.edn` journal routing, hybrid placement, depth-split, catalog + in-flight wikilink resolution, `tana-id` idempotent OCC writes, `Tana/Import Log` ledger); orchestrator [`src/agent/tana_import.py`](src/agent/tana_import.py); CLI **`matryca import tana --file … [--apply]`** (dry-run default, JSON stdout); MCP **`import_tana`** (`dry_run=True` default). Tests: `tests/test_tana_*.py`, `tests/test_tana_e2e.py`.
+- **Tana workspace JSON import** — Full pipeline: [`src/agent/importers/tana/`](src/agent/importers/tana/) (`ijson` streaming, `logseq/config.edn` journal routing, hybrid placement, depth-split, catalog + in-flight wikilink resolution, `tana-id` idempotent OCC writes, `Tana/Import Log` ledger); orchestrator [`src/agent/tana_import.py`](src/agent/tana_import.py); CLI **`matryca import tana --file … [--apply]`** (dry-run default, JSON stdout); MCP **`import_tana`** (`dry_run=True` default). OpenSpec: [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md). Tests: `tests/test_tana_*.py`, `tests/test_tana_e2e.py`.
 - **v2.0 roadmaps** — Maintainer checklists for Shadow DB ([#24](https://github.com/MarcoPorcellato/matryca-plumber/issues/24)) and Nacre-inspired biological memory layer: [`docs/roadmaps/ROADMAP_V2_SHADOW_DB.md`](docs/roadmaps/ROADMAP_V2_SHADOW_DB.md), [`docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md`](docs/roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md); cross-links in [`ROADMAP.md`](ROADMAP.md) and [`docs/openspec/README.md`](docs/openspec/README.md).
 - **v2.0 shadow schema** — [`src/shadow/schema.py`](src/shadow/schema.py) DDL for Logseq read cache (`pages`, `blocks`, `block_refs`, `blocks_fts`) plus biological memory tables (`memory_nodes` through `memory_snapshots`); `apply_shadow_schema()` helper and [`tests/test_shadow_schema.py`](tests/test_shadow_schema.py).
 - **v2.0 biological memory decay (Epic #99, Phase A)** — [`src/memory/decay.py`](src/memory/decay.py) Ebbinghaus pure math (`calculate_decayed_weight`, `calculate_stability`, `MemoryEdgeState`) ported from Nacre with numerical parity tests in [`tests/test_decay.py`](tests/test_decay.py).
@@ -18,11 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Core:** `link_verification` now correctly uses `file_mtime_drifted()` with exact nanosecond precision for OCC checks (thanks to @gaoflow in #88).
 - **Daemon shutdown (#44):** Final catalog and daemon state save failures now log exception details instead of being silently suppressed during graceful shutdown (thanks to @gaoflow in #100).
+- **Daemon shutdown (#101):** SIGTERM/SIGINT token-log shutdown breadcrumb failures now emit exception details instead of being silently suppressed.
+- **TUI dashboard (#102):** Token activity tail and daemon state refresh I/O failures now log exception details while preserving the existing fallback UI.
+- **Catalog sync (#103):** Phase-2 post-write catalog updates now persist page mtimes with nanosecond precision.
+- **Semantic clusters (#104):** Cluster cache loads now read `semantic_clusters.json` under the shared JSON flock.
 
 ### Changed
 
-- **Documentation (Tana import)** — OpenSpec [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md) v1.0; eight-tool MCP surface harmonized across `SYSTEM_PROMPT.md`, `llms.txt`, `.well-known/llms.txt`, `ARCHITECTURE.md`, `agent-dx.md`, `llm-os-instructions.md`, `hermes-agent.md`, `ingest.md` cross-link, `CONTRIBUTING.md`, `ROADMAP.md`, `PROJECT_DIARY.md`.
-- **Contributor onboarding:** Five new good-first issues ([#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105)) plus promoted [#38](https://github.com/MarcoPorcellato/matryca-plumber/issues/38); shipped #44 closed via #100 — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
+- **Documentation** — README, `llms.txt`, ROADMAP, ARCHITECTURE, PROJECT_DIARY, OpenSpec index harmonized for **v1.11.0** with Tana import as headline feature; eight-tool MCP surface across `SYSTEM_PROMPT.md`, `agent-dx.md`, `llm-os-instructions.md`, `hermes-agent.md`, `ingest.md` cross-link.
+- **Contributor onboarding:** Five good-first issues ([#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105)) shipped via @gaoflow; Tier D backlog ([#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129)) — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
+- **Test coverage (#105):** Graceful shutdown tests now assert cleanup still runs after final catalog/state save failures.
 
 ## [1.10.6] - 2026-06-19
 

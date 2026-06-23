@@ -2039,8 +2039,10 @@ class MaintenanceDaemon:
         self._stop_requested = True
         self._shutdown_event.set()
 
-        with contextlib.suppress(Exception):
+        try:
             self.token_logger.log_daemon_shutdown(signum)
+        except OSError:
+            logger.exception("Daemon shutdown token log failed during graceful shutdown")
 
     def _begin_phase2_write(self) -> None:
         with self._inflight_writes:
@@ -2306,7 +2308,7 @@ class MaintenanceDaemon:
         """Upsert catalog row from on-disk semantic index immediately after a page write."""
         try:
             new_text = read_graph_file_text(path, self.graph_root, errors="replace")
-            mtime = int(path.stat().st_mtime)
+            mtime = path.stat().st_mtime_ns
         except OSError as exc:
             self.token_logger.log_structural_lint_warning(
                 target_file=path,

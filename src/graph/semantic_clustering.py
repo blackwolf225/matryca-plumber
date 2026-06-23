@@ -564,9 +564,10 @@ def load_semantic_clusters(graph_root: Path) -> dict[str, list[str]] | None:
     if not path.is_file():
         return None
     try:
-        payload = read_bounded_json(path)
-    except BoundedJsonError as exc:
-        logger.warning("Ignoring corrupt semantic cluster cache at {}: {}", path, exc)
+        with cross_process_json_flock(path):
+            payload = read_bounded_json(path)
+    except (BoundedJsonError, OSError) as exc:
+        logger.warning("Ignoring unreadable semantic cluster cache at {}: {}", path, exc)
         return None
     if not isinstance(payload, dict):
         return None

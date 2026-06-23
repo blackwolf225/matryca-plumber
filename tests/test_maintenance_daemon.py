@@ -639,6 +639,77 @@ def test_graceful_shutdown_logs_final_save_errors(
     ]
 
 
+def test_daemon_signal_handler_logs_token_shutdown_errors(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logged: list[str] = []
+
+    def fail_log_daemon_shutdown(_signum: int) -> None:
+        raise OSError("ops log unavailable")
+
+    def capture_exception(message: str, *args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+        logged.append(message)
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    monkeypatch.setattr(daemon.token_logger, "log_daemon_shutdown", fail_log_daemon_shutdown)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        capture_exception,
+    )
+
+    daemon._handle_daemon_graceful_shutdown(15, None)
+
+    assert daemon._shutdown_in_progress is True
+    assert daemon._stop_requested is True
+    assert daemon._shutdown_event.is_set() is True
+    assert logged == ["Daemon shutdown token log failed during graceful shutdown"]
+
+
+def test_graceful_shutdown_cleanup_runs_after_final_save_errors(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FailingCatalog:
+        def save(self) -> None:
+            raise OSError("catalog unavailable")
+
+    stopped_watchers: list[bool] = []
+
+    def fail_save_daemon_state(_graph_root: Path, _state: DaemonState) -> None:
+        raise OSError("state unavailable")
+
+    def capture_exception(_message: str, *args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    def stop_file_watcher() -> None:
+        stopped_watchers.append(True)
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.load_master_catalog",
+        lambda _graph_root: FailingCatalog(),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.save_daemon_state",
+        fail_save_daemon_state,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        capture_exception,
+    )
+
+    write_pid_file(graph_root)
+    assert read_pid_file(graph_root) is not None
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    monkeypatch.setattr(daemon, "_stop_file_watcher", stop_file_watcher)
+
+    daemon._finalize_graceful_shutdown(DaemonState())
+
+    assert stopped_watchers == [True]
+    assert read_pid_file(graph_root) is None
+
+
 def test_collect_snapshot_reports_metrics(graph_root: Path) -> None:
     _write_page(graph_root, "Snap", "- snap\n")
     snap = collect_snapshot(
@@ -1350,6 +1421,22 @@ def test_run_cycle_prunes_deleted_pages_from_catalog(graph_root: Path) -> None:
     assert "LivePage" in reloaded.pages
     assert "GhostPage" not in reloaded.pages
     _ = live
+
+
+def test_sync_catalog_after_page_write_stores_nanosecond_mtime(graph_root: Path) -> None:
+    path = _write_page(
+        graph_root,
+        "PrecisePage",
+        f"- type:: risorsa\n- body\n\n{SEMANTIC_INDEX_HEADER}\n- summary:: precise\n",
+    )
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+
+    daemon._sync_catalog_after_page_write(path, "PrecisePage")
+
+    reloaded = load_master_catalog(graph_root, force_reload=True)
+    stored_mtime = reloaded.pages["PrecisePage"].last_mtime
+    assert stored_mtime == path.stat().st_mtime_ns
+    assert stored_mtime != int(path.stat().st_mtime)
 
 
 def test_bootstrap_pipeline_sets_complete_only_after_master_index(

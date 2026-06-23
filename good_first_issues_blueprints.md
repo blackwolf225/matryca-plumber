@@ -1,8 +1,8 @@
 # Good First Issues — Contributor Blueprints
 
-**Updated post-#100 merge (2026-06-22)** — #44 shipped via [#100](https://github.com/MarcoPorcellato/matryca-plumber/pull/100) (thanks @gaoflow). Tier C opened [#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105); [#38](https://github.com/MarcoPorcellato/matryca-plumber/issues/38) promoted to `good first issue`.
+**Updated post-Tier C merge (2026-06-23)** — #101–#105 shipped via @gaoflow ([#108](https://github.com/MarcoPorcellato/matryca-plumber/pull/108)–[#112](https://github.com/MarcoPorcellato/matryca-plumber/pull/112)). **Tier D** opened [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129) (TUI observability slices + cognitive-module test).
 
-**Active good-first candidates:** #38, #43, #52, #53, #56, #69, #71, #85, [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90)–[#92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92), [#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105). Welcome comments are on each GitHub thread.
+**Active good-first candidates:** #38, #43, #52, #53, #56, #69, #71, #85, [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90)–[#92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92), [#113](https://github.com/MarcoPorcellato/matryca-plumber/issues/113)–[#114](https://github.com/MarcoPorcellato/matryca-plumber/issues/114), [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118), [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129). Welcome comments are on each GitHub thread.
 
 **Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `fix(daemon): log SIG handler shutdown telemetry (#101)`).
 
@@ -22,7 +22,51 @@ If a maintainer closes an overarching audit issue while your PR is open, **rebas
 
 ---
 
-## Tier C — Post-#100 backlog (#101–#105)
+## Shipped — Tier C (#101–#105, @gaoflow)
+
+**Difficulty:** 2–3/10 · Closed via [#108](https://github.com/MarcoPorcellato/matryca-plumber/pull/108)–[#112](https://github.com/MarcoPorcellato/matryca-plumber/pull/112) · contributor @gaoflow
+
+| Issue | Summary |
+|-------|---------|
+| [#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101) | SIG handler logs `token_logger.log_daemon_shutdown` failures |
+| [#102](https://github.com/MarcoPorcellato/matryca-plumber/issues/102) | TUI dashboard logs activity tail / state load failures |
+| [#103](https://github.com/MarcoPorcellato/matryca-plumber/issues/103) | `_sync_catalog_after_page_write` uses `st_mtime_ns` |
+| [#104](https://github.com/MarcoPorcellato/matryca-plumber/issues/104) | `load_semantic_clusters` reads under `cross_process_json_flock` |
+| [#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105) | Test: shutdown cleanup continues after save failures |
+
+---
+
+## Tier D — Post-#105 backlog (#125–#129)
+
+| Issue | Summary | Difficulty |
+|-------|---------|------------|
+| [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125) | TUI logs `compute_scan_metrics` / Phase-2 progress failures (slice of #102) | 2/10 |
+| [#126](https://github.com/MarcoPorcellato/matryca-plumber/issues/126) | TUI `collect_snapshot_safe` logs outer `collect_snapshot` failures (slice of #102) | 2/10 |
+| [#127](https://github.com/MarcoPorcellato/matryca-plumber/issues/127) | TUI `_try_load_daemon_state` logs state load failures (slice of #102) | 2/10 |
+| [#128](https://github.com/MarcoPorcellato/matryca-plumber/issues/128) | Journal settle logs link registry merge failures | 2/10 |
+| [#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129) | Test: cognitive module LLM fault logs warning and continues (test-only) | 2/10 |
+
+**Verify (TUI slices #125–#127):**
+```bash
+uv run pytest tests/test_tui_dashboard.py -q
+make check
+```
+
+**Verify (#128):**
+```bash
+uv run pytest tests/test_maintenance_daemon.py -q
+make check
+```
+
+**Verify (#129):**
+```bash
+uv run pytest tests/test_plumber_modules.py -q
+make check
+```
+
+---
+
+## Tier C — Post-#100 backlog (#101–#105) — shipped
 
 | Issue | Summary | Difficulty |
 |-------|---------|------------|
@@ -384,6 +428,7 @@ Tagged `good first issue` + `help wanted` by `scripts/populate_gfi_backlog.sh`. 
 | Issue | Shipped in | Summary |
 |-------|------------|---------|
 | [#44](https://github.com/MarcoPorcellato/matryca-plumber/issues/44) | main (#100, @gaoflow) | Daemon shutdown logs final catalog/state save failures |
+| [#101](https://github.com/MarcoPorcellato/matryca-plumber/issues/101)–[#105](https://github.com/MarcoPorcellato/matryca-plumber/issues/105) | main (#108–#112, @gaoflow) | Tier C observability, OCC, flock, and shutdown tests |
 | [#45](https://github.com/MarcoPorcellato/matryca-plumber/issues/45) | v1.9.10 (#38) | Nanosecond OCC tests for link_verification |
 | [#67](https://github.com/MarcoPorcellato/matryca-plumber/issues/67) | v1.9.15 | Journal Phase-2 structural settle — no semantic LLM |
 | [#68](https://github.com/MarcoPorcellato/matryca-plumber/issues/68) | v1.9.14 | Entity consolidation skips journal/date wikilink pairs |

@@ -1,15 +1,17 @@
-# Matryca Plumber - AI Agent Context & Execution Guide (v1.10.6)
+# Matryca Plumber - AI Agent Context & Execution Guide (v1.11.0)
 
 > **SYSTEM DIRECTIVE FOR AI AGENTS:** You operate on the user's **local Logseq OG vault** via Matryca Plumber.  
 > **CRITICAL RULE:** DO NOT `git clone` this repository. DO NOT `pip install`. Run the **PyPI** release with **`uvx`** so you use a real, versioned wheel — not a guessed dev tree.
 
 Canonical copy (2026 standard path): `.well-known/llms.txt` (same content as this file).
 
+> **v1.11.0 headline:** Migrate from **Tana** with `matryca import tana --file export.json [--apply]` or MCP **`import_tana`** — streaming `ijson` parse, `logseq/config.edn` journals, `tana-id` idempotent OCC writes; **dry-run by default**. Spec: `docs/openspec/tana-import.md`.
+
 ---
 
 ## 0. Graph path (REQUIRED — no `--graph` flag)
 
-Matryca Plumber v1.10.6 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
+Matryca Plumber v1.11.0 does **not** accept `--graph` on the CLI. You **must** point at the vault root (folder containing `pages/` and usually `journals/`) with the environment variable **`LOGSEQ_GRAPH_PATH`**.
 
 **Set once per shell session (copy-paste):**
 ```bash
@@ -47,7 +49,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ---
 
-## 2. Core CLI (verified v1.10.6)
+## 2. Core CLI (verified v1.11.0)
 
 Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, **`import`**, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
@@ -180,7 +182,7 @@ Spec: `docs/openspec/agent-ax-robustness.md`
 
 ### 2.4 Security & Sandbox (v1.9.9+)
 
-Graph reads and writes stay inside **`LOGSEQ_GRAPH_PATH`**. v1.9.9 adds defense-in-depth beyond MCP title normalization; **v1.9.13 (Enterprise Resilience)** hardens parsing and RAG boundaries — TOCTOU-safe bounded JSON reads, `templates_subdir` traversal rejection, namespace-aware semantic cache keys, subtree heading fences (token-efficient excerpts), and string-aware LLM JSON recovery so braces inside string values do not truncate payloads. **v1.9.14** adds journal-aware Phase 2 clustering (daily notes no longer inflate `[unclustered]` or cluster-focus prompts) and skips entity-consolidation LLM turns for journal/date wikilink pairs. **v1.9.15** bypasses Phase-2 semantic indexing and dual embeddings for `journals/` pages (Phase-1 AST cache, link registry, and OCC `mtime` ledger still run). **v1.10.0** adds flock-protected master catalog I/O (merge-on-save), atomic link registry writes, and harvest catalog/page parity on OCC abort. **v1.10.3** tightens flock sidecar file mode to `0o600`, offloads Sovereign UI config saves from the HTTP event loop, and enforces strict Pydantic LLM/outline contracts (`extra="forbid"`, recursive OpenAI strict JSON schemas). **v1.10.5** raises **`logseq-matryca-parser`** to **1.3.1** (YAML frontmatter, case-insensitive graph routing, asset extraction, root public API exports). **v1.10.6** unifies page RMW and JSON sidecar flock via `platform_lock.py` (NB acquire + backoff + reentrancy, #40) and adds OCC-safe hub page compiles for Master Index / Graph Insights (#34).
+Graph reads and writes stay inside **`LOGSEQ_GRAPH_PATH`**. v1.9.9 adds defense-in-depth beyond MCP title normalization; **v1.9.13 (Enterprise Resilience)** hardens parsing and RAG boundaries — TOCTOU-safe bounded JSON reads, `templates_subdir` traversal rejection, namespace-aware semantic cache keys, subtree heading fences (token-efficient excerpts), and string-aware LLM JSON recovery so braces inside string values do not truncate payloads. **v1.9.14** adds journal-aware Phase 2 clustering (daily notes no longer inflate `[unclustered]` or cluster-focus prompts) and skips entity-consolidation LLM turns for journal/date wikilink pairs. **v1.9.15** bypasses Phase-2 semantic indexing and dual embeddings for `journals/` pages (Phase-1 AST cache, link registry, and OCC `mtime` ledger still run). **v1.10.0** adds flock-protected master catalog I/O (merge-on-save), atomic link registry writes, and harvest catalog/page parity on OCC abort. **v1.10.3** tightens flock sidecar file mode to `0o600`, offloads Sovereign UI config saves from the HTTP event loop, and enforces strict Pydantic LLM/outline contracts (`extra="forbid"`, recursive OpenAI strict JSON schemas). **v1.10.5** raises **`logseq-matryca-parser`** to **1.3.1** (YAML frontmatter, case-insensitive graph routing, asset extraction, root public API exports). **v1.11.0** unifies page RMW and JSON sidecar flock via `platform_lock.py` (NB acquire + backoff + reentrancy, #40) and adds OCC-safe hub page compiles for Master Index / Graph Insights (#34).
 
 | Control | Operator note |
 |---------|----------------|

@@ -1,7 +1,7 @@
 # Tana workspace JSON import (enterprise migration)
 
 **Version:** 1.0  
-**Status:** Implemented (Unreleased — ships with next semver)  
+**Status:** Implemented (v1.11.0)  
 **Roadmap:** External graph migration (Tana Outliner → Logseq OG)  
 **Orchestrator:** [`src/agent/tana_import.py`](../../src/agent/tana_import.py) — `run_tana_import()`  
 **Package:** [`src/agent/importers/tana/`](../../src/agent/importers/tana/)  
