@@ -1132,6 +1132,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "httpx2" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1143,17 +1144,13 @@ edge = [
     { name = "psutil" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "httpx2" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "edn-format", specifier = ">=0.7.5" },
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
     { name = "gitpython", specifier = ">=3.1.50" },
     { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
+    { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.4.0" },
     { name = "ijson", specifier = ">=3.5.0" },
     { name = "instructor", specifier = ">=1.7.0,<2.0.0" },
     { name = "logseq-matryca-parser", specifier = ">=1.4.0,<2.0.0" },
@@ -1176,9 +1173,6 @@ requires-dist = [
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
 provides-extras = ["edge", "dev"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "httpx2", specifier = ">=2.4.0" }]
 
 [[package]]
 name = "mcp"
