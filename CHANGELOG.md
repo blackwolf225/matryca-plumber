@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Journal settle (#128):** Link registry merge failures during journal structural settle now log exception details while preserving the existing non-blocking settle flow.
+- **CI / deps (#118):** Added `httpx2>=2.4.0` to `[project.optional-dependencies] dev` to silence `StarletteDeprecationWarning` from `fastapi/testclient` during tests (thanks to @blackwolf225 in #122).
 
 ### Changed
 
