@@ -127,10 +127,13 @@ def test_should_skip_entity_overlap_pair_for_journal_title(tmp_path: Path) -> No
     journals.mkdir(parents=True)
     (journals / "2026_06_05.md").write_text("- daily\n", encoding="utf-8")
     idx = build_alias_index(tmp_path)
-    assert should_skip_entity_overlap_pair(
-        tmp_path,
-        "Person",
-        "2026_06_05",
-        alias_index=idx,
-    ) is True
+    assert (
+        should_skip_entity_overlap_pair(
+            tmp_path,
+            "Person",
+            "2026_06_05",
+            alias_index=idx,
+        )
+        is True
+    )
     assert should_skip_entity_overlap_pair(tmp_path, "Person", "Machine Learning") is False
