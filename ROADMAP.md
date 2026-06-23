@@ -103,6 +103,7 @@ Not backlog — context for where we are today:
 | v1.10.6 | Unified `platform_lock` flock (#40); hub page OCC (#34); contributor backlog hygiene (725+ tests) |
 | v1.10.5 | `logseq-matryca-parser` 1.3.1 alignment; root public API imports; AST cache `discover_graph_files` (725+ tests) |
 | v1.10.4 | CI Actions toolchain (`checkout@v7`, `dependency-review-action@v5`, `setup-uv@v8.2.0`); Sovereign UI frontend npm bumps; Dependabot weekly groups (725+ tests) |
+| **Unreleased** | **Tana workspace JSON import** — streaming `ijson` loader, hybrid placement, depth-split, catalog + in-flight link resolution, `tana-id` idempotent writes, CLI `matryca import tana`, MCP `import_tana` (874+ tests) |
 
 ---
 

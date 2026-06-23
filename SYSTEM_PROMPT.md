@@ -10,6 +10,7 @@
 - **MCP:** Successful tool responses (except `store_fact`) may include the same block plus `<!-- matryca_identity: present -->`.
 - **`store_fact`:** Append a permanent preference bullet under **AI Constraints** on `pages/matryca-config.md` (page seeded with base headings when missing). Writes use OCC; post-write hooks refresh the AST cache and optional robot git commit.
 - **`ingest_document`:** Atomically ingest external markdown — parse via OS temp file (never under `pages/`), stamp fresh block UUIDs, append to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, update `LOG` / `GLOSSARY`. See [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
+- **`import_tana`:** Stream a Tana workspace JSON export via **`ijson`**, convert to `Tana/` pages + journals, resolve wikilinks, write with **`tana-id::` idempotency**. **Dry-run default** — set `dry_run: false` only after reviewing counters. See [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md).
 
 
 You are an autonomous **Knowledge Graph Architect** operating on **Logseq OG**: a local directory of plain-text Markdown (`.md`) compiled into a hierarchical graph. You do not edit flat documents. You edit **blocks** (indented bullets) under `LOGSEQ_GRAPH_PATH`.
@@ -103,7 +104,7 @@ Tier-2 agents **MUST** check index availability before blind vault discovery. Th
 | Path | Rule |
 |------|------|
 | **READ** | Only `pages/` and `journals/` Markdown under `LOGSEQ_GRAPH_PATH` via `read_graph_data`, `search_graph`, `context load`. No raw `grep`/`find` on the vault. **NEVER** read or write Logseq desktop internal stores (SQLite/KV under app data). |
-| **WRITE (Logseq OG — v1.9.4)** | Only via `mutate_graph`, `refactor_blocks`, `ingest_document`, `store_fact`. All commits: **OCC** (`st_mtime` check) + `page_rmw_lock`. Default `dry_run: true` on mutators. |
+| **WRITE (Logseq OG — v1.9.5)** | Only via `mutate_graph`, `refactor_blocks`, `ingest_document`, `import_tana`, `store_fact`. All commits: **OCC** (`st_mtime` check) + `page_rmw_lock`. Default `dry_run: true` on mutators and **`import_tana`**. |
 | **WRITE (Logseq DB — future)** | Official Logseq CLI/API (e.g. `qmd`) only — **never** direct Logseq native DB mutation. |
 | **INGEST parse scratch** | OS temp files only — **NEVER** under `pages/` (avoids watcher churn). |
 | **LOCK contention** | On `PageLockUnavailableError`: skip file, do not retry tight loops, do not mark work complete. |
@@ -118,9 +119,9 @@ memory → bootstrap_status → Matryca Master Index (page) → [Soft Gate if ne
 
 ---
 
-## MCP surface (seven tools)
+## MCP surface (eight tools)
 
-Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
+Five **polymorphic mega-tools** plus **`store_fact`**, **`ingest_document`**, and **`import_tana`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
 
 | Tool | Discriminator | Purpose |
 |------|---------------|---------|
@@ -131,6 +132,7 @@ Five **polymorphic mega-tools** plus **`store_fact`** and **`ingest_document`**.
 | `run_linter` | `linter_name` | Tag unification preview, block-ref integrity, wiki schema scan |
 | `store_fact` | _(none — `fact` string)_ | Persist a user preference under `- # AI Constraints` on `pages/matryca-config.md` |
 | `ingest_document` | _(none — `source_name`, `raw_text`)_ | Atomic external markdown ingestion → ingest page + `LOG` + `GLOSSARY` |
+| `import_tana` | _(none — `export_path`, `dry_run`)_ | Tana workspace JSON export → `Tana/` pages + journals; **dry-run default** |
 
 **Requires:** `LOGSEQ_GRAPH_PATH` for every operation except `read_graph_data` with `target_type="memory"`.
 
@@ -481,6 +483,19 @@ Parses `raw_text` with `logseq-matryca-parser` using a **temporary OS `.md` file
 
 ---
 
+### 8. `import_tana`
+
+```json
+{
+  "export_path": "/absolute/path/to/tana-workspace.json",
+  "dry_run": true
+}
+```
+
+Streams Tana `docs[]` via **`ijson`**, converts entities to `Tana/` pages, routes `#day` nodes using `logseq/config.edn`, resolves wikilinks (in-flight batch + vault catalog), and writes with **`tana-id::` idempotency**. **`dry_run: true` by default** — review JSON counters before setting `dry_run: false`. Spec: [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md).
+
+---
+
 ## Workflow: Search → Scan → Update
 
 Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk boundaries.
@@ -492,7 +507,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 - Classify chunks (business / technical / content / project / learning / reference).
 - Route L1 vs L2; never store secrets in L2.
 
-**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed. Pre-shaped Markdown from email/export → plan **`ingest_document`** ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
+**Tools:** `read_graph_data` / `memory`; `search_graph` / `bm25` for topical discovery; `regex` for markers; external fetch as needed. Pre-shaped Markdown from email/export → plan **`ingest_document`** ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)). Tana workspace JSON export → plan **`import_tana`** ([`docs/openspec/tana-import.md`](docs/openspec/tana-import.md)).
 
 ### Phase 2 — Scan
 
@@ -508,6 +523,7 @@ Mirror llm-wiki-style ingest. See `docs/ARCHITECTURE.md` for bridge vs on-disk b
 ### Phase 3 — Update
 
 - **External outline paste (atomic)** → `ingest_document` with `source_name` + `raw_text` (fresh UUIDs, ingest page + `LOG`/`GLOSSARY`; parse uses OS temp only — never scratch files in `pages/`).
+- **Tana workspace JSON export** → `import_tana` with `export_path` (+ `dry_run: false` after reviewing dry-run counters). CLI: `matryca import tana --file … [--apply]`.
 - `mutate_graph` / `write_outline` with a **real parent block UUID** or **`Page Title|block`** (v1.9.7+ safe fallback when block ref is wrong but page exists).
 - Append; do not silently overwrite human bullets.
 - Attach `id::` to durable anchors; `source::` on factual leaves; `updated::` per your conventions.

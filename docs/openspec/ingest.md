@@ -138,3 +138,5 @@ MVP: all body blocks land on **one** ingest page; tags do **not** fan out to sep
 | **Update** | **Preferred** for bulk external outline paste; use `mutate_graph` for surgical edits to existing blocks. |
 
 For multi-page routing by tag, namespace, or `page_type`, continue with planned `mutate_graph` / `write_outline` flows — Phase 2 ingestion is intentionally **single destination page** MVP.
+
+For **Tana workspace JSON exports** (flat `docs[]`, supertags, `#day` journals), use **`import_tana`** / **`matryca import tana`** instead — see [`tana-import.md`](tana-import.md).

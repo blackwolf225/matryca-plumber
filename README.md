@@ -5,7 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
-[![Tests](https://img.shields.io/badge/tests-725%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-874%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
 
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -148,6 +148,16 @@ matryca --json read subtree '{"page":"My Project","block_uuid":"…","heading":"
 
 Full spec: [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md). Background link checks: [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md).
 
+**Tana migration (dry-run default):**
+
+```bash
+export LOGSEQ_GRAPH_PATH=/path/to/your/graph
+matryca import tana --file ~/Downloads/workspace.json          # JSON report on stdout; stderr warns dry-run
+matryca import tana --file ~/Downloads/workspace.json --apply  # commit to disk
+```
+
+Spec: [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md).
+
 ---
 
 ## 🧠 What does it actually do?
@@ -158,9 +168,10 @@ Unlike generic scripts, Matryca Plumber is a continuous background engine. When 
 - **Dangling Link Healing**: Finds broken `[[WikiLinks]]` and creates isolated seed pages for them.
 - **Entity Consolidation**: Suggests `alias::` properties for overlapping concepts.
 - **Auto-Split Dense Blocks**: Extracts oversized subtrees into new pages to keep your graph fast and readable.
-- **Claude Desktop Integration (FastMCP)**: Seven MCP tools (five mega-tools + **`store_fact`** + **`ingest_document`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
+- **Claude Desktop Integration (FastMCP)**: Eight MCP tools (five mega-tools + **`store_fact`** + **`ingest_document`** + **`import_tana`**) query and mutate your graph headlessly. Set `MATRYCA_MCP_ENABLED=true` in `.env` only on machines where you trust the MCP host (stdio MCP is off by default; the host has full graph read/write with no separate authentication).
 - **Telos & Identity (in-graph persona)**: Optional `pages/matryca___config.md` or `pages/matryca-config.md` with `- # Telos` and `- # AI Constraints` headings — injected into daemon LLM prompts and MCP output; **`store_fact`** appends durable preferences under Constraints ([`docs/openspec/identity-config.md`](docs/openspec/identity-config.md)).
 - **Atomic document ingestion**: **`ingest_document`** parses external Markdown via an OS temp file (never under `pages/`), stamps fresh `id::` UUIDs, and appends to daily `Ingest/YYYY-MM-DD` or `MATRYCA_INGEST_PAGE`, with optional `LOG` / `GLOSSARY` ledgers ([`docs/openspec/ingest.md`](docs/openspec/ingest.md)).
+- **Tana workspace import**: **`import_tana`** / **`matryca import tana --file … [--apply]`** streams Tana JSON exports (`ijson`), maps entities to `Tana/` pages, routes `#day` nodes via `logseq/config.edn`, resolves wikilinks against the vault catalog, and writes with `tana-id` idempotency — **dry-run by default** ([`docs/openspec/tana-import.md`](docs/openspec/tana-import.md)).
 - **Structural link verification (v1.9)**: Passive harvest of URLs and `assets/` paths into `.matryca_link_registry.json`; async HTTP HEAD + filesystem checks; OCC-safe **`dead-link::`** / **`missing-asset::`** block properties ([`docs/openspec/link-verification.md`](docs/openspec/link-verification.md)).
 - **Agent-centric DX (v1.9)**: Global CLI **`--json`**, **`matryca context load`**, **`read subtree`**, and **Journey Log** — one cumulative `- 🤖 Matryca Activity` bullet in today's journal (daily totals, updated in place) ([`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md)).
 - **Agent onboarding (v1.9.2+)**: Machine-readable [`llms.txt`](llms.txt) with PyPI/`uvx` execution contract and anti-patterns ([`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)).
@@ -313,7 +324,7 @@ On first start (daemon, CLI, MCP, or UI), Matryca Plumber **automatically create
 - **`<vault>/.matryca_semantic_cache/`**, **`templates/`**, and **`matryca-wiki.yml`** (from `matryca-wiki.example.yml` when absent)
 - **In-memory graph index** at startup (AST cache); **identity** loaded when a Telos/Constraints config page exists
 
-The **identity config page** is not auto-created (use Logseq or `store_fact`). **Ingest / LOG / GLOSSARY** pages are created on first `ingest_document` call. Optional `MATRYCA_INGEST_PAGE` pins a fixed inbox (e.g. `AI_Inbox`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) and [`docs/openspec/ingest.md`](docs/openspec/ingest.md).
+The **identity config page** is not auto-created (use Logseq or `store_fact`). **Ingest / LOG / GLOSSARY** pages are created on first `ingest_document` call. **Tana import** writes under `Tana/` (and `Tana/Import Log` ledger on `--apply`). Optional `MATRYCA_INGEST_PAGE` pins a fixed inbox (e.g. `AI_Inbox`). See [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md), [`docs/openspec/ingest.md`](docs/openspec/ingest.md), and [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md).
 
 See [`docs/openspec/runtime-bootstrap.md`](docs/openspec/runtime-bootstrap.md) for rationale (L1 vs L2, idempotency, and what is intentionally *not* auto-created).
 
@@ -392,6 +403,7 @@ make perf
 | [`docs/openspec/l1-l2-routing.md`](docs/openspec/l1-l2-routing.md) | L1 memory vs L2 graph routing for agents. |
 | [`docs/openspec/identity-config.md`](docs/openspec/identity-config.md) | Telos / AI Constraints and `store_fact`. |
 | [`docs/openspec/ingest.md`](docs/openspec/ingest.md) | `ingest_document` atomic ingestion pipeline. |
+| [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md) | Tana JSON import (`import_tana`, `matryca import tana`, idempotent dry-run). |
 | [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) | v1.9 URL/asset hygiene, sidecar registry, v1.9.9 sandbox reads. |
 | [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) | v1.9.9 path sandbox, bounded JSON, CI `sandbox-read-check`. |
 | [`docs/openspec/agent-dx.md`](docs/openspec/agent-dx.md) | v1.9 CLI JSON, context macro, Journey Log. |

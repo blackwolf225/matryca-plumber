@@ -49,7 +49,7 @@ uvx matryca-plumber --json read page "My Project"
 
 ## 2. Core CLI (verified v1.10.6)
 
-Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, `service`, `plumber`.  
+Subcommands: `read`, `search`, `mutate`, `refactor`, `lint`, `context`, **`import`**, `service`, `plumber`.  
 Shorthand daemon/UI verbs (routed to `plumber`): `start`, `stop`, `status`, `ui`, `audit`, `cluster`.
 
 ### 2.0 Plumber commands — UI vs daemon (do not confuse)
@@ -252,6 +252,13 @@ uvx matryca-plumber --json mutate write_outline \
   --payload '{"text":"New bullet","children":[]}'
 ```
 
+**G. Tana workspace JSON import (dry-run default — add `--apply` to commit)**
+```bash
+export LOGSEQ_GRAPH_PATH="$HOME/Logseq/graphs/MyGraph"
+uvx matryca-plumber --json import tana --file "$HOME/Downloads/tana-workspace.json"
+uvx matryca-plumber import tana --file "$HOME/Downloads/tana-workspace.json" --apply
+```
+
 For **today's journal page** as `read page`, use the **exact Logseq page title** shown in the app (locale-dependent), not a file path like `journals/2026_06_05.md`.
 
 ---
@@ -277,6 +284,7 @@ For **today's journal page** as `read page`, use the **exact Logseq page title**
 * Agent DX spec (CLI JSON, Journey Log — one cumulative `- 🤖 Matryca Activity` bullet per day in the daemon journal): `docs/openspec/agent-dx.md`
 * Security (MCP gate, graph sandbox, bounded JSON, CLI redaction): `SECURITY.md` · `docs/openspec/security-sandbox.md`
 * Hermes Agent MCP (lazy handshake, timeouts): `docs/integrations/hermes-agent.md`
+* Tana workspace JSON import (`import_tana`, dry-run default): `docs/openspec/tana-import.md`
 
 ### Contributing to this repository (not the user vault)
 
@@ -322,4 +330,4 @@ uvx matryca-plumber --json read bootstrap_status
 uvx matryca-plumber --json read page "Matryca Master Index"
 ```
 
-**Safe-Sync (summary):** READ only via Matryca tools on `pages/` + `journals/` under `LOGSEQ_GRAPH_PATH`. **NEVER** open Logseq's internal app database. WRITE only via `mutate_graph`, `refactor_blocks`, `ingest_document`, `store_fact` (atomic `.md` + OCC). Full contract: `SYSTEM_PROMPT.md`.
+**Safe-Sync (summary):** READ only via Matryca tools on `pages/` + `journals/` under `LOGSEQ_GRAPH_PATH`. **NEVER** open Logseq's internal app database. WRITE only via `mutate_graph`, `refactor_blocks`, `ingest_document`, `import_tana`, `store_fact` (atomic `.md` + OCC). **`import_tana` dry-run default.** Full contract: `SYSTEM_PROMPT.md`.

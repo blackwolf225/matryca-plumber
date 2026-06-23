@@ -129,6 +129,17 @@ sequenceDiagram
   Note over Agent,Log: Secret scan rejects credentials in payload
 ```
 
+#### Tana workspace import (CLI + MCP)
+
+| Component | Module | Role |
+|-----------|--------|------|
+| Orchestrator | `src/agent/tana_import.py` | `run_tana_import()` — load → graph → convert → link → write |
+| Importer package | `src/agent/importers/tana/` | Streaming parse, hybrid placement, catalog link rewrite, idempotent OCC writes |
+| CLI | `src/cli/__init__.py` | `matryca import tana --file … [--apply]` — dry-run default; JSON stdout |
+| MCP surface | `src/agent/mcp_server.py` | `import_tana(export_path, dry_run=True)` |
+
+Parse uses **`ijson`** on the export file only — never materializes the full JSON DOM. Writes stamp fresh `id::` UUIDs and `tana-id::` provenance; re-import skips nodes whose `tana-id` already exists in the vault. Spec: [`docs/openspec/tana-import.md`](openspec/tana-import.md).
+
 #### Dual embedding (optional MCP semantic search)
 
 | Component | Module | Role |
@@ -191,7 +202,7 @@ The UI never becomes a second source of truth: it reads daemon checkpoints and l
 
 **Entry:** `matryca-plumber` with **no** CLI-shaped argv → `src/main.py` (lazy-imported from `plumber_entry.py`)
 
-`register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** (identity) and **`ingest_document`** (atomic external markdown → ingest page + `LOG`/`GLOSSARY`, parse via OS temp files only). **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
+`register_mcp_tools` exposes five polymorphic mega-tools (`read_graph_data`, `search_graph`, `mutate_graph`, `refactor_blocks`, `run_linter`) plus **`store_fact`** (identity), **`ingest_document`** (atomic external markdown → ingest page + `LOG`/`GLOSSARY`, parse via OS temp files only), and **`import_tana`** (Tana workspace JSON export → `Tana/` pages + journals, dry-run default). **`guard_mcp_tool`** maps domain errors to LLM-safe strings and appends Telos/Constraints context to successful responses (except `store_fact`); **`mcp_telemetry`** bridges Loguru INFO+ lines to `Context.info` during tool calls.
 
 **Lazy AST bootstrap (v1.9.6+):** MCP `app_lifespan` and the **Sovereign UI** FastAPI lifespan call `prepare_matryca_runtime(..., eager_graph=False)` so stdio handshakes and `:8500` bind in seconds on large vaults. **v1.9.11** extends lazy bootstrap to UI `POST /api/config`, graph-path save, L1 provision, and `POST /api/daemon/start` (spawn only — the child `plumber start` process still loads the AST eagerly). The **maintenance daemon** and agent **`matryca read` / `search` / …** paths remain **eager** (`eager_graph=True`). Deferred surfaces load the AST on the first call to `get_graph_ast_cache().get_graph()` (e.g. MCP graph tools, UI `/api/graph-analytics`); stderr logs `AST cache bootstrap started|complete` with `markdown_files`, `duration_s`, `pages_indexed`. See [`integrations/hermes-agent.md`](integrations/hermes-agent.md).
 
@@ -580,7 +591,7 @@ Every Matryca Plumber surface calls **`prepare_matryca_runtime()`** in `src/util
 | Wiki orchestration | `<vault>/matryca-wiki.yml` | Seeded from `matryca-wiki.example.yml` when missing |
 | AST + identity RAM | `get_graph_ast_cache`, `get_identity_store` | **Eager:** daemon + agent CLI. **Lazy:** MCP + Sovereign UI — on first `get_graph()` (identity loads with first graph access) |
 
-**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), ingest / `LOG` / `GLOSSARY` pages (first `ingest_document`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
+**Not** created at bootstrap: repo `.env`, `pages/` / `journals/` (vault must already be valid), identity config page (operator-created or seeded by `store_fact`), ingest / `LOG` / `GLOSSARY` pages (first `ingest_document`), **`Tana/` import tree** (first `import_tana --apply`), daemon/X-Ray JSON ledgers, PID/lock files — those follow first-use or first-checkpoint semantics.
 
 Full behavioral spec: [`docs/openspec/runtime-bootstrap.md`](openspec/runtime-bootstrap.md). Identity page format: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
@@ -807,10 +818,10 @@ flowchart TB
     BootCLI[read bootstrap_status]
   end
 
-  subgraph mcp [MCP seven tools]
+  subgraph mcp [MCP eight tools]
     Read[read_graph_data]
     Search[search_graph]
-    Mutate[mutate_graph plus ingest store_fact]
+    Mutate[mutate_graph plus ingest import_tana store_fact]
   end
 
   subgraph shared [Shared headless plane]
@@ -996,6 +1007,8 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/graph/markdown_blocks.py` | `atomic_write_bytes*`, OCC helpers |
 | `src/agent/mcp_server.py` | `@mcp.tool()` handlers |
 | `src/agent/ingestion.py` | `ingest_document` / `process_ingestion` |
+| `src/agent/tana_import.py` | `import_tana` / `run_tana_import` |
+| `src/agent/importers/tana/` | Tana JSON streaming import pipeline |
 | `src/agent/memory_tools.py` | `store_fact` |
 | `src/graph/link_verification.py` | Link rot registry, async verify, hygiene properties |
 | `src/agent/journey_log.py` | Journey Log ledger + upsert of cumulative daily activity bullet |
@@ -1033,7 +1046,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.10.6** | Concurrency integrity | Unified `platform_lock` flock for page + JSON sidecars ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)); hub page OCC via `write_generated_hub_page` ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)); contributor backlog hygiene |
 | **1.10.5** | Parser 1.3.1 alignment | `logseq-matryca-parser>=1.3.1`; root public API imports; AST cache `discover_graph_files`; graph parity 1.2.x inherited |
 | **1.10.4** | CI/deps maintenance | GitHub Actions toolchain refresh; Sovereign UI frontend npm bumps; Dependabot weekly groups |
-| **Unreleased** | Master RFC Phases 1–3 | Identity + ingest + optional dual embedding (`docs/openspec/identity-config.md`, `ingest.md`, `dual-embedding.md`) |
+| **Unreleased** | Master RFC Phases 1–3 + Tana import | Identity + ingest + optional dual embedding + Tana workspace JSON pipeline (`identity-config.md`, `ingest.md`, `dual-embedding.md`, `tana-import.md`) |
 
 ---
 
@@ -1046,6 +1059,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 - [`openspec/llm-performance.md`](openspec/llm-performance.md) — LLM performance engineering contract
 - [`openspec/identity-config.md`](openspec/identity-config.md) — Telos / AI Constraints and `store_fact`
 - [`openspec/ingest.md`](openspec/ingest.md) — atomic `ingest_document` pipeline
+- [`openspec/tana-import.md`](openspec/tana-import.md) — Tana workspace JSON import (`import_tana`, CLI dry-run)
 - [`openspec/link-verification.md`](openspec/link-verification.md) — URL/asset hygiene (v1.9)
 - [`openspec/security-sandbox.md`](openspec/security-sandbox.md) — path sandbox, bounded JSON, CI read gate (v1.9.9)
 - [`openspec/agent-dx.md`](openspec/agent-dx.md) — CLI JSON, context macro, Journey Log (v1.9)

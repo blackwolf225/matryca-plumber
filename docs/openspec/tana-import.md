@@ -1,41 +1,56 @@
 # Tana workspace JSON import (enterprise migration)
 
-**Version:** 0.1 (draft)  
-**Status:** Specified — implementation pending  
+**Version:** 1.0  
+**Status:** Implemented (Unreleased — ships with next semver)  
 **Roadmap:** External graph migration (Tana Outliner → Logseq OG)  
-**Implementation (planned):** `src/agent/tana_import.py`, `src/agent/importers/tana/`, `src/graph/logseq_config.py`  
-**Architecture plan:** `.cursor/plans/tana_json_importer_5a941ef5.plan.md`  
-**Related:** [`ingest.md`](ingest.md) (write pipeline + OCC), [`runtime-bootstrap.md`](runtime-bootstrap.md), [`lint.md`](lint.md), [`l1-l2-routing.md`](l1-l2-routing.md)
+**Orchestrator:** [`src/agent/tana_import.py`](../../src/agent/tana_import.py) — `run_tana_import()`  
+**Package:** [`src/agent/importers/tana/`](../../src/agent/importers/tana/)  
+**Related:** [`ingest.md`](ingest.md) (OCC write pipeline), [`runtime-bootstrap.md`](runtime-bootstrap.md), [`agent-dx.md`](agent-dx.md) (CLI JSON)
 
-Matryca Plumber will **import a native Tana workspace JSON export** (flat `docs[]` graph dump) into an **active Logseq OG vault** (`LOGSEQ_GRAPH_PATH`). The importer is a **local, offline parser** — not a Tana API/MCP client. Bulk migration uses the file produced by Tana **Export workspace as JSON** ([Tana docs](https://outliner.tana.inc/docs/workspaces)); this is **not** the Tana Intermediate Format (TIF), which is import-only into Tana.
+Matryca Plumber **imports a native Tana workspace JSON export** (flat `docs[]` graph dump) into an **active Logseq OG vault** (`LOGSEQ_GRAPH_PATH`). The importer is a **local, offline parser** — not a Tana API/MCP client. Bulk migration uses the file produced by Tana **Export workspace as JSON** ([Tana docs](https://outliner.tana.inc/docs/workspaces)); this is **not** the Tana Intermediate Format (TIF), which is import-only into Tana.
 
-This complements **`ingest_document`**: ingestion accepts outline-shaped Markdown; Tana import accepts the proprietary flat JSON dump and performs schema translation, journal routing, depth splitting, and provenance stamping before writing via the same OCC / page-lock / post-write pipeline.
+This complements **`ingest_document`**: ingestion accepts outline-shaped Markdown; Tana import accepts the proprietary flat JSON dump and performs schema translation, journal routing, depth splitting, link resolution, and provenance stamping before writing via the same OCC / page-lock / post-write pipeline.
 
 > **Terminology:** Tana **node IDs** are stored as `tana-id::` properties. Logseq **`id::` UUIDs are always freshly generated** on import — never copied from Tana.
 
 ---
 
-## CLI / MCP surface (planned)
+## CLI / MCP surface
 
 ### CLI
 
 ```text
-matryca import tana --file <export.json> [--apply] [--depth-limit N]
+matryca import tana --file <export.json> [--apply]
 ```
 
 | Flag / arg | Description |
 |------------|-------------|
 | `--file` | Path to Tana workspace JSON export (required). |
 | `--apply` | Perform writes (default: **dry-run** only). |
-| `--depth-limit` | Override max outliner depth before page-split (default from `MATRYCA_TANA_DEPTH_LIMIT`, **8**). |
 
-### MCP (v1.1)
+**UX:** Without `--apply`, the CLI prints a visible warning on **stderr**:
 
-**Signature (planned):** `import_tana(export_path: str, dry_run: bool = True, depth_limit: int | None = None) -> dict`
+```text
+DRY-RUN MODE: No files written to disk. Use --apply to commit.
+```
 
-**Description for hosts:** *Import a Tana workspace JSON export into the Logseq graph with streaming parse, journal format compliance, depth splitting, and tana provenance metadata.*
+**Stdout:** JSON report (`TanaImportResult.to_dict()`) — pipe-friendly:
 
-**Response fields (typical):** `ok`, `dry_run`, `pages_created`, `journals_touched`, `depth_splits`, `links_matched`, `links_new`, `skipped_duplicates`, `peak_memory_mb`, `journal_format`, `files_touched`, `error`.
+```bash
+export LOGSEQ_GRAPH_PATH=/path/to/vault
+matryca import tana --file ~/Downloads/workspace.json | jq '.write'
+matryca import tana --file ~/Downloads/workspace.json --apply | jq '.write.pages_created'
+```
+
+### MCP
+
+**Signature:** `import_tana(export_path: str, dry_run: bool = True) -> dict`
+
+**Description for hosts:** *Import a Tana workspace JSON export into the Logseq graph with streaming parse, journal format compliance, depth splitting, in-flight + catalog wikilink resolution, and `tana-*` provenance metadata.*
+
+**Default:** `dry_run=True` — safe for autonomous agents; set `dry_run=False` only after operator review.
+
+**Response fields (typical):** `ok`, `export_path`, `apply`, `pages_planned`, `journals_planned`, `depth_splits`, `link_stats` (`in_flight_resolved`, `catalog_title_resolved`, `catalog_alias_resolved`, `unchanged`), `write` (`pages_created`, `pages_appended`, `journals_touched`, `skipped_duplicates`, `blocks_written`, `occ_conflicts`, …), `warnings`, `error`.
 
 ---
 
@@ -56,21 +71,21 @@ Reference reverse-engineering (algorithms only; implement fresh in Plumber):
 
 ---
 
-## Pipeline (`process_tana_import`)
+## Pipeline (`run_tana_import`)
 
-| Phase | Name | Behavior |
-|-------|------|----------|
-| 1 | **Stream parse** | `ijson` over `docs[]`; build `id → node` and `childId → parentId` indexes |
-| 2a | **Journal bootstrap** | Read `logseq/config.edn`; resolve `:journal/page-title-format` |
-| 2b | **Convert** | Hybrid placement + field/tag mapping + depth limit page-split |
-| 3 | **Link** | `MasterCatalog.resolve_page_title` / `resolve_alias` for existing vault pages |
-| 4 | **Write** | OCC + `page_rmw_lock` + `emit_post_write_commit`; dry-run skips disk |
+| Phase | Module | Behavior |
+|-------|--------|----------|
+| 1 | `load.py` + `graph.py` | `ijson` stream over `docs[]`; build indexes; entity heuristics |
+| 2a | `logseq_config.py` + `journal.py` | Read `logseq/config.edn`; resolve `:journal/page-title-format` |
+| 2b | `convert.py` | Hybrid placement + field/tag mapping + depth limit page-split |
+| 3 | `link.py` | In-flight page map + `MasterCatalog.resolve_page_title` / `resolve_alias` |
+| 4 | `write.py` | `tana-id` pre-scan gate; OCC + `page_rmw_lock`; dry-run skips disk |
 
 ---
 
 ## Architectural contract 1 — `ijson` streaming (anti-OOM)
 
-**Requirement:** Phase 1 **must** parse the export with **`ijson`** in streaming mode. **`json.load()` and `ujson.load()` are forbidden** on the Tana export file in production code paths (including tests — use the same streaming loader for parity).
+**Requirement:** Phase 1 **must** parse the export with **`ijson`** in streaming mode. **`json.load()` and `ujson.load()` are forbidden** on the Tana export file in production code paths (tests monkeypatch-block `json.load()` on the loader path for parity).
 
 **Rationale:** Tana workspace dumps can exceed hundreds of MB. Loading the full JSON DOM risks fatal OOM on 16 GB laptops.
 
@@ -80,8 +95,6 @@ Reference reverse-engineering (algorithms only; implement fresh in Plumber):
 2. Detect `storeData` wrapper via stream prefix; select ijson path `storeData.docs.item` or `docs.item`.
 3. For each `docs[]` element: deserialize **one** node, validate, insert into indexes, discard raw dict.
 4. Memory budget: **O(number of nodes)** for structural indexes, **not** O(file size).
-
-**Dry-run report:** include `peak_memory_mb` when measurable.
 
 **Dependency:** `ijson` in [`pyproject.toml`](../../pyproject.toml).
 
@@ -95,31 +108,26 @@ Reference reverse-engineering (algorithms only; implement fresh in Plumber):
 
 **Implementation rules:**
 
-1. `format_journal_title(iso_date: date) -> str` — semantic title Logseq expects.
-2. `journal_file_path(iso_date: date) -> Path` — on-disk path under `journals/`.
+1. `format_edn_date_pattern()` — Java/Clojure tokens → Python strftime.
+2. `resolve_journal_path()` — on-disk path under `journals/`.
 3. Inline journal links `[[…]]` use the **same** formatted title as the journal file.
-4. **Fallback** when `config.edn` is missing or malformed: `yyyy-MM-dd` (Logseq default) + **warning** in dry-run/apply report — do not abort the full import.
+4. **Fallback** when `config.edn` is missing or malformed: `yyyy-MM-dd` (Logseq default) + **warning** in report — do not abort the full import.
 5. Path reads must use graph sandbox helpers (no traversal outside `LOGSEQ_GRAPH_PATH`).
 
-**Module (planned):** `src/graph/logseq_config.py`, `src/agent/importers/tana/journal.py`.
-
-**Dependency:** lightweight EDN parser (e.g. `edn_format`) if not already present.
+**Modules:** [`src/graph/logseq_config.py`](../../src/graph/logseq_config.py), [`src/agent/importers/tana/journal.py`](../../src/agent/importers/tana/journal.py).
 
 ---
 
 ## Architectural contract 3 — Depth limit + page-split (anti-freeze UI)
 
-**Requirement:** During AST conversion, enforce a **depth limit** (default **8**, env `MATRYCA_TANA_DEPTH_LIMIT`, CLI `--depth-limit`). When a branch would exceed the limit:
+**Requirement:** During AST conversion, enforce a **depth limit** (default **8**, env `MATRYCA_TANA_DEPTH_LIMIT`). When a branch would exceed the limit:
 
-1. Create (or reuse) a **dedicated page** for the node at the limit (title = node name; namespace `Tana/` when needed).
-2. Replace the deep subtree in the parent with a page link: `[[Child Page Title]]` (after catalog resolution in Phase 3).
-3. Move overflow content **into** the child page as root blocks (depth resets to 0).
-4. Stamp **`tana-depth-split:: true`** on the bullet containing the page link.
-5. Apply recursively if the split page itself receives deep branches.
+1. Create a dedicated page `Tana/Split/{Label}` for the overflow subtree.
+2. Replace the deep subtree in the parent with `[[Tana/Split/{Label}]]` (after link resolution in Phase 3).
+3. Stamp **`tana-depth-split:: true`** on the split page frontmatter and on the link bullet.
+4. Reset depth to 0 inside the split page; apply recursively.
 
-**Rationale:** Tana allows unbounded indentation; Logseq Markdown outliner performance degrades severely beyond ~10 nesting levels.
-
-**Dry-run report:** include `depth_splits` count.
+**Dry-run report:** `depth_splits` count on convert result.
 
 ---
 
@@ -133,7 +141,7 @@ Reference reverse-engineering (algorithms only; implement fresh in Plumber):
 | Supertag application | `#tag` inline and/or `type:: TagName` property |
 | Field tuple | `field-name:: value` under owning bullet (keys: lowercase, `_` → `-`) |
 | Done / checkbox | `TODO` / `DONE` prefix on block line |
-| Tana references | `[[Title]]` after catalog resolution |
+| Tana references | `[[Title]]` after in-flight + catalog resolution |
 
 **Excluded v1:** `TRASH`, pure `SYS_*` structural nodes, mega-tuples (>50 children), Tana queries/commands/search nodes (report as `non_portable`).
 
@@ -150,24 +158,22 @@ Every imported page and block carries provenance. **Tana node IDs never become L
 | `tana-export-file::` | Page (frontmatter) | Source filename (basename only) |
 | `tana-created::` | Block/page | Tana `props.created` when present (Unix ms) |
 | `tana-modified::` | Block/page | Tana `modifiedTs` when present |
-| `tana-depth-split::` | Block | `true` when this bullet is a page-split link |
+| `tana-depth-split::` | Block / page | `true` when depth-split page or link stub |
 | `made-by::` | New pages | `matryca plumber v…` via `stamp_plumber_authored_page` |
 | `id::` | Every block | **Fresh UUID v4** — same policy as [`ingest.md`](ingest.md) |
 
-**Idempotency (v1):** before write, scan for existing `tana-id:: <id>` in graph; if found → **skip** and report (no `--merge` in v1).
+**Idempotency (v1):** before write, scan vault for existing `tana-id::` values; if found → **skip** that page or subtree and increment `skipped_duplicates` (no `--merge` in v1).
 
 ---
 
 ## Linking to existing vault content
 
-For each proposed `[[Title]]`:
+For each proposed `[[Title]]` (block text and string property values):
 
-1. `MasterCatalog.resolve_page_title(title)` — case-insensitive page match.
-2. Else `MasterCatalog.resolve_alias(title)` — `alias::` frontmatter match.
-3. **Match** → emit `[[Canonical Title]]`; do not create duplicate page.
-4. **No match** → `[[Proposed Title]]`; create page under `Tana/` namespace when needed.
-
-In-export registry: `tana_node_id → logseq_page_title` resolves cross-references within the same dump before write ordering.
+1. **In-flight map** — titles from pages/journals created in this same import batch (label → `Tana/…` canonical title).
+2. `MasterCatalog.resolve_page_title(title)` — case-insensitive page match.
+3. Else `MasterCatalog.resolve_alias(title)` — `alias::` frontmatter match.
+4. **No match** → leave `[[Proposed Title]]` (orphan page — expected v1 behavior).
 
 ---
 
@@ -175,18 +181,16 @@ In-export registry: `tana_node_id → logseq_page_title` resolves cross-referenc
 
 | Step | Target |
 |------|--------|
-| 1 | Entity pages (including depth-split pages) without external deps |
+| 1 | Entity pages (including depth-split pages) |
 | 2 | Journal files (append, user format) |
-| 3 | `Tana/Import Log` ledger + global `LOG` |
-| 4 | Optional `GLOSSARY` for unmatched new terms |
+| 3 | `Tana/Import Log` ledger (apply only) |
 
-Each write: `page_rmw_lock` → `OCCSnapshot.capture` → `atomic_write_bytes_if_unchanged` → `emit_post_write_commit`.
+Each write: `page_rmw_lock` → `OCCSnapshot.capture` → `atomic_write_bytes_if_unchanged` → post-write hooks.
 
 | Concern | Handling |
 |---------|----------|
-| OCC conflict | Abort file write; report path; same contract as `ingest_document` |
+| OCC conflict | Abort file write; increment `occ_conflicts`; log warning |
 | Secret scan | `secret_violations_in_text` before any write |
-| Bounds | `outline_bounds_violations` on generated outline trees |
 | Git | Optional `robot(matryca): tana import …` when `MATRYCA_GIT_ROBOT_COMMIT` |
 | Watchdog | No scratch files under graph root during parse |
 
@@ -201,38 +205,38 @@ Each write: `page_rmw_lock` → `OCCSnapshot.capture` → `atomic_write_bytes_if
 | `MATRYCA_TANA_DEPTH_LIMIT` | Max nesting depth before page-split (default `8`) |
 | `MATRYCA_GIT_ROBOT_COMMIT` | Post-write surgical commits |
 
-Document in [`.env.example`](../../.env.example) when implementation lands.
+Documented in [`.env.example`](../../.env.example).
 
 ---
 
-## Module map (planned)
+## Module map
 
 | Module | Responsibility |
 |--------|----------------|
 | `src/agent/importers/tana/load.py` | `ijson` streaming loader — **no** `json.load()` |
-| `src/agent/importers/tana/graph.py` | Parent map, entity detection |
+| `src/agent/importers/tana/graph.py` | Parent map, entity detection, Library/STASH |
 | `src/agent/importers/tana/tags.py` | `tagDef`, `metaNode`, tuple → supertags + fields |
-| `src/agent/importers/tana/html.py` | `props.name` HTML → text + inline refs |
+| `src/agent/importers/tana/html.py` | `props.name` HTML → plain keys + ref values |
 | `src/agent/importers/tana/journal.py` | ISO date → journal title/path |
-| `src/agent/importers/tana/depth.py` | Depth limit + page-split |
-| `src/agent/importers/tana/convert.py` | Tana subgraph → `OutlineNode` trees |
-| `src/agent/importers/tana/link.py` | Catalog resolution + in-export ID map |
+| `src/agent/importers/tana/convert.py` | Hybrid placement → `OutlineNode` trees + depth-split |
+| `src/agent/importers/tana/link.py` | In-flight map + catalog wikilink rewrite |
 | `src/agent/importers/tana/provenance.py` | `tana-*` property builders |
-| `src/graph/logseq_config.py` | `config.edn` read/cache, journal format |
-| `src/agent/tana_import.py` | `process_tana_import`, CLI/MCP dispatch |
+| `src/agent/importers/tana/write.py` | Idempotent OCC writes + `Tana/Import Log` |
+| `src/graph/logseq_config.py` | `config.edn` read, journal format |
+| `src/agent/tana_import.py` | `run_tana_import`, `dispatch_tana_import` |
 | `src/cli/__init__.py` | `import tana` subcommand |
-| `src/agent/mcp_server.py` | `import_tana` tool (v1.1) |
+| `src/agent/mcp_server.py` | `import_tana` MCP tool |
 
-**Tests (planned):** `tests/test_tana_import.py`, `tests/fixtures/tana/` (minimal workspace, custom `config.edn`, deep nesting, streaming large file).
+**Tests:** `tests/test_tana_load.py`, `test_tana_graph.py`, `test_tana_journal.py`, `test_tana_tags.py`, `test_tana_convert.py`, `test_tana_link.py`, `test_tana_write.py`, `test_tana_e2e.py` · fixtures under `tests/fixtures/tana/`.
 
 ---
 
 ## Operator guidance
 
 1. **Test vault first** — clone the production graph before `--apply`.
-2. **Dry-run default** — review `pages_created`, `journals_touched`, `depth_splits`, `journal_format` in JSON report.
-3. **Re-import** — skipped nodes with matching `tana-id::`; use `--force` only when explicitly implemented.
-4. **Not supported v1** — Tana Markdown zip, media download, Tana queries/commands, Logseq DB graph backend, semantic/embedding link merge.
+2. **Dry-run default** — review JSON report: `write.pages_created`, `journals_touched`, `depth_splits`, `link_stats`, `skipped_duplicates`.
+3. **Re-import** — nodes with matching `tana-id::` are skipped (idempotent v1).
+4. **Not supported v1** — Tana Markdown zip, media download, Tana queries/commands, Logseq DB graph backend, `--merge`, CLI `--depth-limit` override (use `MATRYCA_TANA_DEPTH_LIMIT`).
 
 ---
 
@@ -243,5 +247,6 @@ Document in [`.env.example`](../../.env.example) when implementation lands.
 | OOM on large dumps | Mandatory `ijson` streaming |
 | Wrong journal filenames | `config.edn` journal format before routing |
 | Logseq UI freeze | Depth limit + page-split at 8 |
-| Undocumented Tana JSON schema | Permissive Pydantic `props`; fixture from anonymized real export |
-| Re-import duplication | `tana-id::` dedup skip |
+| Undocumented Tana JSON schema | Permissive Pydantic `props`; fixture from anonymized export |
+| Re-import duplication | `tana-id::` pre-scan skip |
+| Cross-export orphan links | In-flight map resolves entities within same batch |

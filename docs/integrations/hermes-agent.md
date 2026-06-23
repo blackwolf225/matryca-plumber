@@ -128,6 +128,7 @@ After successful connect, Hermes registered:
 | `run_linter` | Cognitive lint modules |
 | `store_fact` | Append durable constraints / identity facts |
 | `ingest_document` | Atomic external Markdown ingestion |
+| `import_tana` | Tana workspace JSON export → Logseq OG (`dry_run=True` default) |
 
 Implementation: `src/agent/mcp_server.py` (`register_mcp_tools`).
 

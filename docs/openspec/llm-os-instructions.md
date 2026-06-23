@@ -53,7 +53,7 @@ uvx matryca-plumber --json read bootstrap_status
 ## Safe-Sync
 
 - **READ:** `pages/` + `journals/` via Matryca tools only. Never Logseq app internal DB.
-- **WRITE (v1.9.5 / Logseq OG):** `mutate_graph`, `refactor_blocks`, `ingest_document`, `store_fact` on `.md` with OCC.
+- **WRITE (v1.9.5 / Logseq OG):** `mutate_graph`, `refactor_blocks`, `ingest_document`, `import_tana`, `store_fact` on `.md` with OCC. Default `dry_run: true` on mutators and **`import_tana`**.
 - **WRITE (future Logseq DB):** official CLI/API only (e.g. `qmd`) — never native DB mutation.
 
 ---

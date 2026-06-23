@@ -73,7 +73,7 @@ matryca context load "Architecture/Plumber"
 matryca --json context load "Architecture/Plumber|aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 ```
 
-MCP equivalent: compose `read_graph_data` (`page` or `subtree`) — no separate MCP tool (keeps seven-tool surface stable).
+MCP equivalent: compose `read_graph_data` (`page` or `subtree`) — no separate MCP tool (keeps eight-tool surface stable).
 
 ### Phase 1 `bootstrap_status` (v1.9.5)
 
@@ -199,6 +199,7 @@ Full spec: [`agent-ax-robustness.md`](agent-ax-robustness.md). Chaos tests: `tes
 | `matryca refactor` | `split_large`, `reparent` (JSON **array** of group objects — repaired via `loads_repaired_json`), `generate_flashcards` |
 | `matryca lint` | `unify_tags`, `block_refs`, `full_wiki_scan` |
 | **`matryca context load`** | Semantic macro (page or subtree bundle) |
+| **`matryca import tana`** | Tana workspace JSON → `Tana/` pages + journals (`--file`, `--apply`; dry-run default; JSON stdout) |
 | `matryca plumber start` | Maintenance daemon only (no browser, no `:8500`) |
 | `matryca plumber status` / `ui` | Sovereign UI on `http://127.0.0.1:8500` (no daemon until **Start Engine** or `start`) |
 | `matryca plumber stop` | Stop daemon |
@@ -208,6 +209,17 @@ Full spec: [`agent-ax-robustness.md`](agent-ax-robustness.md). Chaos tests: `tes
 Shorthand: `matryca-plumber status` → `plumber status`, `matryca-plumber start` → `plumber start`.
 
 Global: **`--json`** on any subcommand.
+
+### Tana import (CLI)
+
+Dry-run is the default — stderr warns until you pass **`--apply`**:
+
+```bash
+matryca import tana --file ~/Downloads/workspace.json
+matryca --json import tana --file ~/Downloads/workspace.json --apply
+```
+
+MCP equivalent: `import_tana(export_path=…, dry_run=True)`. Spec: [`tana-import.md`](tana-import.md).
 
 ---
 
@@ -223,6 +235,7 @@ Global: **`--json`** on any subcommand.
 ## Related reading
 
 - [`agent-onboarding.md`](agent-onboarding.md) — `llms.txt`, PyPI `uvx`, maintainer sync checklist
+- [`tana-import.md`](tana-import.md) — Tana JSON import CLI + MCP (`import_tana`, dry-run default)
 - [`agent-ax-robustness.md`](agent-ax-robustness.md) — lenient page resolution, safe writes, `warnings` contract
 - [`link-verification.md`](link-verification.md) — dead-link / missing-asset pipeline (feeds Journey Log metrics)
 - [`SYSTEM_PROMPT.md`](../../SYSTEM_PROMPT.md) — agent tool reference (updated for `subtree`)

@@ -10,6 +10,25 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
+## [2026-06-23] Unreleased — Tana workspace JSON import
+
+### Context
+
+Operators migrating from Tana Outliner need a **local, offline** path into Logseq OG that respects journal `config.edn`, avoids OOM on large exports, preserves outliner depth limits, and never duplicates nodes on re-import. The pipeline mirrors `ingest_document` OCC semantics but adds Tana-specific schema translation (flat `docs[]`, supertags, field tuples, Library/STASH entities).
+
+### Shipped
+
+1. **Streaming loader** — `ijson` over `docs[]` / `storeData.docs.item`; `json.load()` forbidden on export path.
+2. **Hybrid placement** — entities → `Tana/{Supertag}/{Name}` pages; `#day` → `journals/` via EDN format; depth-split at 8 with `Tana/Split/` pages.
+3. **Link resolution** — in-flight batch map + `MasterCatalog` title/alias rewrite before write.
+4. **Idempotent writes** — vault-wide `tana-id::` pre-scan; skip duplicates; `Tana/Import Log` ledger on apply.
+5. **Surfaces** — `run_tana_import()`; CLI `matryca import tana --file … [--apply]` (dry-run warning on stderr); MCP `import_tana(dry_run=True)`.
+6. **Docs** — [`docs/openspec/tana-import.md`](openspec/tana-import.md) v1.0; README, `llms.txt`, ARCHITECTURE, CONTRIBUTING harmonized.
+
+**Suite:** 874 tests green · mypy strict · ruff clean · coverage ≥70%.
+
+---
+
 ## [2026-06-19] v1.10.6 — Concurrency integrity (unified flock + hub page OCC)
 
 ### Context

@@ -17,8 +17,8 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 | [`link-verification.md`](link-verification.md) | v1.9 zero-LLM URL/asset hygiene, `.matryca_link_registry.json`, `dead-link::` / `missing-asset::`; v1.10.0 atomic registry save (#41). |
 | [`agent-dx.md`](agent-dx.md) | v1.9 CLI `--json`, `context load`, `read subtree`, Journey Log (single cumulative bullet per day). |
 | [`dual-embedding.md`](dual-embedding.md) | Phase 3 dual vectors (content + applicability) and `search_graph` / `method=semantic`. |
+| [`tana-import.md`](tana-import.md) | **`import_tana`** / **`matryca import tana`** — Tana workspace JSON → Logseq OG (`ijson` streaming, journal `config.edn`, depth-split, `tana-id` idempotency, dry-run default). |
 | [`ingest.md`](ingest.md) | **`ingest_document`** MCP tool — atomic external Markdown → ingest page + `LOG` / `GLOSSARY` (OS temp parse, OCC writes). |
-| [`tana-import.md`](tana-import.md) | **Planned** — Tana workspace JSON import (`ijson` streaming, `config.edn` journal format, depth-split, `tana-*` provenance). |
 | [`identity-config.md`](identity-config.md) | In-graph **Telos** / **AI Constraints** and **`store_fact`**. |
 | [`lint.md`](lint.md) | On-disk lint: block refs + wiki convention pack. |
 | [`l1-l2-routing.md`](l1-l2-routing.md) | L1 memory vs L2 graph routing and MCP hints. |
@@ -30,4 +30,4 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 | [`../v1.8-SOFTWARE-EDGE-PLAN.md`](../v1.8-SOFTWARE-EDGE-PLAN.md) | CPU sandbox, frozen KV prefix, adaptive LLM, mmap reads. |
 | [`../v1.8-OPTIMIZATION-PLAN.md`](../v1.8-OPTIMIZATION-PLAN.md) | v1.8 operator env vars, verification matrix, load testing. |
 
-Implementation entry points: `src/main.py`, `src/utils/runtime_bootstrap.py`, `src/agent/mcp_server.py`, `src/agent/ingestion.py`, `src/config.py`, `src/graph/`, `src/rag/`.
+Implementation entry points: `src/main.py`, `src/utils/runtime_bootstrap.py`, `src/agent/mcp_server.py`, `src/agent/ingestion.py`, `src/agent/tana_import.py`, `src/config.py`, `src/graph/`, `src/rag/`.
