@@ -21,6 +21,7 @@ from ..agent.maintenance_daemon import (
     resolve_graph_root,
 )
 from ..agent.plumber_config import resolve_lm_model
+from ..utils.bounded_json import BoundedJsonError
 from ..utils.token_logger import TokenLogger, resolve_plumber_log_path
 
 MONITOR_TITLE = "[MATRYCA PLUMBER MONITOR]"
@@ -91,7 +92,8 @@ def _try_load_daemon_state(
     """Load daemon state without blocking the TUI on transient read or parse failures."""
     try:
         return load_daemon_state(graph_root)
-    except Exception:
+    except (OSError, BoundedJsonError, ValueError):
+        loguru_logger.exception("TUI dashboard failed to load daemon state; using fallback state")
         if last_good is not None:
             return last_good
         return DaemonState()
@@ -236,7 +238,7 @@ def collect_snapshot_safe(
     if root is not None:
         try:
             last_good_state = load_daemon_state(root)
-        except OSError:
+        except (OSError, BoundedJsonError, ValueError):
             loguru_logger.exception("TUI dashboard failed to refresh last good daemon state")
     return snapshot, last_good_state
 

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Daemon shutdown (#44):** Final catalog and daemon state save failures now log exception details instead of being silently suppressed during graceful shutdown (thanks to @gaoflow in #100).
 - **Daemon shutdown (#101):** SIGTERM/SIGINT token-log shutdown breadcrumb failures now emit exception details instead of being silently suppressed.
 - **TUI dashboard (#102):** Token activity tail and daemon state refresh I/O failures now log exception details while preserving the existing fallback UI.
+- **TUI dashboard (#127):** Daemon state load failures now catch only expected state I/O/JSON/value errors and log a breadcrumb before falling back to the cached or empty state.
 - **Catalog sync (#103):** Phase-2 post-write catalog updates now persist page mtimes with nanosecond precision.
 - **Semantic clusters (#104):** Cluster cache loads now read `semantic_clusters.json` under the shared JSON flock.
 
