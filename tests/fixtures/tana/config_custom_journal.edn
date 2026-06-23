@@ -1,0 +1,3 @@
+{:journal/page-title-format "MMM do, yyyy"
+ :preferred-format "markdown"
+ :feature/enable-block-timestamps? true}

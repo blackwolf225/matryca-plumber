@@ -55,6 +55,7 @@ async def test_mcp_tools_list_handshake_within_30_seconds(tmp_path: Path) -> Non
     elapsed = time.perf_counter() - started
     names = sorted(tool.name for tool in result.tools)
     assert names == [
+        "import_tana",
         "ingest_document",
         "mutate_graph",
         "read_graph_data",

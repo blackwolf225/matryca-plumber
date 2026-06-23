@@ -21,11 +21,12 @@ from src.agent.outline_models import validate_outline_for_write
 
 
 def test_mcp_registers_five_mega_tools() -> None:
-    """Consolidated MCP surface exposes seven tool names (five mega-tools + memory + ingest)."""
+    """Consolidated MCP surface exposes eight tools (mega-tools + memory + ingest + tana)."""
     app = FastMCP("matryca-test")
     register_mcp_tools(app)
     names = sorted(app._tool_manager._tools.keys())  # noqa: SLF001
     assert names == [
+        "import_tana",
         "ingest_document",
         "mutate_graph",
         "read_graph_data",

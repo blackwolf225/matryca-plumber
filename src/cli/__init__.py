@@ -34,6 +34,7 @@ from ..agent.maintenance_daemon import (
     start_daemon_foreground,
     stop_daemon,
 )
+from ..agent.tana_import import run_tana_import
 from ..config import load_matryca_wiki_config
 from ..graph.service_manager import manage_matryca_service
 from ..utils.runtime_bootstrap import try_prepare_matryca_runtime_from_env
@@ -202,6 +203,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compute or audit deterministic semantic cluster neighborhoods",
     )
 
+    import_p = sub.add_parser("import", help="Import external data into the Logseq graph")
+    import_sub = import_p.add_subparsers(dest="import_command", required=True)
+    tana_import_p = import_sub.add_parser(
+        "tana",
+        help="Import a Tana workspace JSON export into the graph",
+    )
+    tana_import_p.add_argument(
+        "--file",
+        required=True,
+        dest="export_file",
+        help="Path to the Tana workspace JSON export",
+    )
+    tana_import_p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write to disk (default is dry-run: report only, no files touched)",
+    )
+
     return parser
 
 
@@ -359,6 +378,18 @@ async def run_cli(args: argparse.Namespace) -> int:
             _emit_result(cluster_out, as_json=as_json, command=command)
             return 0 if cluster_out.get("ok") is not False else 1
         _emit_error(f"unknown plumber action: {plumber_action}")
+        return 2
+
+    if command == "import":
+        if args.import_command == "tana":
+            if not args.apply:
+                _emit_error(
+                    "DRY-RUN MODE: No files written to disk. Use --apply to commit.\n",
+                )
+            import_result = run_tana_import(args.export_file, apply=args.apply)
+            _emit_result(import_result.to_dict(), as_json=True, command="import tana")
+            return 0 if import_result.ok else 1
+        _emit_error(f"unknown import command: {args.import_command}")
         return 2
 
     _emit_error(f"unknown command: {command}")

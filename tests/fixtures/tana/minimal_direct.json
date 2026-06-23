@@ -1,0 +1,22 @@
+{
+  "formatVersion": 1,
+  "docs": [
+    {
+      "id": "ROOT_A",
+      "props": { "name": "Home" },
+      "children": ["CHILD_B"]
+    },
+    {
+      "id": "CHILD_B",
+      "props": { "name": "Nested note", "created": 1734912000000 },
+      "children": [],
+      "outbound_refs": ["REF_C"]
+    },
+    {
+      "id": "REF_C",
+      "props": { "name": "Referenced" },
+      "children": []
+    }
+  ],
+  "workspaces": { "ws1": "My Workspace" }
+}

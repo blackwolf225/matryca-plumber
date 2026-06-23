@@ -35,6 +35,7 @@ from .outline_models import (
     PageType,
     outline_block_count,
 )
+from .tana_import import dispatch_tana_import
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +49,8 @@ def register_mcp_tools(mcp: FastMCP) -> None:
     """Register consolidated MCP tools on the FastMCP application.
 
     Tools: ``read_graph_data``, ``search_graph``, ``mutate_graph``, ``refactor_blocks``,
-    ``run_linter``, ``store_fact``, ``ingest_document`` — each routes by a ``typing.Literal``
-    discriminator (where applicable) to
+    ``run_linter``, ``store_fact``, ``ingest_document``, ``import_tana`` — each routes by a
+    ``typing.Literal`` discriminator (where applicable) to
     existing graph/RAG helpers (see module-level docstrings on each handler).
 
     Args:
@@ -285,6 +286,22 @@ def register_mcp_tools(mcp: FastMCP) -> None:
         """
         _ = ctx
         return await dispatch_ingest_document(source_name, raw_text)
+
+    @safe_tool()
+    async def import_tana(
+        ctx: Context[ServerSession, AppContext],
+        export_path: str,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Import a Tana workspace JSON export into the Logseq graph.
+
+        Streams ``docs[]`` via ``ijson``, builds hybrid placement plans, resolves wikilinks
+        against in-flight pages and ``MasterCatalog``, then writes entity pages and journals
+        with ``tana-id`` idempotency. When ``dry_run`` is true (default), returns the JSON
+        report without touching disk.
+        """
+        _ = ctx
+        return await dispatch_tana_import(export_path, dry_run=dry_run)
 
 
 __all__ = [

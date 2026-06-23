@@ -17,7 +17,7 @@ from src.cli import build_parser, main, run_cli
 BLOCK_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 
-def test_parser_exposes_eight_subcommands() -> None:
+def test_parser_exposes_nine_subcommands() -> None:
     parser = build_parser()
     sub_action = next(
         action
@@ -26,6 +26,7 @@ def test_parser_exposes_eight_subcommands() -> None:
     )
     assert sorted(sub_action.choices) == [
         "context",
+        "import",
         "lint",
         "mutate",
         "plumber",

@@ -1,0 +1,59 @@
+{
+  "docs": [
+    {
+      "id": "WS_STASH",
+      "props": { "name": "Library" },
+      "children": ["LIB_ITEM", "LIB_CHILD"]
+    },
+    {
+      "id": "LIB_ITEM",
+      "props": { "name": "Library entity", "_ownerId": "WS_STASH" },
+      "children": []
+    },
+    {
+      "id": "LIB_CHILD",
+      "props": { "name": "Nested under library" },
+      "children": ["DEEP_BLOCK"]
+    },
+    {
+      "id": "DEEP_BLOCK",
+      "props": { "name": "Deep note" },
+      "children": []
+    },
+    {
+      "id": "FLAG_ENTITY",
+      "props": { "name": "Flagged entity", "_flags": 3 },
+      "children": []
+    },
+    {
+      "id": "PLAIN",
+      "props": { "name": "Plain block" },
+      "children": []
+    },
+    {
+      "id": "WS_SCHEMA",
+      "props": { "name": "Schema" },
+      "children": ["TAG_PROJECT"]
+    },
+    {
+      "id": "TAG_PROJECT",
+      "props": { "name": "project", "_docType": "tagDef" },
+      "children": []
+    },
+    {
+      "id": "TAGGED",
+      "props": { "name": "My project", "_metaNodeId": "META1" },
+      "children": []
+    },
+    {
+      "id": "META1",
+      "props": {},
+      "children": ["TUPLE1"]
+    },
+    {
+      "id": "TUPLE1",
+      "props": { "_docType": "tuple" },
+      "children": ["TAG_PROJECT"]
+    }
+  ]
+}

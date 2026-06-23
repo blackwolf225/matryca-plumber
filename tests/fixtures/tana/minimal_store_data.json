@@ -1,0 +1,18 @@
+{
+  "storeData": {
+    "formatVersion": 1,
+    "docs": [
+      {
+        "id": "WRAP_ROOT",
+        "props": { "name": "Wrapped workspace root" },
+        "children": ["WRAP_CHILD"]
+      },
+      {
+        "id": "WRAP_CHILD",
+        "props": { "name": "Child under storeData" },
+        "children": []
+      }
+    ],
+    "currentWorkspaceId": "ws-wrap"
+  }
+}
