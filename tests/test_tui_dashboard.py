@@ -68,6 +68,24 @@ def test_collect_snapshot_activity_feed_updates_when_log_appends(graph_root: Pat
     assert second.activity_lines != first.activity_lines
 
 
+def test_collect_snapshot_logs_activity_tail_failures(graph_root: Path) -> None:
+    _write_page(graph_root, "Snap", "- snap\n")
+    logger = TokenLogger(log_path=graph_root / "ops.log")
+
+    with (
+        patch.object(
+            logger,
+            "tail_activity_summaries",
+            side_effect=OSError("ops log unavailable"),
+        ),
+        patch("src.cli.tui_dashboard.loguru_logger.exception") as logged,
+    ):
+        snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
+
+    assert snap.activity_lines == []
+    logged.assert_called_once_with("TUI dashboard failed to load token activity summaries")
+
+
 def test_collect_snapshot_uses_checkpoint_processed_count_despite_mtime_drift(
     graph_root: Path,
 ) -> None:
@@ -161,9 +179,12 @@ def test_collect_snapshot_safe_falls_back_to_last_good_state_on_read_failure(
     assert first.session_prompt_tokens == 42
     assert cached_state is not None
 
-    with patch(
-        "src.cli.tui_dashboard.load_daemon_state",
-        side_effect=OSError("state file busy"),
+    with (
+        patch(
+            "src.cli.tui_dashboard.load_daemon_state",
+            side_effect=OSError("state file busy"),
+        ),
+        patch("src.cli.tui_dashboard.loguru_logger.exception") as logged,
     ):
         second, still_cached = collect_snapshot_safe(
             graph_root=graph_root,
@@ -173,3 +194,4 @@ def test_collect_snapshot_safe_falls_back_to_last_good_state_on_read_failure(
 
     assert second.session_prompt_tokens == 42
     assert still_cached is cached_state
+    logged.assert_called_once_with("TUI dashboard failed to refresh last good daemon state")
