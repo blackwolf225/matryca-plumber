@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 import pytest
 from src.agent.maintenance_daemon import DaemonState, FileState, save_daemon_state
-from src.cli.tui_dashboard import collect_snapshot, collect_snapshot_safe
+from src.cli.tui_dashboard import _try_load_daemon_state, collect_snapshot, collect_snapshot_safe
+from src.utils.bounded_json import BoundedJsonError
 from src.utils.token_logger import TokenLogger
 
 
@@ -194,4 +195,48 @@ def test_collect_snapshot_safe_falls_back_to_last_good_state_on_read_failure(
 
     assert second.session_prompt_tokens == 42
     assert still_cached is cached_state
-    logged.assert_called_once_with("TUI dashboard failed to refresh last good daemon state")
+    logged.assert_any_call("TUI dashboard failed to load daemon state; using fallback state")
+    logged.assert_any_call("TUI dashboard failed to refresh last good daemon state")
+    assert logged.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("state file busy"),
+        BoundedJsonError("state json corrupt"),
+        ValueError("invalid daemon state payload"),
+    ],
+)
+def test_try_load_daemon_state_logs_and_returns_last_good_on_expected_load_failures(
+    graph_root: Path,
+    failure: Exception,
+) -> None:
+    last_good = DaemonState(status="running", session_prompt_tokens=99)
+
+    with (
+        patch("src.cli.tui_dashboard.load_daemon_state", side_effect=failure),
+        patch("src.cli.tui_dashboard.loguru_logger.exception") as logged,
+    ):
+        state = _try_load_daemon_state(graph_root, last_good=last_good)
+
+    assert state is last_good
+    logged.assert_called_once_with(
+        "TUI dashboard failed to load daemon state; using fallback state"
+    )
+
+
+def test_try_load_daemon_state_logs_and_returns_empty_state_without_cache(
+    graph_root: Path,
+) -> None:
+    with (
+        patch("src.cli.tui_dashboard.load_daemon_state", side_effect=ValueError("bad state")),
+        patch("src.cli.tui_dashboard.loguru_logger.exception") as logged,
+    ):
+        state = _try_load_daemon_state(graph_root, last_good=None)
+
+    assert state.files == {}
+    assert state.status == "idle"
+    logged.assert_called_once_with(
+        "TUI dashboard failed to load daemon state; using fallback state"
+    )
