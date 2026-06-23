@@ -57,8 +57,13 @@ def iter_tana_nodes(export_path: Path) -> Iterator[NodeDump]:
 
 
 def load_tana_nodes_by_id(export_path: Path) -> dict[str, NodeDump]:
-    """Stream ``docs[]`` and build an ``id → NodeDump`` index (O(nodes) memory)."""
-    return {node.id: node for node in iter_tana_nodes(export_path)}
+    """Return the node index (single streaming pass via ``StreamingGraphBuilder``)."""
+    from .graph import StreamingGraphBuilder
+
+    builder = StreamingGraphBuilder()
+    for node in iter_tana_nodes(export_path):
+        builder.ingest_node(node)
+    return builder.build().nodes
 
 
 __all__ = [

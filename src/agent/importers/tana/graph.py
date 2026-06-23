@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from .load import load_tana_nodes_by_id
+from .load import iter_tana_nodes
 from .schema import NodeDump
 
 _STASH_SUFFIX = "_STASH"
@@ -67,42 +67,10 @@ class TanaWorkspaceGraph:
         *,
         page_like_supertags: frozenset[str] | None = None,
     ) -> TanaWorkspaceGraph:
-        children_by_parent: dict[str, list[str]] = {}
-        parent_by_child: dict[str, str] = {}
-        schema_root_id: str | None = None
-        stash_root_id: str | None = None
-        tag_def_names: dict[str, str] = {}
-
-        for node_id, node in nodes.items():
-            if node_id.endswith(_SCHEMA_SUFFIX):
-                schema_root_id = node_id
-            elif node_id.endswith(_STASH_SUFFIX):
-                stash_root_id = node_id
-
-            doc_type = node.props.get("_docType")
-            if doc_type == "tagDef":
-                name = _node_display_name(node)
-                if name:
-                    tag_def_names[node_id] = name
-
-            for child_id in node.children:
-                children_by_parent.setdefault(node_id, []).append(child_id)
-                parent_by_child.setdefault(child_id, node_id)
-
-        for node_id, node in nodes.items():
-            owner_id = node.props.get("_ownerId")
-            if isinstance(owner_id, str) and owner_id in nodes:
-                parent_by_child[node_id] = owner_id
-
-        return cls(
-            nodes=dict(nodes),
-            children_by_parent=children_by_parent,
-            parent_by_child=parent_by_child,
-            schema_root_id=schema_root_id,
-            stash_root_id=stash_root_id,
-            tag_def_names=tag_def_names,
-            page_like_supertags=page_like_supertags or _DEFAULT_PAGE_LIKE_SUPERTAGS,
-        )
+        builder = StreamingGraphBuilder(page_like_supertags=page_like_supertags)
+        for node in nodes.values():
+            builder.ingest_node(node)
+        return builder.build()
 
     @classmethod
     def from_export(
@@ -110,9 +78,17 @@ class TanaWorkspaceGraph:
         export_path: Path,
         *,
         page_like_supertags: frozenset[str] | None = None,
+        on_progress: Callable[[int], None] | None = None,
+        progress_every: int = 1000,
     ) -> TanaWorkspaceGraph:
-        nodes = load_tana_nodes_by_id(export_path)
-        return cls.from_nodes(nodes, page_like_supertags=page_like_supertags)
+        builder = StreamingGraphBuilder(
+            page_like_supertags=page_like_supertags,
+            on_progress=on_progress,
+            progress_every=progress_every,
+        )
+        for node in iter_tana_nodes(export_path):
+            builder.ingest_node(node)
+        return builder.build()
 
     @classmethod
     def from_iterable(
@@ -121,8 +97,10 @@ class TanaWorkspaceGraph:
         *,
         page_like_supertags: frozenset[str] | None = None,
     ) -> TanaWorkspaceGraph:
-        index = {node.id: node for node in nodes}
-        return cls.from_nodes(index, page_like_supertags=page_like_supertags)
+        builder = StreamingGraphBuilder(page_like_supertags=page_like_supertags)
+        for node in nodes:
+            builder.ingest_node(node)
+        return builder.build()
 
     def iter_children(self, parent_id: str) -> Iterator[NodeDump]:
         for child_id in self.children_by_parent.get(parent_id, ()):
@@ -195,9 +173,75 @@ class TanaWorkspaceGraph:
         return False
 
 
-def build_graph_from_export(export_path: Path) -> TanaWorkspaceGraph:
-    """Stream ``docs[]`` and build workspace indexes."""
-    return TanaWorkspaceGraph.from_export(export_path)
+@dataclass
+class StreamingGraphBuilder:
+    """Incremental single-pass builder for :class:`TanaWorkspaceGraph`."""
+
+    page_like_supertags: frozenset[str] | None = None
+    on_progress: Callable[[int], None] | None = None
+    progress_every: int = 1000
+
+    def __post_init__(self) -> None:
+        if self.page_like_supertags is None:
+            self.page_like_supertags = _DEFAULT_PAGE_LIKE_SUPERTAGS
+        self._nodes: dict[str, NodeDump] = {}
+        self._children_by_parent: dict[str, list[str]] = {}
+        self._parent_by_child: dict[str, str] = {}
+        self._schema_root_id: str | None = None
+        self._stash_root_id: str | None = None
+        self._tag_def_names: dict[str, str] = {}
+
+    def ingest_node(self, node: NodeDump) -> None:
+        node_id = node.id
+        self._nodes[node_id] = node
+        if node_id.endswith(_SCHEMA_SUFFIX):
+            self._schema_root_id = node_id
+        elif node_id.endswith(_STASH_SUFFIX):
+            self._stash_root_id = node_id
+
+        doc_type = node.props.get("_docType")
+        if doc_type == "tagDef":
+            name = _node_display_name(node)
+            if name:
+                self._tag_def_names[node_id] = name
+
+        for child_id in node.children:
+            self._children_by_parent.setdefault(node_id, []).append(child_id)
+            self._parent_by_child.setdefault(child_id, node_id)
+
+        if self.on_progress is not None and self.progress_every > 0:
+            count = len(self._nodes)
+            if count % self.progress_every == 0:
+                self.on_progress(count)
+
+    def build(self) -> TanaWorkspaceGraph:
+        for node_id, node in self._nodes.items():
+            owner_id = node.props.get("_ownerId")
+            if isinstance(owner_id, str) and owner_id in self._nodes:
+                self._parent_by_child[node_id] = owner_id
+        return TanaWorkspaceGraph(
+            nodes=self._nodes,
+            children_by_parent=self._children_by_parent,
+            parent_by_child=self._parent_by_child,
+            schema_root_id=self._schema_root_id,
+            stash_root_id=self._stash_root_id,
+            tag_def_names=self._tag_def_names,
+            page_like_supertags=self.page_like_supertags,
+        )
+
+
+def build_graph_from_export(
+    export_path: Path,
+    *,
+    on_progress: Callable[[int], None] | None = None,
+    progress_every: int = 1000,
+) -> TanaWorkspaceGraph:
+    """Stream ``docs[]`` and build workspace indexes in one pass."""
+    return TanaWorkspaceGraph.from_export(
+        export_path,
+        on_progress=on_progress,
+        progress_every=progress_every,
+    )
 
 
 def _node_display_name(node: NodeDump) -> str:
@@ -212,6 +256,7 @@ def _node_display_name(node: NodeDump) -> str:
 __all__ = [
     "EntityDecision",
     "EntityReason",
+    "StreamingGraphBuilder",
     "TanaWorkspaceGraph",
     "build_graph_from_export",
 ]

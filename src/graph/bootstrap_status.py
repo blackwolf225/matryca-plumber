@@ -45,39 +45,39 @@ class BootstrapStatusSnapshot:
 def collect_bootstrap_status(graph_root: str | Path) -> BootstrapStatusSnapshot:
     """Merge daemon checkpoint fields with on-disk catalog completeness."""
     root = Path(graph_root).expanduser().resolve(strict=False)
-    from ..agent.maintenance_daemon import load_daemon_state
+    from ..daemon.checkpoint import read_daemon_checkpoint
 
-    state = load_daemon_state(root)
+    checkpoint = read_daemon_checkpoint(root)
     master_present = master_index_page_path(root).is_file()
     catalog_complete = is_bootstrap_catalog_complete(root) if master_present else False
 
-    daemon_complete = bool(state.bootstrap_complete)
+    daemon_complete = checkpoint.bootstrap_complete
     catalog_stale = daemon_complete and not catalog_complete
     phase1_in_progress = (
         not daemon_complete
-        and not state.bootstrap_failed
-        and state.bootstrap_total > 0
-        and state.bootstrap_scanned < state.bootstrap_total
+        and not checkpoint.bootstrap_failed
+        and checkpoint.bootstrap_total > 0
+        and checkpoint.bootstrap_scanned < checkpoint.bootstrap_total
     )
 
     effective_complete = catalog_complete or (
         daemon_complete and master_present and not catalog_stale
     )
 
-    soft_gate_active = not effective_complete or state.bootstrap_failed or phase1_in_progress
+    soft_gate_active = not effective_complete or checkpoint.bootstrap_failed or phase1_in_progress
 
     return BootstrapStatusSnapshot(
         bootstrap_complete=effective_complete,
-        bootstrap_failed=bool(state.bootstrap_failed),
-        bootstrap_failed_reason=state.bootstrap_failed_reason,
-        bootstrap_scanned=int(state.bootstrap_scanned),
-        bootstrap_total=int(state.bootstrap_total),
+        bootstrap_failed=checkpoint.bootstrap_failed,
+        bootstrap_failed_reason=checkpoint.bootstrap_failed_reason,
+        bootstrap_scanned=checkpoint.bootstrap_scanned,
+        bootstrap_total=checkpoint.bootstrap_total,
         master_index_present=master_present,
         catalog_complete=catalog_complete,
         catalog_stale=catalog_stale,
         phase1_in_progress=phase1_in_progress,
         soft_gate_active=soft_gate_active,
-        daemon_status=str(state.status) if state.status else None,
+        daemon_status=checkpoint.status,
     )
 
 

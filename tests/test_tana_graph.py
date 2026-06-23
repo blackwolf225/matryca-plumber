@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from src.agent.importers.tana.graph import (
     EntityReason,
+    StreamingGraphBuilder,
     TanaWorkspaceGraph,
     build_graph_from_export,
 )
@@ -72,3 +74,30 @@ def test_from_iterable_builds_same_parent_map() -> None:
     graph = TanaWorkspaceGraph.from_iterable(nodes)
     assert graph.parent_by_child["C"] == "P"
     assert list(graph.iter_children("P"))[0].id == "C"
+
+
+def test_streaming_builder_matches_from_export() -> None:
+    export = _FIXTURES / "entity_graph.json"
+    direct = build_graph_from_export(export)
+    builder = StreamingGraphBuilder()
+    for node in direct.nodes.values():
+        builder.ingest_node(node)
+    built = builder.build()
+    assert built.schema_root_id == direct.schema_root_id
+    assert built.stash_root_id == direct.stash_root_id
+    assert built.tag_def_names == direct.tag_def_names
+    assert built.parent_by_child == direct.parent_by_child
+    assert set(built.nodes) == set(direct.nodes)
+
+
+def test_from_export_single_pass_no_load_tana_nodes_by_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.agent.importers.tana.load as load_mod
+
+    def _forbidden(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("load_tana_nodes_by_id must not run during from_export")
+
+    monkeypatch.setattr(load_mod, "load_tana_nodes_by_id", _forbidden)
+    graph = TanaWorkspaceGraph.from_export(_FIXTURES / "minimal_direct.json")
+    assert len(graph.nodes) == 3

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Contributor onboarding:** Good-first [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118) shipped via @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)) — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
 - **Repomix pack** — `repomix.config.json` now uses an `include` allowlist aligned with code-graph clusters (Graph, Agent, Daemon, Cli, Semantic, Tana, Frontend, Tests); `.repomixignore` deduplicated and scoped to vault/runtime/maintainer noise; pack header documents entry points and reading order.
 - **Local graph indexer layout** — Index data stays under gitignored `.local/graph-index/`; root `.gitnexus` symlink and vendor skills are excluded via `.git/info/exclude` (not public `.gitignore`); `analyze-embeddings.sh` uses `--skip-skills` so skills are not written to `.claude/skills/`.
 - **Repository hygiene (TRIZ separation-in-space)** — Vendor-specific graph indexer tooling moved under gitignored `.local/`; public wrappers `scripts/provision-local-workspace.sh` and `scripts/reindex-code-graph.sh` delegate via `LOCAL_GRAPH_ANALYZER_NPM_PACKAGE` / `CODE_GRAPH_CLI` with no vendor names in the OSS tree.

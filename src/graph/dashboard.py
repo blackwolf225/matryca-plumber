@@ -41,7 +41,7 @@ def collect_dashboard_stats(graph_root: str | Path) -> DashboardStats:
             continue
         newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
 
-    from ..daemon.ast_cache import get_graph_ast_cache
+    from .ast_cache import get_graph_ast_cache
 
     graph = get_graph_ast_cache(root).get_graph()
     id_tally = sum(

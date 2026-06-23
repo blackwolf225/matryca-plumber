@@ -18,7 +18,8 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - Agent surface: [`llms.txt`](llms.txt), [`.well-known/llms.txt`](.well-known/llms.txt), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md)
 - Operator workflow in [CONTRIBUTING.md](CONTRIBUTING.md) — Discussions for RFCs, issues for trackable work
 - “Test vault first” guidance in README (clone graph before pointing at production)
-- Good-first issues live on GitHub — [open `good first issue` label](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#38, #43, #52, #53, #56, #69, #71, #85, #90–#92, #101–#105); maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md)
+- Good-first issues live on GitHub — [open `good first issue` label](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) (#38, #43, #52, #53, #56, #69, #71, #85, #90–#92, #125–#129); maintainer blueprints in [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md)
+- ~~CI `StarletteDeprecationWarning` in test client~~ — **done (main):** [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118) via [#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122) (@blackwolf225)
 
 ### Tech debt & integrity (prerequisite for v2.0)
 

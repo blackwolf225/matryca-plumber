@@ -101,7 +101,7 @@ def lint_block_refs_in_graph(
     from .alias_index import iter_scannable_pages_markdown
 
     if graph is None:
-        from ..daemon.ast_cache import get_graph_ast_cache
+        from .ast_cache import get_graph_ast_cache
 
         graph = get_graph_ast_cache(root).get_graph()
     pages_scanned = len(iter_scannable_pages_markdown(root))

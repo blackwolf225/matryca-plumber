@@ -7,7 +7,13 @@ from .convert import (
     TanaConvertResult,
     convert_tana_graph,
 )
-from .graph import EntityDecision, EntityReason, TanaWorkspaceGraph, build_graph_from_export
+from .graph import (
+    EntityDecision,
+    EntityReason,
+    StreamingGraphBuilder,
+    TanaWorkspaceGraph,
+    build_graph_from_export,
+)
 from .html import plain_text_from_tana_html
 from .journal import (
     JournalPathResult,
@@ -63,6 +69,7 @@ __all__ = [
     "TanaLinkResult",
     "TanaLinkStats",
     "TanaWriteReport",
+    "StreamingGraphBuilder",
     "TanaConvertResult",
     "TanaWorkspaceGraph",
     "TanaConverter",

@@ -10,6 +10,21 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
+## [2026-06-23] Good-first #118 — httpx2 dev dependency (@blackwolf225)
+
+### Context
+
+`fastapi/testclient` triggered `StarletteDeprecationWarning` on every UI-server test run, polluting CI logs and blocking strict `-W error::DeprecationWarning` gates. Issue [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118) was scoped as a dependency-only good-first fix.
+
+### Shipped
+
+1. **`httpx2>=2.4.0`** in `[project.optional-dependencies] dev` — aligned with Makefile/CI `--extra dev` (not a separate `[dependency-groups]` block).
+2. **Contributor path** — first external merge from @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)); maintainer rebased `uv.lock` on updated `main` before landing.
+
+**Verify:** `uv run pytest tests/test_ui_server.py -q -W error::DeprecationWarning` · `make check`.
+
+---
+
 ## [2026-06-23] v1.11.1 — Logseq Matryca Parser 1.4.0 alignment
 
 ### Context

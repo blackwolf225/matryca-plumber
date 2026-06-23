@@ -315,9 +315,9 @@ def atomic_write_bytes(
                 )
             _commit_once()
             if is_markdown:
-                from ..daemon.post_write_hooks import emit_post_write_commit
+                from .post_write import emit_page_written
 
-                emit_post_write_commit(
+                emit_page_written(
                     graph_root=graph_root,
                     path=path,
                     summary=robot_commit_summary,

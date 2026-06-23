@@ -17,7 +17,7 @@ from .post_write_hooks import (
 
 
 def register_daemon_post_write_hooks(graph_root: Path) -> None:
-    """Wire AST cache refresh and surgical git commits after successful markdown writes."""
+    """Wire surgical git commits and identity refresh after successful markdown writes."""
     root = graph_root.expanduser().resolve(strict=False)
 
     def _on_commit(event: PostWriteEvent) -> None:
