@@ -2557,8 +2557,10 @@ class MaintenanceDaemon:
             if path.is_file():
                 content = read_graph_file_text(path, self.graph_root, errors="replace")
                 if link_verify_enabled():
-                    with contextlib.suppress(OSError):
+                    try:
                         merge_page_links_into_registry(self.graph_root, path, content)
+                    except OSError:
+                        logger.exception("Journal structural settle link registry merge failed")
             get_graph_ast_cache(self.graph_root).apply_file_event(path, "modified")
             state.files[key] = FileState(
                 mtime=path.stat().st_mtime,
