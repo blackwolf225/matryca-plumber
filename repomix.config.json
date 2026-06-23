@@ -1,24 +1,59 @@
 {
-    "output": {
-      "filePath": "repomix-output.xml",
-      "style": "xml",
-      "parsableStyle": true,
-      "fileSummary": true,
-      "directoryStructure": true
-    },
-    "ignore": {
-      "useGitignore": true,
-      "useDefaultPatterns": true,
-      "customPatterns": [
-        ".cursor/",
-        ".github/",
-        "tests/.*_cache/",
-        "*.sqlite3",
-        "repomix-output.*",
-        "pnpm-lock.yaml",
-        "package-lock.json",
-        "poetry.lock",
-        "uv.lock"
-      ]
-    }
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "parsableStyle": true,
+    "fileSummary": true,
+    "directoryStructure": true,
+    "includeFullDirectoryStructure": true,
+    "headerText": "Matryca Plumber — source pack for code review and architecture evaluation.\n\nRead first: README.md → docs/ARCHITECTURE.md → docs/openspec/ → llms.txt\n\nModule map (code-graph clusters): Graph (src/graph/), Agent (src/agent/), Daemon (src/daemon/), Cli+UI (src/cli/), Semantic (src/semantic/), Tana import (src/agent/importers/tana/), Frontend (frontend/src/), plus tests/.\n\nEntry points: src/plumber_entry.py → src/cli/__init__.py (CLI) | src/agent/mcp_server.py (MCP stdio) | src/agent/maintenance_daemon.py (background daemon) | src/cli/ui_server.py (Sovereign UI, /api/*).\n\nExcluded: Logseq vault data, lockfiles, .github CI, maintainer scripts, planning archives, runtime logs/state."
+  },
+  "include": [
+    "src/**/*.py",
+    "tests/**/*.py",
+    "tests/fixtures/**",
+    "scripts/__init__.py",
+    "scripts/check_graph_read_sandbox.py",
+    "scripts/check_version_consistency.py",
+    "scripts/extract_changelog.py",
+    "scripts/gen_synthetic_graph.py",
+    "scripts/data/**",
+    "frontend/src/**/*",
+    "frontend/package.json",
+    "frontend/vite.config.ts",
+    "frontend/vitest.config.ts",
+    "frontend/tsconfig*.json",
+    "frontend/tailwind.config.js",
+    "frontend/eslint.config.js",
+    "frontend/index.html",
+    "docs/ARCHITECTURE.md",
+    "docs/openspec/**",
+    "docs/integrations/**",
+    "docs/RELEASE_PROCESS.md",
+    "README.md",
+    "ROADMAP.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "CODE_OF_CONDUCT.md",
+    "LICENSE",
+    "NOTICE",
+    "llms.txt",
+    ".well-known/llms.txt",
+    "pyproject.toml",
+    "Makefile",
+    ".env.example",
+    "matryca-wiki.example.yml",
+    "MANIFEST.in"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "security": {
+    "enableSecurityCheck": true
   }
+}

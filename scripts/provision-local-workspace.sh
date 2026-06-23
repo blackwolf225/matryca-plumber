@@ -29,10 +29,10 @@ fi
 echo "Installing graph analyzer CLI under .local/tooling/ ..."
 npm install --prefix "$TOOLING"
 
-# Personal git exclude (not committed) — analyzer root artifacts derived from package name.
+# Personal git exclude (not committed) — root symlink + vendor skills stay out of git status.
 EXCLUDE="$ROOT/.git/info/exclude"
 mkdir -p "$(dirname "$EXCLUDE")"
-for _pat in ".$PKG" ".${PKG}rc"; do
+for _pat in ".$PKG" ".${PKG}rc" ".claude/skills/${PKG}/"; do
   if ! grep -qxF "$_pat" "$EXCLUDE" 2>/dev/null; then
     echo "$_pat" >>"$EXCLUDE"
   fi

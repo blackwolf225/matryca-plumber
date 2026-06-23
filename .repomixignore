@@ -1,120 +1,115 @@
-# ==============================================================================
-# .repomixignore - Configurazione d'Élite per Matryca Plumber OS
-# ==============================================================================
+# =============================================================================
+# .repomixignore — Repomix-only exclusions (Matryca Plumber)
+# =============================================================================
+# Complements repomix.config.json `include` allowlist, .gitignore, and Repomix
+# default patterns. Goal: pack only source + tests + operator docs needed to
+# understand and evaluate the codebase.
+# Docs: https://repomix.com/guide/configuration
+#
+# Include allowlist (repomix.config.json) targets graph-derived core modules:
+# Graph, Agent, Daemon, Cli, Semantic, Tana, Frontend, Tests (+ openspec docs).
+# =============================================================================
 
-# --- Version Control & GitHub ---
-.git/
-.github/
-.gitignore
+# --- Repomix output (avoid recursive packs) ---
+repomix-output.*
+.repomix-cache/
 
-# --- Python & Virtual Environments ---
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
-env/
-build/
-dist/
-*.egg-info/
+# --- Secrets & local operator config ---
+.env
+.env.*
+!.env.example
+matryca-wiki.yml
 
-# --- Linter, Formatter & Test Caches (Ruff, MyPy, Pytest) ---
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-htmlcov/
-
-# --- Matryca Plumber Daemon & State (CRITICO: Esclude i file di runtime del Demone) ---
+# --- Runtime / daemon state (not source) ---
+.matryca_semantic_cache/
+*.matryca.lock
+.*.matryca.lock
 *.pid
 .matryca_plumber_daemon.pid
 .matryca_daemon_state.json
 .matryca_xray_state.json
 logs/
-logs/*
-logs/matryca_plumber_ops.log
 
-# --- File di Configurazione Locali e Segreti (Sicurezza) ---
-.env
-.env.local
-.env.*.local
-matryca-wiki.yml
-
-# --- Logseq (Graph locali di test ed esperimenti testuali) ---
+# --- Logseq vault data & local test graphs ---
 journals/
 pages/
+.logseq/
+logseq/
 LOGSEQ copy test LLM/
+*.sqlite3
+*.db
 
-# --- File Temporanei e Backup Atomici (Surgical editors di Fase 8) ---
-*.bak
-*.tmp
-*.md.tmp
-
-# --- Output di Repomix (Evita loop ricorsivi infiniti dello strumento) ---
-repomix-output.xml
-repomix-output.txt
-repomix-output.json
-
-# --- Frontend & JS Dependencies (MOLTO IMPORTANTE PER I TOKEN) ---
-node_modules/
-**/node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# --- Binary media & frontend static/build artifacts ---
+images/
+frontend/public/
 frontend/dist/
 frontend/build/
-public/
-assets/
-*.svg
-*.png
-*.jpg
-*.ico
+node_modules/
+**/node_modules/
 
-# --- Roadmap d'Archivio (Scommentali per nasconderli a Cursor) ---
-ROADMAP_LLM_WIKI.md
-ROADMAP_LLM_WIKI_PHASE_3.md
-ROADMAP_LOGSEQ_SUPERPOWERS.md
-ROADMAP_PHASE_5_6.md
-ROADMAP_MLDOC_COMPLIANCE.md
-ROADMAP_IRONCLAD_SHIELD.md
+# --- Build / packaging artifacts ---
+build/
+dist/
+*.egg-info/
+matryca_plumber.egg-info/
 
-# Cache e VAs (Inutili per l'LLM)
+# --- Tool caches & coverage (low signal) ---
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-.venv/
-venv/
-env/
+.coverage
+htmlcov/
+.hypothesis/
+.coverage.*
 
-# Build e Distribuzione
-dist/
-build/
-*.egg-info/
-*.spec
+# --- Maintainer-local & IDE debug (not product code) ---
+.local/
+.gitnexus
+.claude/skills/gitnexus/
+.cursor/
+.cursorignore
+.cursorrules
 
-# File di Lock (Troppo lunghi e illeggibili, a meno di non dover debuggare un pacchetto)
+# --- Git / GitHub housekeeping (not implementation) ---
+.git/
+.github/
+
+# --- Internal planning archives (noise for code review) ---
+ROADMAP_LLM_WIKI*.md
+ROADMAP_LOGSEQ_SUPERPOWERS.md
+ROADMAP_PHASE_5_6.md
+ROADMAP_MLDOC_COMPLIANCE.md
+ROADMAP_IRONCLAD_SHIELD.md
+docs/roadmaps/
+docs/releases/
+docs/v1.8-*-PLAN.md
+docs/PROJECT_DIARY.md
+PROJECT_DIARY.md
+good_first_issues_blueprints.md
+docs/resilience-llm-json-triz.md
+docs/BRANDING.md
+
+# --- Maintainer ops scripts (not runtime) ---
+scripts/github-reorg/
+scripts/github_audit_tracker.*
+scripts/populate_gfi_*
+scripts/provision-local-workspace.sh
+scripts/reindex-code-graph.sh
+
+# --- Lockfiles (large, low signal for code review) ---
 uv.lock
 poetry.lock
 package-lock.json
+pnpm-lock.yaml
+yarn.lock
 
-# Media e Assets visivi (L'LLM non può "leggere" le immagini nei file di testo)
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.ico
-*.woff
-*.woff2
-*.ttf
-assets/images/
+# --- Duplicated agent prompt (canonical specs live in docs/openspec/) ---
+SYSTEM_PROMPT.md
 
-# Fixture di test massicce (Toglile solo se hai dump enormi di logseq graph nei test)
-# tests/fixtures/**/*.json 
-# tests/fixtures/**/*.md
-
-# Log generati dal sistema
+# --- Temp / OS cruft ---
+*.bak
+*.tmp
+*.md.tmp
 *.log
 .DS_Store
