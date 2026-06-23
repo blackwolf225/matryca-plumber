@@ -447,7 +447,7 @@ def _clusterable_catalog_titles(
     titles = sorted(str(title) for title in raw_pages)
     if graph_root is None:
         return titles
-    from .alias_index import is_journal_page_title
+    from .generational_cache import is_journal_page_title
 
     return [title for title in titles if not is_journal_page_title(graph_root, title)]
 

@@ -89,12 +89,9 @@ def page_title_from_path(graph_root: Path, path: Path) -> str:
     return _page_title_from_path(graph_root, path)
 
 
-def is_journal_page_title(graph_root: str | Path, title: str) -> bool:
+def is_journal_page_title_in_index(idx: AliasIndex, title: str) -> bool:
     """Return whether *title* maps to a file under the graph ``journals/`` tree."""
-    from .generational_cache import cached_build_alias_index
-
-    root = Path(graph_root).expanduser().resolve(strict=False)
-    relpath = cached_build_alias_index(root).page_to_relpath.get(title)
+    relpath = idx.page_to_relpath.get(title)
     if not relpath:
         return False
     return relpath.replace("\\", "/").startswith("journals/")
@@ -124,9 +121,15 @@ def should_skip_entity_overlap_pair(
     graph_root: str | Path,
     title_a: str,
     title_b: str,
+    *,
+    alias_index: AliasIndex | None = None,
 ) -> bool:
     """Return whether entity consolidation should skip an LLM overlap check."""
-    if is_journal_page_title(graph_root, title_a) or is_journal_page_title(graph_root, title_b):
+    del graph_root  # journal path lookup uses *alias_index*; date heuristics need no root
+    if alias_index is not None and (
+        is_journal_page_title_in_index(alias_index, title_a)
+        or is_journal_page_title_in_index(alias_index, title_b)
+    ):
         return True
     return is_likely_journal_date_title(title_a) or is_likely_journal_date_title(title_b)
 
@@ -415,7 +418,7 @@ __all__ = [
     "is_scannable_graph_markdown",
     "iter_scannable_pages_markdown",
     "iter_alias_source_paths",
-    "is_journal_page_title",
+    "is_journal_page_title_in_index",
     "is_likely_journal_date_title",
     "normalize_concept_key",
     "should_skip_entity_overlap_pair",

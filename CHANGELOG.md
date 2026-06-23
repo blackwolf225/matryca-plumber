@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Import cycle (P2)** — Broke `alias_index` ↔ `generational_cache` runtime cycle: pure `is_journal_page_title_in_index(AliasIndex, …)` in domain layer; cached `is_journal_page_title(graph_root, …)` lives in `generational_cache`; `should_skip_entity_overlap_pair` accepts injected `alias_index`.
+- **Flaky CI test** — 3000-page semantic clustering scale test moved to `tests/slow/` (`@pytest.mark.slow`, 15s ceiling) after intermittent failures under full-suite load (~9s vs 8s threshold); structural assertions unchanged.
 - **Core:** `link_verification` now correctly uses `file_mtime_drifted()` with exact nanosecond precision for OCC checks (thanks to @gaoflow in #88).
 - **Daemon shutdown (#44):** Final catalog and daemon state save failures now log exception details instead of being silently suppressed during graceful shutdown (thanks to @gaoflow in #100).
 - **Daemon shutdown (#101):** SIGTERM/SIGINT token-log shutdown breadcrumb failures now emit exception details instead of being silently suppressed.

@@ -12,7 +12,9 @@ from .alias_index import (
     AliasIndex,
     build_alias_index,
     index_aliases_from_file,
+    is_journal_page_title_in_index,
     iter_alias_source_paths,
+    iter_scannable_pages_markdown,
     page_title_from_path,
     purge_stale_alias_entries,
     remove_page_from_alias_index,
@@ -243,9 +245,13 @@ def cached_build_alias_index(graph_root: str | Path) -> AliasIndex:
         return idx
 
 
-def _bm25_page_paths(root: Path) -> list[Path]:
-    from .alias_index import iter_scannable_pages_markdown
+def is_journal_page_title(graph_root: str | Path, title: str) -> bool:
+    """Return whether *title* maps to a file under ``journals/`` (cached alias index)."""
+    root = Path(graph_root).expanduser().resolve(strict=False)
+    return is_journal_page_title_in_index(cached_build_alias_index(root), title)
 
+
+def _bm25_page_paths(root: Path) -> list[Path]:
     return iter_scannable_pages_markdown(root)
 
 
@@ -364,6 +370,7 @@ __all__ = [
     "clear_generational_caches",
     "gc_generational_alias_cache",
     "get_cached_bm25_corpus",
+    "is_journal_page_title",
     "patch_generational_caches_for_paths",
     "release_bm25_corpus",
     "score_bm25_query",
