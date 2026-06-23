@@ -105,6 +105,27 @@ Persistent artifacts at the graph root include `.matryca_daemon_state.json` (che
 
 Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
+#### Layer boundaries & known gaps (v1.11)
+
+Honest status after the [Expert Audit 2026-06](quality/EXPERT_AUDIT_TRIAGE_2026-06.md) triage:
+
+| Gap | Current behavior | Tracking |
+|-----|------------------|----------|
+| Graph → daemon coupling | `markdown_blocks` calls `daemon.post_write_hooks.emit_post_write_commit` directly; `post_write_hooks` already has a subscriber API but dependency direction is inverted | [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) |
+| `lock_backoff` ledger | After successful Phase 2 write, a post-write embedding lock failure can downgrade `processed` → `lock_backoff` | [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) |
+| `graph_dispatch` resolve/write | Parent UUID resolved in a separate thread from OCC snapshot capture | [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) |
+| Generational alias/BM25 cache | Per-graph mtime invalidation works; no LRU cap when switching `LOGSEQ_GRAPH_PATH` across vaults | [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) |
+| Tana import memory | `ijson` avoids full JSON DOM; `load_tana_nodes_by_id` still materializes O(nodes) `NodeDump` dict | [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) |
+| Tana idempotency v1 | Skip on `tana-id::` match only — no content-hash merge (v2 scope) | [#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139) |
+| Identity AST stale on reload | mtime-based reload without invalidating AST page parse | [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140) |
+| Dual-embedding `block_vectors.json` in RAM | Full JSON catalog in `BlockVectorStore.blocks` | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) |
+
+**Already closed from Expert Audit:** `alias_index` ↔ `generational_cache` import cycle (v1.11.0); NoRedirect DRY; Phase 2 denominator journal exclusion ([#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70)). **Audit correction:** `get_logseq_journal_format()` has no in-process cache — it re-reads `config.edn` each call (repeated I/O, not staleness).
+
+Repomix audit triage: [`docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md`](quality/REPOmix_AUDIT_TRIAGE_2026-06.md). Rejected claims: OCC lock leak (context managers release); Tana “no streaming” (`ijson` shipped); identity path hardcoding (centralized in `config_layer.py`).
+
+v2.0 north-star layout (`domain/` / `adapters/` / `orchestration/`) aligns with [Epic #20](https://github.com/MarcoPorcellato/matryca-plumber/issues/20) and [GraphRepository #17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) — not an immediate monolith split.
+
 #### Atomic ingestion (MCP)
 
 | Component | Module | Role |
@@ -142,7 +163,7 @@ sequenceDiagram
 | CLI | `src/cli/__init__.py` | `matryca import tana --file … [--apply]` — dry-run default; JSON stdout |
 | MCP surface | `src/agent/mcp_server.py` | `import_tana(export_path, dry_run=True)` |
 
-Parse uses **`ijson`** on the export file only — never materializes the full JSON DOM. Writes stamp fresh `id::` UUIDs and `tana-id::` provenance; re-import skips nodes whose `tana-id` already exists in the vault. Spec: [`docs/openspec/tana-import.md`](openspec/tana-import.md).
+Parse uses **`ijson`** on the export file only — never materializes the full JSON DOM. The loader still builds an O(nodes) `id → NodeDump` index for wikilink resolution ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)). Writes stamp fresh `id::` UUIDs and `tana-id::` provenance; re-import skips nodes whose `tana-id` already exists in the vault. Spec: [`docs/openspec/tana-import.md`](openspec/tana-import.md).
 
 #### Dual embedding (optional MCP semantic search)
 

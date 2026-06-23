@@ -2,7 +2,9 @@
 
 **Updated post-Tier C merge (2026-06-23)** — #101–#105 shipped via @gaoflow ([#108](https://github.com/MarcoPorcellato/matryca-plumber/pull/108)–[#112](https://github.com/MarcoPorcellato/matryca-plumber/pull/112)). **Tier D** opened [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129) (TUI observability slices + cognitive-module test).
 
-**Active good-first candidates:** #38, #43, #52, #53, #56, #69, #71, #85, [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90)–[#92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92), [#113](https://github.com/MarcoPorcellato/matryca-plumber/issues/113)–[#114](https://github.com/MarcoPorcellato/matryca-plumber/issues/114), [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118), [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129). Welcome comments are on each GitHub thread.
+**Active good-first candidates:** #38, #43, #52, #53, #56, #69, #71, #85, [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90)–[#92](https://github.com/MarcoPorcellato/matryca-plumber/issues/92), [#113](https://github.com/MarcoPorcellato/matryca-plumber/issues/113)–[#114](https://github.com/MarcoPorcellato/matryca-plumber/issues/114), [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118), [#125](https://github.com/MarcoPorcellato/matryca-plumber/issues/125)–[#129](https://github.com/MarcoPorcellato/matryca-plumber/issues/129), [#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138), [#141](https://github.com/MarcoPorcellato/matryca-plumber/issues/141). Welcome comments are on each GitHub thread.
+
+Expert Audit 2026-06 triage: [`docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md`](docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md) · issues [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132)–[#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139). Repomix audit: [`docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md`](docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md) · [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142).
 
 **Before opening a PR:** read [`CONTRIBUTING.md`](CONTRIBUTING.md), run `make check`, and reference the issue number in your PR title (e.g. `fix(daemon): log SIG handler shutdown telemetry (#101)`).
 
@@ -420,6 +422,26 @@ Tagged `good first issue` + `help wanted` by `scripts/populate_gfi_backlog.sh`. 
 > ```
 >
 > Keep the diff surgical — move + re-export, no behavior change. Comment here when you claim it. Glad to have you on board!
+
+---
+
+## Tier E — Expert Audit 2026-06 slices
+
+Triage: [`docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md`](docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md)
+
+| Issue | Summary | Difficulty |
+|-------|---------|------------|
+| [#141](https://github.com/MarcoPorcellato/matryca-plumber/issues/141) | `RoutingHint` enum for L1/L2 MCP hints (Repomix audit) | 2/10 |
+| [#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85) | `BootstrapHarvestStatus` Literal dedup (unchanged good-first) | 2/10 |
+| [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90)–[#91](https://github.com/MarcoPorcellato/matryca-plumber/issues/91) | Env parser DRY slices under [#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57) (+ invalid fallback warning) | 2/10 |
+
+**Verify (#138):**
+```bash
+uv run pytest tests/test_tui_dashboard.py -q
+make check
+```
+
+P1 concurrency fixes ([#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132), [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133)) and larger performance items ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135), [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136)) are maintainer-led — not good-first unless explicitly tagged.
 
 ---
 

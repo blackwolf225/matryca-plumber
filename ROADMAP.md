@@ -45,6 +45,17 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 - ~~Public API on `SessionAliasRegistry`~~ — scoped v1.9.14 helpers in `alias_state.py` (#64 partial); full upstream API deferred to v2.0
 - Journal page detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
 
+**Expert Architectural Audit 2026-06** — triage: [`docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md`](docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md). Four findings were already closed or tracked; eight new issues opened:
+
+| Issue | Area |
+|-------|------|
+| [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132), [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) | Concurrency — `lock_backoff` downgrade, `graph_dispatch` resolve/write TOCTOU |
+| [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)–[#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137) | Performance — Tana RAM peak, generational cache LRU, Phase 2 progress UX |
+| [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134), [#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) | Tech debt — graph→daemon post-write inversion, TUI state dedup load |
+| [#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139) | v2.0 — Tana content-aware re-import (`--merge`) |
+
+**Repomix Architectural Audit 2026-06** — triage: [`docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md`](docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md). Three new issues ([#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142)); vector RAM tracked on existing [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51).
+
 ---
 
 ## Medium-term (v1.9.x → v2.0-alpha)

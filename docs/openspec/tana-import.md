@@ -164,6 +164,22 @@ Every imported page and block carries provenance. **Tana node IDs never become L
 
 **Idempotency (v1):** before write, scan vault for existing `tana-id::` values; if found → **skip** that page or subtree and increment `skipped_duplicates` (no `--merge` in v1).
 
+**Idempotency limits (v1):** skip is **ID-only** — if the operator edits imported content in Logseq, a re-import still skips the subtree when `tana-id::` matches, even when Tana export content diverges. Content-hash comparison and `--merge` are v2 scope ([#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139)).
+
+---
+
+## Memory model (parse vs index)
+
+| Stage | Mechanism | RAM |
+|-------|-----------|-----|
+| JSON parse | `ijson` stream over `docs[]` | O(1) DOM — no `json.load()` |
+| Node index | `load_tana_nodes_by_id` → `dict[str, NodeDump]` | **O(nodes)** — full payloads retained today |
+| Conversion | `convert_tana_graph` + link rewrite | Additional structures on top of index |
+
+Large enterprise exports (50k+ nodes) can peak at hundreds of MB during the index phase before any write. Target improvement: incremental `StreamingGraphBuilder` retaining only parent/child indexes and tag definitions ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)).
+
+**Journal format:** `get_logseq_journal_format()` in `logseq_config.py` re-reads and re-parses `logseq/config.edn` on each call (no in-process cache). Fixing `config.edn` and re-running import picks up the new format immediately.
+
 ---
 
 ## Linking to existing vault content
@@ -244,7 +260,7 @@ Documented in [`.env.example`](../../.env.example).
 
 | Risk | Mitigation |
 |------|------------|
-| OOM on large dumps | Mandatory `ijson` streaming |
+| OOM on large dumps | `ijson` streaming parse; **open:** O(nodes) index ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)) |
 | Wrong journal filenames | `config.edn` journal format before routing |
 | Logseq UI freeze | Depth limit + page-split at 8 |
 | Undocumented Tana JSON schema | Permissive Pydantic `props`; fixture from anonymized export |
