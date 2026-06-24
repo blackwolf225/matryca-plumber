@@ -1,6 +1,6 @@
 NUM_WORKERS ?= 4
 
-.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-integration test-resilience check clean version-check build-system-prompt check-system-prompt provision-local reindex-graph
+.PHONY: help install format lint typecheck test test-full test-fast test-fast-parallel test-integration test-resilience check clean version-check agents-check build-system-prompt check-system-prompt provision-local reindex-graph
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -23,6 +23,9 @@ sandbox-read-check: ## Ensure graph reads use read_graph_file_text (v1.9.9 secur
 
 version-check: ## Fail if llms.txt version headers drift from pyproject.toml
 	uv run python scripts/check_version_consistency.py
+
+agents-check: ## Fail if AGENTS.md coherence, llms byte-identity, or doc paths drift
+	uv run python scripts/check_agents_coherence.py
 
 build-system-prompt: ## Assemble SYSTEM_PROMPT.md from docs/openspec/agent/ fragments
 	uv run python scripts/build_system_prompt.py
@@ -54,9 +57,9 @@ perf: ## Run slow performance/memory tests (no coverage gate)
 format-check: ## Verify formatting without modifying files
 	uv run ruff format --check .
 
-check: lint typecheck sandbox-read-check version-check check-system-prompt test ## Run linting, typechecking, sandbox read gate, version sync, system prompt hash, and tests
+check: lint typecheck sandbox-read-check version-check agents-check check-system-prompt test ## Run linting, typechecking, sandbox read gate, version sync, agents router, system prompt hash, and tests
 
-ci: format-check lint typecheck sandbox-read-check version-check check-system-prompt test ## CI gate: format + lint + types + sandbox + version + system prompt + tests
+ci: format-check lint typecheck sandbox-read-check version-check agents-check check-system-prompt test ## CI gate: format + lint + types + sandbox + version + agents + system prompt + tests
 
 provision-local: ## Scaffold .local/ graph indexer (requires LOCAL_GRAPH_ANALYZER_NPM_PACKAGE)
 	@bash scripts/provision-local-workspace.sh
