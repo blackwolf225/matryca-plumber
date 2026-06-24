@@ -1,12 +1,12 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.11.2 (graph layer boundary refactor + bounded RAM LRU caches + OCC nanosecond parity + parser 1.4.0 alignment + Tana workspace JSON import + unified flock + hub page OCC + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
+**Version:** 1.12.0 (plan v3 — Tier-1 prompt Clean Architecture + L0 write safety + SYSTEM_PROMPT fragment assembly + AGENTS.md router) · ships on top of 1.11.2 (graph layer boundary + bounded RAM + OCC ns parity)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
 This document is the engineering contract for **Matryca Plumber**: an enterprise-grade, **local-first background AI daemon** that mutates Logseq OG Markdown on disk. It is not a Logseq plugin, not a cloud service, and not dependent on Logseq HTTP JSON-RPC. Humans and the daemon co-edit the same `.md` trees; safety is enforced through **AST parity**, **optimistic concurrency control (OCC)**, **path sandboxing**, and operator-visible **Trust & Safety** tiers.
 
-For the maintainer timeline and crushed bottlenecks, see [`PROJECT_DIARY.md`](PROJECT_DIARY.md). For agent discipline at inference time, see [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md).
+For the maintainer timeline and crushed bottlenecks, see [`PROJECT_DIARY.md`](PROJECT_DIARY.md). For agent discipline at inference time, see [`SYSTEM_PROMPT.md`](../SYSTEM_PROMPT.md). For **Clean Architecture** boundaries on prompts (Tier-1 / L0 / Tier-2), see [`PROMPT_ARCHITECTURE.md`](PROMPT_ARCHITECTURE.md).
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TB
   Locks --> Vault
 ```
 
-**Quality bar:** **879+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make check`; local iteration via `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); slow perf tests via `make perf` (`pytest -m slow`).
+**Quality bar:** **974+** pytest targets passing (70% coverage gate on `src`), **Mypy strict** on `src` and `tests` with **zero `# type: ignore` in `src/`** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60)), Ruff lint/format clean via `make ci`; local iteration via `make test-fast` (`NUM_WORKERS` default `4`, no coverage, skips `tests/slow/`); slow perf tests via `make perf` (`pytest -m slow`). Maintainer gates: `make agents-check`, `make check-system-prompt`.
 
 **v1.8 focus:** Run indefinitely on a **16 GB CPU-only laptop** with **≤10k pages** — KV-cache-aligned prompts, bounded RAM, cooperative bootstrap I/O. See [Edge computing & performance (v1.8)](#edge-computing--performance-v18).
 
@@ -67,6 +67,8 @@ flowchart TB
 **v1.10.0 focus:** **Catalog & registry integrity** — `master_catalog.json` load/save under `cross_process_json_flock` with merge-on-save ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35), [#36](https://github.com/MarcoPorcellato/matryca-plumber/issues/36)); bootstrap harvest skips catalog upsert when semantic index append OCC-aborts ([#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37)); link registry persistence via `atomic_write_bytes` ([#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)). **Journal Phase-2 bypass (v1.9.15)** — daily notes under `journals/` receive structural indexing only; semantic LLM indexing and dual embeddings are skipped. **Mypy strictness (#60)** — zero `# type: ignore` in `src/`. See [Journal pages — structural-only indexing](#journal-pages--structural-only-indexing), [JSON sidecar concurrency](#json-sidecar-concurrency-v1100), and [`CONTRIBUTING.md`](../CONTRIBUTING.md#strict-typing-zero-mypy-suppressions-in-src).
 
 **v1.10.3 focus:** **Sovereign UI resilience & LLM contract hardening** — config/graph-path saves offloaded from the FastAPI event loop (`asyncio.to_thread`); rotating Loguru at UI startup; Pydantic `extra="forbid"` on plumber/outline structured models; recursive OpenAI strict JSON Schema generation; adaptive `max_tokens` / `max_completion_tokens`; flock sidecar files created as `0o600`. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md#v1103-non-blocking-config-saves), [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md).
+
+**v1.12.0 focus:** **Prompt Clean Architecture (plan v3)** — Tier-1 domain builders (`src/agent/prompts/core.py`, `*/prompts.py`) with constructor injection on `InstructorLLMClient`; **L0 hard rejection** (`src/graph/safety/validators.py`) before semantic index commits; **`SYSTEM_PROMPT.md` assembly** from `docs/openspec/agent/` with fragment `build-hash` CI and unlisted-fragment guard; **`AGENTS.md`** three-audience router + `make agents-check`. Full design: [`PROMPT_ARCHITECTURE.md`](PROMPT_ARCHITECTURE.md). **Recommended semver:** minor **1.12.0** (new maintainer contracts + L0 behavioral gate; no intentional PyPI CLI break).
 
 **v1.11.2 focus:** **Graph layer boundary refactor** — canonical graph primitives (`post_write`, `ast_cache`, `daemon_checkpoint`, cooperative yield, harvest runtime, prompt layout/constraints, cognitive LLM protocols) live in `src/graph/` with agent/daemon shims; `tests/test_graph_layer_boundary.py` forbids graph→agent/daemon imports ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) closed). **Bounded RAM** — generational alias/BM25 LRU (`MATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS`) and dual-embedding ondemand/resident modes (`MATRYCA_BLOCK_VECTOR_STORE_MODE`, `MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS`) ([#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136), [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial). **OCC nanosecond parity** — page writes use `st_mtime_ns` via `read_file_mtime_ns` ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial). **Shared env parsing** — `src/utils/env_parse.py`.
 
@@ -821,28 +823,43 @@ No telemetry database — the vault **is** the audit trail.
 
 **Non-goal:** New cognitive capabilities, clustering algorithms, or Logseq semantic changes.
 
-### Prompt stack (Zero-Prefill)
+### Prompt stack (Zero-Prefill + Clean Architecture v1.12)
 
 ```mermaid
 sequenceDiagram
   participant D as MaintenanceDaemon
+  participant B as semantic_lint/prompts.py
   participant S as PagePromptSession
   participant L as Local_LLM
+  participant V as safety/validators
   D->>S: build once per page cycle
   Note over S: stable_page_block + capped AliasIndex footer
-  D->>L: system = build_semantic_lint_system_prompt
+  D->>B: build_semantic_lint_system_prompt (Tier-1A)
+  D->>L: system = builder output
   D->>L: user = stable block + task_index
   D->>L: user = same stable block + task_marpa
   Note over L: llama.cpp reuses KV prefix on stable block
+  L-->>D: proposed index body
+  D->>V: validate_llm_write_diff (L0)
+  alt safe
+    D->>D: OCC commit
+  else rejected
+    D->>D: abort write
+  end
 ```
 
 | Layer | Module | Contract |
 |-------|--------|----------|
-| System (stable) | `semantic_lint_prompts.py` | Compiler rules only — **no** per-page alias map |
+| **L0 safety** | `graph/safety/validators.py` | Reject `id::` deletion and protected-zone edits before disk |
+| System (stable) | `semantic_lint/prompts.py` (re-export: `semantic_lint_prompts.py`) | Tier-1A compiler rules — **no** per-page alias map |
+| Builder DI | `prompts/core.py`, domain `*/prompts.py` | Domain modules import **only** `core`; enforced in `test_daemon_prompts` |
 | Stable user prefix | `page_prompt_session.py` | One block per file from `prepare_llm_context_payload` + optional alias footer |
 | Task tail | `prompt_layout.py` | `build_cache_aligned_prompt` — content first, task last |
-| Stateless turns | `InstructorLLMClient` | Per-page calls use `stateless=True` (`index_page`, bootstrap harvest, `generate_graph_insights`, …); cluster history optional via `MATRYCA_LLM_CLUSTER_HISTORY` |
+| Stateless turns | `InstructorLLMClient` | Injected builders; `stateless=True` for index/harvest/insights |
+| Tier-2 law | `docs/openspec/agent/` → `SYSTEM_PROMPT.md` | `make build-system-prompt` / `make check-system-prompt` |
 | Compression hygiene | `context_compressor.py`, `llm_client.py` | Ermes history condensation prose is `sanitize_prose_llm_completion()` before append/persist |
+
+Detail: [`PROMPT_ARCHITECTURE.md`](PROMPT_ARCHITECTURE.md).
 
 Bootstrap **Phase 1** and **MapReduce** harvest paths use the same layout (fixing the pre-v1.8 bootstrap prompt that placed page text after the task).
 
@@ -1114,7 +1131,12 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | `src/plumber_entry.py` | CLI vs MCP stdio disambiguation |
 | `src/agent/maintenance_daemon.py` | Autonomous poll loop, ledger, detached spawn |
 | `src/agent/page_prompt_session.py` | Per-page stable LLM prefix (v1.8 KV reuse) |
-| `src/agent/semantic_lint_prompts.py` | Stable semantic-index system prompt |
+| `src/agent/prompts/core.py` | `SystemPromptBuilder`, Tier-1A/B compile helpers |
+| `src/agent/semantic_lint/prompts.py` | Tier-1A semantic lint builder (rules 1–6) |
+| `src/agent/semantic_lint_prompts.py` | Deprecated re-export → `semantic_lint.prompts` |
+| `src/graph/safety/validators.py` | L0 `validate_llm_write_diff` before semantic commits |
+| `scripts/build_system_prompt.py` | Assemble `SYSTEM_PROMPT.md` from agent fragments |
+| `docs/PROMPT_ARCHITECTURE.md` | Clean Architecture map for prompts (plan v3) |
 | `src/agent/memory_budget.py` | RSS snapshots, Phase 1 memory teardown |
 | `src/agent/cooperative_yield.py` | Bootstrap / scan cooperative scheduling |
 | `src/agent/llm_client.py` | Adaptive structured output, `InstructorLLMClient`, backend probe |

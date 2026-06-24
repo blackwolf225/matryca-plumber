@@ -8,7 +8,7 @@ This file routes coding assistants to the correct instruction layer. **Do not lo
 |----------|------------|-------------|
 | **Cursor agent patching this repo** | [`.cursor/rules/00-karpathy-agent-behavior.mdc`](.cursor/rules/00-karpathy-agent-behavior.mdc), this file, [`CONTRIBUTING.md`](CONTRIBUTING.md) | Full [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) (runtime vault law) |
 | **External agent on a user Logseq vault** | [`llms.txt`](llms.txt) → [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | [`.cursor/rules/`](.cursor/rules/) |
-| **Maintainer changing MCP/CLI/prompt contracts** | [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md), [`docs/openspec/agent/`](docs/openspec/agent/), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md), rule `11-prompt-maintainer` | — |
+| **Maintainer changing MCP/CLI/prompt contracts** | [`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md), [`docs/openspec/agent/`](docs/openspec/agent/), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md), rule `11-prompt-maintainer` | — |
 
 ## Cursor rule routing
 
@@ -39,5 +39,5 @@ This file routes coding assistants to the correct instruction layer. **Do not lo
 make agents-check          # AGENTS.md paths, llms byte-identity, rule index
 make build-system-prompt   # after editing docs/openspec/agent/ fragments
 make check-system-prompt   # fragment build-hash vs SYSTEM_PROMPT.md
-make check                 # full local gate
+make ci                  # full CI gate (format-check + lint + types + tests)
 ```

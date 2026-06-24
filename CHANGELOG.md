@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+## [1.12.0] - 2026-06-24
+
+**Prompt Clean Architecture (plan v3) — Tier-1 DI, L0 write safety, SYSTEM_PROMPT fragment assembly**
+
 ### Added
 
 - **L0 write safety** — `src/graph/safety/validators.py` (`reject_id_line_deletion`, `reject_protected_zones_modification`) invoked before semantic index commits; `tests/test_safety_validators.py`.
@@ -14,6 +18,11 @@
 ### Changed
 
 - **Semantic lint prompt** — rule (6) dead-zone invariant; harvest/insights prompts aligned to cross-lingual output (no English-only hardcoding).
+
+### Documentation
+
+- **[`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md)** — Clean Architecture / Clean Code map for Tier-1, L0, Tier-2 assembly; mermaid + ASCII data-flow diagrams.
+- **`docs/ARCHITECTURE.md`**, **`README.md`**, **`ROADMAP.md`**, **`PROJECT_DIARY.md`** — harmonized for plan v3 and v1.12.0.
 
 ## [1.11.2] - 2026-06-24
 
