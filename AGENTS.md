@@ -25,6 +25,7 @@ This file routes coding assistants to the correct instruction layer. **Do not lo
 | [`08-github-workflow-standards.mdc`](.cursor/rules/08-github-workflow-standards.mdc) | GitHub issues/PRs (on request) |
 | [`09-github-identity-marco-porcellato.mdc`](.cursor/rules/09-github-identity-marco-porcellato.mdc) | GitHub actions as maintainer |
 | [`10-tooling-static-analysis-policy.mdc`](.cursor/rules/10-tooling-static-analysis-policy.mdc) | Public docs / CI — vendor-agnostic tooling |
+| [`11-prompt-maintainer.mdc`](.cursor/rules/11-prompt-maintainer.mdc) | Prompt fragments, Tier-1 builders, MCP docstrings (on request) |
 
 ## Runtime agent surfaces
 

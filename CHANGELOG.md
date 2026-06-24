@@ -9,6 +9,7 @@
 - **`SYSTEM_PROMPT.md` assembly** — [`docs/openspec/agent/`](docs/openspec/agent/) fragments, `make build-system-prompt`, `make check-system-prompt` (fragment `build-hash` in generated banner); Soft Gate decision tree in `soft-gate.md`.
 - **Prompt hash snapshots** — `tests/prompt_hash_snapshots.json` + `pytest tests/test_daemon_prompts.py --update-prompt-hashes`; `tests/test_llm_client_prompt_injection.py` verifies DI on `InstructorLLMClient`.
 - **Assembly guard** — `build_system_prompt.py` fails when `docs/openspec/agent/*.md` exists but is missing from `_assembly_order.txt`.
+- **Cursor rule `11-prompt-maintainer`** — on-request trigger→action checklist for prompt fragments, Tier-1 builders, and MCP docstrings; indexed in [`.cursorrules`](.cursorrules) and [`AGENTS.md`](AGENTS.md).
 
 ### Changed
 
