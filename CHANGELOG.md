@@ -1,11 +1,8 @@
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
+
+### Added
+
+- **L0 write safety** — `src/graph/safety/validators.py` (`reject_id_line_deletion`, `reject_protected_zones_modification`) invoked before semantic index commits; `tests/test_safety_validators.py`.
 
 ## [1.11.2] - 2026-06-24
 
