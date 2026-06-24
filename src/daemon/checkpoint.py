@@ -1,90 +1,14 @@
-"""Read-only daemon checkpoint access without importing ``maintenance_daemon``."""
+"""Shim — canonical checkpoint reader lives in :mod:`src.graph.daemon_checkpoint`."""
 
 from __future__ import annotations
 
-import contextlib
-import shutil
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-
-from loguru import logger
-
-from ..utils.bounded_json import BoundedJsonError, read_bounded_json
-
-CHECKPOINT_FILENAME = ".matryca_daemon_state.json"
-CHECKPOINT_BAK_FILENAME = f"{CHECKPOINT_FILENAME}.bak"
-
-
-@dataclass(frozen=True, slots=True)
-class DaemonCheckpointView:
-    """Bootstrap fields read from ``.matryca_daemon_state.json``."""
-
-    bootstrap_complete: bool = False
-    bootstrap_failed: bool = False
-    bootstrap_failed_reason: str | None = None
-    bootstrap_scanned: int = 0
-    bootstrap_total: int = 0
-    status: str | None = None
-
-
-def checkpoint_path(graph_root: Path) -> Path:
-    return graph_root / CHECKPOINT_FILENAME
-
-
-def _read_checkpoint_payload(path: Path) -> dict[str, Any] | None:
-    for attempt in range(2):
-        try:
-            payload = read_bounded_json(path)
-        except BoundedJsonError:
-            if attempt == 0:
-                continue
-            return None
-        if isinstance(payload, dict):
-            return payload
-        return None
-    return None
-
-
-def read_daemon_checkpoint(graph_root: str | Path) -> DaemonCheckpointView:
-    """Load bootstrap gate fields from the on-disk daemon checkpoint."""
-    root = Path(graph_root).expanduser().resolve(strict=False)
-    path = checkpoint_path(root)
-    bak_path = root / CHECKPOINT_BAK_FILENAME
-    if not path.is_file() and not bak_path.is_file():
-        return DaemonCheckpointView()
-
-    payload = _read_checkpoint_payload(path) if path.is_file() else None
-    if payload is None and bak_path.is_file():
-        logger.warning(
-            "[METADATA CORRUPTION DETECTED] Primary checkpoint unreadable; "
-            "attempting recovery from .bak backup."
-        )
-        payload = _read_checkpoint_payload(bak_path)
-        if payload is not None:
-            with contextlib.suppress(OSError):
-                shutil.copy2(bak_path, path)
-
-    if payload is None:
-        logger.warning(
-            "[METADATA CORRUPTION DETECTED] Checkpoint and backup both unreadable; "
-            "using empty bootstrap gate defaults."
-        )
-        return DaemonCheckpointView()
-
-    reason = payload.get("bootstrap_failed_reason")
-    status = payload.get("status")
-    return DaemonCheckpointView(
-        bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
-        bootstrap_failed=bool(payload.get("bootstrap_failed", False)),
-        bootstrap_failed_reason=(
-            str(reason) if reason not in (None, "") else None
-        ),
-        bootstrap_scanned=int(payload.get("bootstrap_scanned", 0)),
-        bootstrap_total=int(payload.get("bootstrap_total", 0)),
-        status=str(status) if status not in (None, "") else None,
-    )
-
+from ..graph.daemon_checkpoint import (
+    CHECKPOINT_BAK_FILENAME,
+    CHECKPOINT_FILENAME,
+    DaemonCheckpointView,
+    checkpoint_path,
+    read_daemon_checkpoint,
+)
 
 __all__ = [
     "CHECKPOINT_BAK_FILENAME",

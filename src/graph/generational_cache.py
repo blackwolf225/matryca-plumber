@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,8 +24,40 @@ from .page_path import page_title_from_graph_relpath
 from .path_sandbox import read_graph_file_text
 
 _lock = threading.Lock()
-_alias_cache: dict[str, tuple[frozenset[tuple[str, int]], AliasIndex]] = {}
-_bm25_cache: dict[str, tuple[frozenset[tuple[str, int]], Bm25Corpus]] = {}
+_alias_cache: OrderedDict[str, tuple[frozenset[tuple[str, int]], AliasIndex]] = OrderedDict()
+_bm25_cache: OrderedDict[str, tuple[frozenset[tuple[str, int]], Bm25Corpus]] = OrderedDict()
+_DEFAULT_CACHE_MAX_GRAPHS = 4
+
+
+def _generational_cache_max_graphs() -> int:
+    raw = os.environ.get("MATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS", "").strip()
+    if not raw:
+        return _DEFAULT_CACHE_MAX_GRAPHS
+    try:
+        return max(1, min(32, int(raw)))
+    except ValueError:
+        return _DEFAULT_CACHE_MAX_GRAPHS
+
+
+def _evict_oldest_graph_caches() -> None:
+    limit = _generational_cache_max_graphs()
+    while len(_alias_cache) > limit:
+        _alias_cache.popitem(last=False)
+    while len(_bm25_cache) > limit:
+        _bm25_cache.popitem(last=False)
+
+
+def _cache_get[T](cache: OrderedDict[str, T], key: str) -> T | None:
+    hit = cache.get(key)
+    if hit is not None:
+        cache.move_to_end(key)
+    return hit
+
+
+def _cache_set[T](cache: OrderedDict[str, T], key: str, value: T) -> None:
+    cache[key] = value
+    cache.move_to_end(key)
+    _evict_oldest_graph_caches()
 
 
 def clear_generational_caches() -> None:
@@ -149,7 +182,7 @@ def patch_generational_caches_for_paths(
     patched = False
 
     with _lock:
-        alias_hit = _alias_cache.get(key)
+        alias_hit = _cache_get(_alias_cache, key)
         if alias_hit is not None:
             sig, idx = alias_hit
             for rel in removed_rels or []:
@@ -171,10 +204,10 @@ def patch_generational_caches_for_paths(
                 updated_paths=resolved,
                 removed_rels=removed_rels,
             )
-            _alias_cache[key] = (new_sig, idx)
+            _cache_set(_alias_cache, key, (new_sig, idx))
             patched = True
 
-        bm25_hit = _bm25_cache.get(key)
+        bm25_hit = _cache_get(_bm25_cache, key)
         if bm25_hit is not None:
             sig, corpus = bm25_hit
             from src.rag.local_query import tokenize
@@ -202,7 +235,7 @@ def patch_generational_caches_for_paths(
                 updated_paths=resolved,
                 removed_rels=removed_rels,
             )
-            _bm25_cache[key] = (new_sig, corpus)
+            _cache_set(_bm25_cache, key, (new_sig, corpus))
             patched = True
 
     if resolved:
@@ -218,14 +251,14 @@ def gc_generational_alias_cache(graph_root: str | Path) -> int:
     root = Path(graph_root).expanduser().resolve(strict=False)
     key = str(root)
     with _lock:
-        hit = _alias_cache.get(key)
+        hit = _cache_get(_alias_cache, key)
         if hit is None:
             return 0
         _sig, idx = hit
         live_titles = {page_title_from_path(root, path) for path in iter_alias_source_paths(root)}
         purged = purge_stale_alias_entries(idx, live_titles)
         new_sig = _signature(iter_alias_source_paths(root), root)
-        _alias_cache[key] = (new_sig, idx)
+        _cache_set(_alias_cache, key, (new_sig, idx))
         return purged
 
 
@@ -234,14 +267,19 @@ def cached_build_alias_index(graph_root: str | Path) -> AliasIndex:
     root = Path(graph_root).expanduser().resolve(strict=False)
     key = str(root)
     with _lock:
-        paths = iter_alias_source_paths(root)
-        sig = _signature(paths, root)
-        hit = _alias_cache.get(key)
-        if hit is not None and hit[0] == sig:
-            return hit[1]
-        idx = build_alias_index(root)
-        sig_after = _signature(iter_alias_source_paths(root), root)
-        _alias_cache[key] = (sig_after, idx)
+        idx: AliasIndex | None = None
+        for _attempt in range(3):
+            paths = iter_alias_source_paths(root)
+            sig_before = _signature(paths, root)
+            hit = _cache_get(_alias_cache, key)
+            if hit is not None and hit[0] == sig_before:
+                return hit[1]
+            idx = build_alias_index(root)
+            sig_after = _signature(iter_alias_source_paths(root), root)
+            if sig_before == sig_after:
+                _cache_set(_alias_cache, key, (sig_after, idx))
+                return idx
+        assert idx is not None
         return idx
 
 
@@ -317,16 +355,22 @@ def get_cached_bm25_corpus(graph_root: str | Path) -> Bm25Corpus:
     root = Path(graph_root).expanduser().resolve(strict=False)
     key = str(root)
     with _lock:
-        paths = _bm25_page_paths(root)
-        sig = _signature(paths, root)
-        if _bm25_mode() == "resident":
-            hit = _bm25_cache.get(key)
-            if hit is not None and hit[0] == sig:
-                return hit[1]
-        corpus = _build_bm25_corpus(root)
-        if _bm25_mode() == "resident":
+        corpus: Bm25Corpus | None = None
+        for _attempt in range(3):
+            paths = _bm25_page_paths(root)
+            sig_before = _signature(paths, root)
+            if _bm25_mode() == "resident":
+                hit = _cache_get(_bm25_cache, key)
+                if hit is not None and hit[0] == sig_before:
+                    return hit[1]
+            corpus = _build_bm25_corpus(root)
+            if _bm25_mode() != "resident":
+                return corpus
             sig_after = _signature(_bm25_page_paths(root), root)
-            _bm25_cache[key] = (sig_after, corpus)
+            if sig_before == sig_after:
+                _cache_set(_bm25_cache, key, (sig_after, corpus))
+                return corpus
+        assert corpus is not None
         return corpus
 
 

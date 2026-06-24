@@ -6,12 +6,11 @@ import os
 from dataclasses import dataclass
 
 from ..agent.plumber_config import (
-    _env_bool,
-    _env_float,
     _env_str,
     resolve_llm_api_key,
     resolve_llm_base_url,
 )
+from ..utils.env_parse import env_bool, env_float
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_WEIGHT_CONTENT = 0.5
@@ -37,7 +36,7 @@ class EmbeddingSettings:
 
 def dual_embedding_enabled() -> bool:
     """Return whether daemon should dual-index blocks after semantic writes."""
-    return _env_bool("MATRYCA_DUAL_EMBEDDING_ENABLED", default=False)
+    return env_bool("MATRYCA_DUAL_EMBEDDING_ENABLED", default=False)
 
 
 def resolve_embedding_base_url() -> str:
@@ -61,9 +60,26 @@ def embedding_settings() -> EmbeddingSettings:
 
 
 def hybrid_weights() -> HybridWeights:
-    content = _env_float("MATRYCA_WEIGHT_CONTENT", DEFAULT_WEIGHT_CONTENT)
-    applicability = _env_float("MATRYCA_WEIGHT_APPLICABILITY", DEFAULT_WEIGHT_APPLICABILITY)
+    content = env_float("MATRYCA_WEIGHT_CONTENT", DEFAULT_WEIGHT_CONTENT)
+    applicability = env_float("MATRYCA_WEIGHT_APPLICABILITY", DEFAULT_WEIGHT_APPLICABILITY)
     return HybridWeights(content=content, applicability=applicability)
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticRuntimeConfig:
+    """Injectable semantic sidecar settings (embedding API + hybrid retrieval)."""
+
+    dual_embedding_enabled: bool
+    embedding: EmbeddingSettings
+    hybrid: HybridWeights
+
+    @classmethod
+    def from_env(cls) -> SemanticRuntimeConfig:
+        return cls(
+            dual_embedding_enabled=dual_embedding_enabled(),
+            embedding=embedding_settings(),
+            hybrid=hybrid_weights(),
+        )
 
 
 __all__ = [
@@ -72,6 +88,7 @@ __all__ = [
     "DEFAULT_WEIGHT_CONTENT",
     "EmbeddingSettings",
     "HybridWeights",
+    "SemanticRuntimeConfig",
     "dual_embedding_enabled",
     "embedding_settings",
     "hybrid_weights",

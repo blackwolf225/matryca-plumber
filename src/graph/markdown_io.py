@@ -3,42 +3,25 @@
 from __future__ import annotations
 
 import mmap
-import os
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..utils.env_parse import env_bool, env_int
 from .path_sandbox import assert_path_within_graph
 
 _MMAP_MIN_BYTES_ENV = "MATRYCA_MMAP_MIN_BYTES"
 _DEFAULT_MMAP_MIN_BYTES = 4096
 
 
-def _env_bool(key: str, default: bool) -> bool:
-    raw = os.environ.get(key, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
-
-
-def _env_int(key: str, default: int) -> int:
-    raw = os.environ.get(key, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
 def graph_read_mmap_enabled() -> bool:
-    return _env_bool("MATRYCA_GRAPH_READ_MMAP", True)
+    return env_bool("MATRYCA_GRAPH_READ_MMAP", True)
 
 
 def mmap_min_bytes() -> int:
-    return max(0, _env_int(_MMAP_MIN_BYTES_ENV, _DEFAULT_MMAP_MIN_BYTES))
+    return max(0, env_int(_MMAP_MIN_BYTES_ENV, _DEFAULT_MMAP_MIN_BYTES))
 
 
 @dataclass(slots=True)

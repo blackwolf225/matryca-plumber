@@ -1,7 +1,7 @@
 """Dual embedding: applicability synthesis, block vector store, hybrid search."""
 
 from .applicability import ApplicabilityLLM, InstructorApplicabilityLLM, synthesize_applicability
-from .config import dual_embedding_enabled, hybrid_weights
+from .config import SemanticRuntimeConfig, dual_embedding_enabled, hybrid_weights
 from .embedding import EmbeddingClient, OpenAICompatibleEmbeddingClient
 from .indexer import index_page_blocks
 from .search import format_semantic_search_markdown, hybrid_block_search
@@ -13,6 +13,7 @@ __all__ = [
     "EmbeddingClient",
     "InstructorApplicabilityLLM",
     "OpenAICompatibleEmbeddingClient",
+    "SemanticRuntimeConfig",
     "clear_block_vector_store_cache",
     "dual_embedding_enabled",
     "format_semantic_search_markdown",

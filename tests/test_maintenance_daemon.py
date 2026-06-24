@@ -712,7 +712,7 @@ def test_graceful_shutdown_cleanup_runs_after_final_save_errors(
 
 def test_collect_snapshot_reports_metrics(graph_root: Path) -> None:
     _write_page(graph_root, "Snap", "- snap\n")
-    snap = collect_snapshot(
+    snap, _ = collect_snapshot(
         graph_root=graph_root,
         token_logger=TokenLogger(log_path=graph_root / "x.log"),
     )
@@ -2000,6 +2000,205 @@ def test_load_daemon_state_recovers_from_bak_when_primary_corrupt(graph_root: Pa
     assert loaded.session_completion_tokens == 7
     restored = json.loads(state_path(graph_root).read_text(encoding="utf-8"))
     assert restored["session_prompt_tokens"] == 42
+
+
+def test_load_daemon_state_logs_when_bak_restore_fails(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    save_daemon_state(
+        graph_root,
+        DaemonState(status="idle", session_prompt_tokens=11),
+    )
+    state_path(graph_root).write_text("{not valid json", encoding="utf-8")
+    logged: list[str] = []
+
+    def fail_copy(*_args: object, **_kwargs: object) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.shutil.copy2", fail_copy)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *args: logged.append(msg.format(*args) if args else msg),
+    )
+
+    loaded = load_daemon_state(graph_root)
+    assert loaded.session_prompt_tokens == 11
+    assert any("restore primary" in entry for entry in logged)
+
+
+def test_save_daemon_state_logs_when_bak_write_fails(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shutil as shutil_mod
+
+    real_copy2 = shutil_mod.copy2
+    logged: list[str] = []
+
+    def selective_copy2(
+        src: str | Path,
+        dst: str | Path,
+        *,
+        follow_symlinks: bool = True,
+    ) -> str | Path:
+        if str(dst).endswith(".bak"):
+            raise OSError("disk full")
+        return real_copy2(src, dst, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.shutil.copy2", selective_copy2)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *args: logged.append(msg.format(*args) if args else msg),
+    )
+
+    save_daemon_state(graph_root, DaemonState(status="idle"))
+    assert state_path(graph_root).is_file()
+    assert any("backup copy failed" in entry for entry in logged)
+
+
+def test_finalize_link_and_journey_logs_upsert_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logged: list[str] = []
+    monkeypatch.setattr("src.agent.maintenance_daemon.journey_log_enabled", lambda: True)
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: False)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.upsert_journey_log",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("journal locked")),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *_args: logged.append(msg),
+    )
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    state = DaemonState(bootstrap_complete=True)
+    daemon._finalize_link_and_journey_pass(
+        state,
+        llm_files_processed=0,
+        fast_track_files=1,
+    )
+    assert logged == ["Journey log upsert failed"]
+
+
+def test_on_watchdog_deleted_logs_link_registry_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _write_page(graph_root, "Gone", "- x\n")
+    logged: list[str] = []
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: True)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.register_page_links_from_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("registry down")),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *args: logged.append(msg.format(*args) if args else msg),
+    )
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    daemon._on_watchdog_change(page, "deleted")
+    assert any("deleted page" in entry for entry in logged)
+
+
+def test_process_llm_cycle_logs_phase2_link_registry_merge_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = _write_page(graph_root, "Topic", "- [[Link]] note\n")
+    logged: list[str] = []
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: True)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.merge_page_links_into_registry",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("registry sidecar unavailable")),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.run_cognitive_lint_pipeline",
+        lambda *_args, **_kwargs: (CognitiveLintOutcome(), None),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *_args: logged.append(msg),
+    )
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    daemon.bootstrap_complete = True
+    state = DaemonState(bootstrap_complete=True)
+    lint_config = PlumberLintConfig()
+    daemon._process_llm_cycle_file(path, state, lint_config, reset_history_after=False)
+    assert logged == ["Phase 2 cognitive lint link registry merge failed"]
+
+
+def test_run_cycle_fast_track_logs_link_registry_registration_failure(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.agent.maintenance_daemon.reload_plumber_dotenv", lambda **_kw: None)
+    path = _write_page(graph_root, "Empty", "   \n")
+    logged: list[str] = []
+    pending_calls = {"count": 0}
+
+    def pending(*_args: object, **_kwargs: object) -> list[Path]:
+        pending_calls["count"] += 1
+        return [path] if pending_calls["count"] == 1 else []
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.list_pending_files", pending)
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: True)
+    monkeypatch.setattr("src.agent.maintenance_daemon.journey_log_enabled", lambda: False)
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.register_page_links_from_path",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("registry down")),
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.exception",
+        lambda msg, *_args: logged.append(msg),
+    )
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    daemon.bootstrap_complete = True
+    state = DaemonState(bootstrap_complete=True)
+    daemon.run_cycle(state)
+    assert logged == ["Fast-track link registry registration failed"]
+
+
+def test_run_cycle_logs_phase2_totals_failure_at_cycle_end(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.agent.maintenance_daemon.reload_plumber_dotenv", lambda **_kw: None)
+    path = _write_page(graph_root, "Empty", "   \n")
+    pending_calls = {"count": 0}
+
+    def pending(*_args: object, **_kwargs: object) -> list[Path]:
+        pending_calls["count"] += 1
+        return [path] if pending_calls["count"] == 1 else []
+
+    monkeypatch.setattr("src.agent.maintenance_daemon.list_pending_files", pending)
+    monkeypatch.setattr("src.agent.maintenance_daemon.link_verify_enabled", lambda: False)
+    monkeypatch.setattr("src.agent.maintenance_daemon.journey_log_enabled", lambda: False)
+    warnings: list[str] = []
+
+    def fail_refresh(*_args: object, **_kwargs: object) -> None:
+        raise OSError("totals scan failed")
+
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.refresh_phase2_cognitive_totals",
+        fail_refresh,
+    )
+    monkeypatch.setattr(
+        "src.agent.maintenance_daemon.logger.warning",
+        lambda msg, *args: warnings.append(msg.format(*args) if args else msg),
+    )
+
+    daemon = MaintenanceDaemon(graph_root, llm_client=StubLLM())
+    daemon.bootstrap_complete = True
+    daemon._vault_refresh_counter = 9
+    state = DaemonState(bootstrap_complete=True, phase2_cognitive_total=100)
+    daemon.run_cycle(state)
+    assert any("cycle end" in entry for entry in warnings)
 
 
 def test_run_cycle_journal_phase1_only_skips_semantic_indexing(

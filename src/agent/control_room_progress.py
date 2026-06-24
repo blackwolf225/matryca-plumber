@@ -112,7 +112,7 @@ def resolve_control_room_progress(state: DaemonState) -> ControlRoomProgress:
             percent=_percent(done, cluster_total),
         )
 
-    vault_total = state.phase2_cognitive_total
+    vault_total = state.phase2_vault_baseline_total or state.phase2_cognitive_total
     vault_done = state.phase2_cognitive_done
     if vault_total <= 0:
         vault_done, vault_total = _legacy_phase2_vault_fallback(state)

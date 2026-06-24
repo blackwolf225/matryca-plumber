@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import os
 import threading
+from collections import OrderedDict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import ijson
 from loguru import logger
 
 from ..graph.json_flock import cross_process_json_flock
@@ -19,8 +22,24 @@ BLOCK_VECTORS_FILENAME = "block_vectors.json"
 BLOCK_VECTORS_VERSION = 1
 
 _lock = threading.Lock()
-_loaded: dict[str, BlockVectorStore] = {}
+_loaded: OrderedDict[str, BlockVectorStore] = OrderedDict()
 _disk_mtimes: dict[str, float] = {}
+
+
+def _block_vector_store_max_graphs() -> int:
+    raw = os.environ.get("MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS", "").strip()
+    if not raw:
+        return 4
+    try:
+        return max(1, min(32, int(raw)))
+    except ValueError:
+        return 4
+
+
+def _evict_lru_block_stores() -> None:
+    limit = _block_vector_store_max_graphs()
+    while len(_loaded) > limit:
+        _loaded.popitem(last=False)
 
 
 def _graph_cache_key(graph_root: Path) -> str:
@@ -31,6 +50,20 @@ def _block_vectors_mtime(path: Path) -> float:
     if not path.is_file():
         return 0.0
     return path.stat().st_mtime
+
+
+def _block_vector_store_mode() -> str:
+    raw = os.environ.get("MATRYCA_BLOCK_VECTOR_STORE_MODE", "ondemand").strip().lower()
+    return raw if raw in {"resident", "ondemand"} else "ondemand"
+
+
+def _cache_block_vector_store(key: str, store: BlockVectorStore, *, disk_mtime: float) -> None:
+    if _block_vector_store_mode() != "resident":
+        return
+    _loaded[key] = store
+    _loaded.move_to_end(key)
+    _evict_lru_block_stores()
+    _disk_mtimes[key] = disk_mtime
 
 
 def _semantic_search_max_candidates() -> int:
@@ -195,7 +228,214 @@ class BlockVectorStore:
         key = _graph_cache_key(self.graph_root)
         with _lock:
             _disk_mtimes[key] = _block_vectors_mtime(path)
-            _loaded[key] = self
+            _cache_block_vector_store(key, self, disk_mtime=_disk_mtimes[key])
+
+
+def _read_block_vectors_header(path: Path) -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        "version": BLOCK_VECTORS_VERSION,
+        "updated_at": None,
+        "embedding_dim": None,
+    }
+    if not path.is_file():
+        return meta
+    try:
+        with path.open("rb") as handle:
+            for prefix, event, value in ijson.parse(handle):
+                if prefix == "version" and event in {"number", "string"}:
+                    meta["version"] = int(value)
+                elif prefix == "updated_at" and event == "string":
+                    meta["updated_at"] = value
+                elif prefix == "embedding_dim" and event == "number":
+                    meta["embedding_dim"] = int(value)
+                elif prefix == "blocks" or prefix.startswith("blocks."):
+                    break
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("Failed to read block_vectors.json header: {}", exc)
+    return meta
+
+
+def _coerce_embedding_dim(raw: Any) -> int | None:
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    return None
+
+
+def _validate_block_vectors(
+    record: BlockVectorRecord,
+    *,
+    block_uuid: str,
+    embedding_dim: int | None,
+) -> tuple[bool, int | None]:
+    new_dim = embedding_dim
+    for vector in (record.vec_content, record.vec_applicability):
+        if not vector:
+            logger.warning("Empty embedding vector for block {}", block_uuid)
+            return False, embedding_dim
+        dim = len(vector)
+        if new_dim is None:
+            new_dim = dim
+        elif dim != new_dim:
+            logger.warning(
+                "Embedding dim mismatch for {}: got {} expected {} "
+                "(reindex after MATRYCA_EMBEDDING_MODEL change)",
+                block_uuid,
+                dim,
+                new_dim,
+            )
+            return False, embedding_dim
+    return True, new_dim
+
+
+def _invalidate_block_vector_cache(graph_root: Path) -> None:
+    key = _graph_cache_key(graph_root)
+    with _lock:
+        _loaded.pop(key, None)
+        path = BlockVectorStore.store_path(graph_root)
+        if path.is_file():
+            _disk_mtimes[key] = _block_vectors_mtime(path)
+        else:
+            _disk_mtimes.pop(key, None)
+
+
+def apply_page_block_vector_updates(
+    graph_root: Path,
+    page_title: str,
+    *,
+    upserts: dict[str, BlockVectorRecord],
+    keep_uuids: set[str],
+) -> tuple[int, int]:
+    """Apply page-scoped upserts/prunes via streaming merge (avoids full-vault RAM load)."""
+    root = graph_root.expanduser().resolve(strict=False)
+    path = BlockVectorStore.store_path(root)
+
+    embedding_dim = (
+        _coerce_embedding_dim(_read_block_vectors_header(path).get("embedding_dim"))
+        if path.is_file()
+        else None
+    )
+    validated: dict[str, BlockVectorRecord] = {}
+    for block_uuid, record in upserts.items():
+        ok, embedding_dim = _validate_block_vectors(
+            record,
+            block_uuid=block_uuid,
+            embedding_dim=embedding_dim,
+        )
+        if ok:
+            validated[block_uuid] = record
+    indexed = len(validated)
+
+    if not path.is_file():
+        if not validated:
+            return 0, 0
+        store = BlockVectorStore(graph_root=root)
+        for block_uuid, record in validated.items():
+            store.upsert(block_uuid, record)
+        store.save()
+        return indexed, 0
+
+    pending = dict(validated)
+    pruned = 0
+    changed = bool(pending)
+    tmp = path.with_suffix(".json.tmp")
+
+    with cross_process_json_flock(path):
+        meta = _read_block_vectors_header(path)
+        version = int(meta.get("version", BLOCK_VECTORS_VERSION))
+        if embedding_dim is None:
+            embedding_dim = _coerce_embedding_dim(meta.get("embedding_dim"))
+
+        with path.open("rb") as src, tmp.open("w", encoding="utf-8") as dst:
+            now = datetime.now(tz=UTC).isoformat()
+            dst.write("{\n")
+            dst.write(f'  "version": {version},\n')
+            dst.write(f'  "updated_at": {json.dumps(now)},\n')
+            if embedding_dim is not None:
+                dst.write(f'  "embedding_dim": {embedding_dim},\n')
+            dst.write('  "blocks": {\n')
+
+            first = True
+            try:
+                for block_uuid, raw in ijson.kvitems(src, "blocks"):
+                    block_uuid = str(block_uuid)
+                    if not isinstance(raw, dict):
+                        continue
+                    try:
+                        rec = BlockVectorRecord.from_json(raw)
+                    except (ValueError, TypeError) as exc:
+                        logger.warning(
+                            "Skipping corrupt block {} during merge: {}",
+                            block_uuid,
+                            exc,
+                        )
+                        changed = True
+                        continue
+
+                    if rec.page_title == page_title:
+                        if block_uuid not in keep_uuids:
+                            pruned += 1
+                            changed = True
+                            continue
+                        if block_uuid in pending:
+                            rec = pending.pop(block_uuid)
+                            changed = True
+                    elif block_uuid in pending:
+                        rec = pending.pop(block_uuid)
+                        changed = True
+
+                    if not first:
+                        dst.write(",\n")
+                    first = False
+                    entry = json.dumps(rec.to_json(), ensure_ascii=False)
+                    dst.write(f"    {json.dumps(block_uuid)}: {entry}")
+            except (BoundedJsonError, OSError, ValueError, TypeError) as exc:
+                logger.warning("Failed to stream block_vectors.json during merge: {}", exc)
+                tmp.unlink(missing_ok=True)
+                return indexed, pruned
+
+            for block_uuid, rec in pending.items():
+                changed = True
+                if not first:
+                    dst.write(",\n")
+                first = False
+                entry = json.dumps(rec.to_json(), ensure_ascii=False)
+                dst.write(f"    {json.dumps(block_uuid)}: {entry}")
+
+            dst.write("\n  }\n}\n")
+
+        if not changed:
+            tmp.unlink(missing_ok=True)
+            return indexed, pruned
+
+        tmp.replace(path)
+        _invalidate_block_vector_cache(root)
+
+    return indexed, pruned
+
+
+def iter_block_records_from_disk(graph_root: Path) -> Iterator[tuple[str, BlockVectorRecord]]:
+    """Stream block records from disk without retaining the global resident cache."""
+    root = graph_root.expanduser().resolve(strict=False)
+    path = BlockVectorStore.store_path(root)
+    if not path.is_file():
+        return
+    try:
+        with cross_process_json_flock(path), path.open("rb") as handle:
+            for block_uuid, raw in ijson.kvitems(handle, "blocks"):
+                if isinstance(raw, dict):
+                    yield str(block_uuid), BlockVectorRecord.from_json(raw)
+    except (BoundedJsonError, OSError, ValueError, TypeError) as exc:
+        logger.warning("Failed to stream block_vectors.json: {}", exc)
+
+
+def release_block_vector_store(graph_root: Path) -> None:
+    """Drop the in-memory store for one graph (Phase teardown / RAM budget)."""
+    key = _graph_cache_key(graph_root)
+    with _lock:
+        _loaded.pop(key, None)
+        _disk_mtimes.pop(key, None)
 
 
 def load_block_vector_store(
@@ -213,16 +453,26 @@ def load_block_vector_store(
 
         store = BlockVectorStore(graph_root=Path(key))
         if path.is_file():
-            try:
-                with cross_process_json_flock(path):
-                    payload = read_bounded_json(path)
-                if isinstance(payload, dict):
-                    store = BlockVectorStore.from_json(Path(key), payload)
-            except (BoundedJsonError, OSError, ValueError, TypeError) as exc:
-                logger.warning("Failed to load block_vectors.json: {}", exc)
-        _loaded[key] = store
-        _disk_mtimes[key] = disk_mtime
+            if _block_vector_store_mode() == "ondemand":
+                meta = _read_block_vectors_header(path)
+                store.version = int(meta.get("version", BLOCK_VECTORS_VERSION))
+                updated_at = meta.get("updated_at")
+                store.updated_at = updated_at if isinstance(updated_at, str) else None
+                store.embedding_dim = _coerce_embedding_dim(meta.get("embedding_dim"))
+            else:
+                try:
+                    with cross_process_json_flock(path):
+                        payload = read_bounded_json(path)
+                    if isinstance(payload, dict):
+                        store = BlockVectorStore.from_json(Path(key), payload)
+                except (BoundedJsonError, OSError, ValueError, TypeError) as exc:
+                    logger.warning("Failed to load block_vectors.json: {}", exc)
+        _cache_block_vector_store(key, store, disk_mtime=disk_mtime)
         return store
+
+
+def block_vector_store_ondemand() -> bool:
+    return _block_vector_store_mode() == "ondemand"
 
 
 def clear_block_vector_store_cache() -> None:
@@ -237,7 +487,11 @@ __all__ = [
     "BLOCK_VECTORS_VERSION",
     "BlockVectorRecord",
     "BlockVectorStore",
+    "apply_page_block_vector_updates",
+    "block_vector_store_ondemand",
     "_semantic_search_max_candidates",
     "clear_block_vector_store_cache",
+    "iter_block_records_from_disk",
     "load_block_vector_store",
+    "release_block_vector_store",
 ]

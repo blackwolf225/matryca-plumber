@@ -27,3 +27,31 @@ def test_serialize_thermal_rejects_nan_and_inf() -> None:
 
 def test_serialize_thermal_accepts_int() -> None:
     assert serialize_plumber_config_field_for_dotenv("thermal_delay_bootstrap", 2) == "2.0"
+
+
+def test_env_int_warns_on_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.agent import plumber_config
+
+    warnings: list[str] = []
+
+    def _capture(msg: str, *args: object) -> None:
+        warnings.append(msg.format(*args) if args else msg)
+
+    monkeypatch.setattr("src.utils.env_parse.logger.warning", _capture)
+    monkeypatch.setenv("MATRYCA_TEST_INT_ENV", "not-a-number")
+    assert plumber_config._env_int("MATRYCA_TEST_INT_ENV", 42) == 42
+    assert any("MATRYCA_TEST_INT_ENV" in warning for warning in warnings)
+
+
+def test_env_float_warns_on_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.utils import env_parse
+
+    warnings: list[str] = []
+
+    def _capture(msg: str, *args: object) -> None:
+        warnings.append(msg.format(*args) if args else msg)
+
+    monkeypatch.setattr("src.utils.env_parse.logger.warning", _capture)
+    monkeypatch.setenv("MATRYCA_TEST_FLOAT_ENV", "not-a-float")
+    assert env_parse.env_float("MATRYCA_TEST_FLOAT_ENV", 1.5) == 1.5
+    assert any("MATRYCA_TEST_FLOAT_ENV" in warning for warning in warnings)

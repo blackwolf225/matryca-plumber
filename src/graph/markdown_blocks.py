@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import os
 import re
 import tempfile
@@ -142,17 +141,37 @@ def bullet_indent_unit(lines: list[str], bullet_idx: int) -> str:
     return "  "
 
 
+def read_file_mtime_ns(file_path: str | Path) -> int | None:
+    """Return ``st_mtime_ns`` for ``file_path``, or ``None`` when the path is unreadable."""
+    try:
+        st = Path(file_path).stat()
+    except OSError:
+        return None
+    return int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+
+
 def read_file_mtime(file_path: str | Path) -> float | None:
-    """Return ``st_mtime`` for ``file_path``, or ``None`` when the path is unreadable."""
+    """Return ``st_mtime`` in seconds (legacy); prefer :func:`read_file_mtime_ns` for OCC."""
     try:
         return Path(file_path).stat().st_mtime
     except OSError:
         return None
 
 
-def occ_snapshot(file_path: str | Path) -> float | None:
-    """Phase 1: capture ``st_mtime`` before expensive work (LLM inference)."""
-    return read_file_mtime(file_path)
+def _normalize_baseline_mtime_ns(value: int | float) -> int:
+    """Accept nanosecond baselines or legacy second snapshots (int/float)."""
+    if isinstance(value, float):
+        if value < 1_000_000_000_000:
+            return int(value * 1_000_000_000)
+        return int(value)
+    if value < 1_000_000_000_000:
+        return int(value) * 1_000_000_000
+    return int(value)
+
+
+def occ_snapshot(file_path: str | Path) -> int | None:
+    """Phase 1: capture ``st_mtime_ns`` before expensive work (LLM inference)."""
+    return read_file_mtime_ns(file_path)
 
 
 class OCCConflictError(Exception):
@@ -162,8 +181,8 @@ class OCCConflictError(Exception):
         self,
         file_path: str | Path,
         *,
-        baseline_mtime: float,
-        current_mtime: float | None,
+        baseline_mtime: int | float,
+        current_mtime: int | float | None,
     ) -> None:
         self.file_path = Path(file_path)
         self.baseline_mtime = baseline_mtime
@@ -179,28 +198,28 @@ class OCCSnapshot:
     """Phase-1 mtime snapshot for two-phase optimistic concurrency control."""
 
     file_path: Path
-    baseline_mtime: float
+    baseline_mtime: int
 
     @classmethod
     def capture(cls, file_path: str | Path) -> OCCSnapshot | None:
-        mtime = read_file_mtime(file_path)
-        if mtime is None:
+        mtime_ns = read_file_mtime_ns(file_path)
+        if mtime_ns is None:
             return None
-        return cls(file_path=Path(file_path), baseline_mtime=mtime)
+        return cls(file_path=Path(file_path), baseline_mtime=mtime_ns)
 
     def drifted(self) -> bool:
         return file_mtime_drifted(self.file_path, self.baseline_mtime)
 
     def refresh_after_own_write(self) -> None:
         """Re-baseline after our own committed write (multi-step same-request edits)."""
-        current = read_file_mtime(self.file_path)
+        current = read_file_mtime_ns(self.file_path)
         if current is not None:
             self.baseline_mtime = current
 
 
 def occ_verify_before_write(
     file_path: str | Path,
-    baseline_mtime: float,
+    baseline_mtime: int | float,
     *,
     raise_on_conflict: bool = False,
 ) -> bool:
@@ -210,18 +229,35 @@ def occ_verify_before_write(
             raise OCCConflictError(
                 file_path,
                 baseline_mtime=baseline_mtime,
-                current_mtime=read_file_mtime(file_path),
+                current_mtime=read_file_mtime_ns(file_path),
             )
         return False
     return True
 
 
-def file_mtime_drifted(file_path: str | Path, baseline_mtime: float) -> bool:
-    """Return whether on-disk mtime differs from ``baseline_mtime`` (user edit during inference)."""
-    current = read_file_mtime(file_path)
+def file_mtime_drifted(file_path: str | Path, baseline_mtime: int | float) -> bool:
+    """Return whether on-disk mtime differs from ``baseline_mtime``.
+
+    Nanosecond baselines (``>= 1e12`` or normalized ns) use exact ``st_mtime_ns``
+    equality. Legacy second snapshots (``int``/``float`` ``< 1e12``) preserve the
+    pre-#153 semantics: float baselines compare ``st_mtime``; int baselines compare
+    whole Unix seconds.
+    """
+    if isinstance(baseline_mtime, float) and baseline_mtime < 1_000_000_000_000:
+        current = read_file_mtime(file_path)
+        if current is None:
+            return True
+        return current != baseline_mtime
+    if isinstance(baseline_mtime, int) and baseline_mtime < 1_000_000_000_000:
+        current = read_file_mtime_ns(file_path)
+        if current is None:
+            return True
+        return current // 1_000_000_000 != baseline_mtime
+
+    current = read_file_mtime_ns(file_path)
     if current is None:
         return True
-    return not math.isclose(baseline_mtime, current, rel_tol=0.0, abs_tol=1e-6)
+    return current != _normalize_baseline_mtime_ns(baseline_mtime)
 
 
 def atomic_write_bytes_if_unchanged(
@@ -229,7 +265,7 @@ def atomic_write_bytes_if_unchanged(
     data: bytes,
     *,
     graph_root: str | Path,
-    baseline_mtime: float,
+    baseline_mtime: int | float,
     validate_block_refs: bool = True,
     robot_commit_summary: str | None = None,
 ) -> bool:
@@ -256,7 +292,7 @@ def atomic_write_bytes(
     *,
     graph_root: str | Path,
     validate_block_refs: bool = True,
-    baseline_mtime: float | None = None,
+    baseline_mtime: int | float | None = None,
     robot_commit_summary: str | None = None,
 ) -> None:
     """Write ``data`` to ``file_path`` via temp file, ``fsync``, and atomic ``os.replace``.
@@ -311,7 +347,7 @@ def atomic_write_bytes(
                 raise OCCConflictError(
                     file_path,
                     baseline_mtime=baseline_mtime,
-                    current_mtime=read_file_mtime(file_path),
+                    current_mtime=read_file_mtime_ns(file_path),
                 )
             _commit_once()
             if is_markdown:
@@ -421,6 +457,7 @@ __all__ = [
     "occ_snapshot",
     "occ_verify_before_write",
     "read_file_mtime",
+    "read_file_mtime_ns",
     "read_page_lines",
     "strip_line_endings",
     "strip_lines_for_match",

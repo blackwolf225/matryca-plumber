@@ -6,9 +6,9 @@ import time
 from pathlib import Path
 
 import pytest
-from src.agent.plumber_config import PlumberLintConfig
-from src.agent.plumber_llm import BootstrapSummaryResult
 from src.graph.bootstrap_harvest import harvest_page_into_catalog
+from src.graph.cognitive_llm import BootstrapSummaryResult
+from src.graph.harvest_runtime import HarvestRuntimeConfig
 from src.graph.hierarchical_summarization import (
     chunk_outliner_content,
     mapreduce_harvest_page_summary,
@@ -59,7 +59,7 @@ def test_mapreduce_harvest_uses_single_pass_below_trigger() -> None:
             return BootstrapSummaryResult(summary=f"Summary for {page_title}")
 
     content = "- Small page\n  - one child\n"
-    config = PlumberLintConfig(mapreduce_trigger_chars=10_000)
+    config = HarvestRuntimeConfig(mapreduce_trigger_chars=10_000)
     result = mapreduce_harvest_page_summary(
         SinglePassLLM(),
         page_title="Small",
@@ -100,7 +100,7 @@ def test_mapreduce_harvest_splits_and_reduces_above_trigger() -> None:
     root_a = "- Root A\n" + "  - child\n" * 200
     root_b = "- Root B\n" + "  - child\n" * 200
     content = root_a + root_b
-    config = PlumberLintConfig(mapreduce_trigger_chars=500, mapreduce_chunk_chars=400)
+    config = HarvestRuntimeConfig(mapreduce_trigger_chars=500, mapreduce_chunk_chars=400)
     result = mapreduce_harvest_page_summary(
         MapReduceLLM(),
         page_title="Giant Log",
@@ -142,7 +142,7 @@ def test_mapreduce_thermal_pause_after_each_harvest_turn(
     root_a = "- Root A\n" + "  - child\n" * 200
     root_b = "- Root B\n" + "  - child\n" * 200
     content = root_a + root_b
-    config = PlumberLintConfig(
+    config = HarvestRuntimeConfig(
         mapreduce_trigger_chars=500,
         mapreduce_chunk_chars=400,
         thermal_delay_bootstrap=1.5,
@@ -192,7 +192,7 @@ def test_harvest_page_into_catalog_mapreduce_integration(graph_root: Path) -> No
     path.write_text(body, encoding="utf-8")
 
     catalog = load_master_catalog(graph_root)
-    config = PlumberLintConfig(mapreduce_trigger_chars=2_000, mapreduce_chunk_chars=800)
+    config = HarvestRuntimeConfig(mapreduce_trigger_chars=2_000, mapreduce_chunk_chars=800)
     status, changed, llm_called = harvest_page_into_catalog(
         graph_root,
         catalog,

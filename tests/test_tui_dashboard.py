@@ -7,7 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from src.agent.maintenance_daemon import DaemonState, FileState, save_daemon_state
+from src.agent.maintenance_daemon import (
+    DaemonState,
+    FileState,
+    load_daemon_state,
+    save_daemon_state,
+)
 from src.cli.tui_dashboard import _try_load_daemon_state, collect_snapshot, collect_snapshot_safe
 from src.utils.bounded_json import BoundedJsonError
 from src.utils.token_logger import TokenLogger
@@ -28,7 +33,7 @@ def test_collect_snapshot_reflects_updated_daemon_state(graph_root: Path) -> Non
     _write_page(graph_root, "Beta", "- beta\n")
     logger = TokenLogger(log_path=graph_root / "ops.log")
 
-    first = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    first, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
     assert first.total_pages == 2
     assert first.processed_pages == 0
 
@@ -44,7 +49,7 @@ def test_collect_snapshot_reflects_updated_daemon_state(graph_root: Path) -> Non
     )
     save_daemon_state(graph_root, state)
 
-    second = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    second, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
     assert second.total_pages == 2
     assert second.processed_pages == 1
     assert second.processed_pages != first.processed_pages
@@ -56,14 +61,14 @@ def test_collect_snapshot_activity_feed_updates_when_log_appends(graph_root: Pat
     logger = TokenLogger(log_path=log_path)
     log_path.write_text(json.dumps({"message": "first-event"}) + "\n", encoding="utf-8")
 
-    first = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    first, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
     assert first.activity_lines
     assert "first-event" in first.activity_lines[-1]
 
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"message": "second-event"}) + "\n")
 
-    second = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    second, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
     assert second.activity_lines
     assert "second-event" in second.activity_lines[-1]
     assert second.activity_lines != first.activity_lines
@@ -81,7 +86,7 @@ def test_collect_snapshot_logs_activity_tail_failures(graph_root: Path) -> None:
         ),
         patch("src.cli.tui_dashboard.loguru_logger.exception") as logged,
     ):
-        snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
+        snap, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
 
     assert snap.activity_lines == []
     logged.assert_called_once_with("TUI dashboard failed to load token activity summaries")
@@ -106,7 +111,7 @@ def test_collect_snapshot_uses_checkpoint_processed_count_despite_mtime_drift(
     save_daemon_state(graph_root, state)
     logger = TokenLogger(log_path=graph_root / "ops.log")
 
-    snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    snap, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
 
     assert snap.processed_pages == 1
     assert snap.total_pages == 1
@@ -115,7 +120,7 @@ def test_collect_snapshot_uses_checkpoint_processed_count_despite_mtime_drift(
 
 def test_collect_snapshot_includes_refresh_timestamp(graph_root: Path) -> None:
     _write_page(graph_root, "Tick", "- tick\n")
-    snap = collect_snapshot(
+    snap, _ = collect_snapshot(
         graph_root=graph_root,
         token_logger=TokenLogger(log_path=graph_root / "ops.log"),
     )
@@ -136,7 +141,7 @@ def test_collect_snapshot_phase2_panel_fields(graph_root: Path) -> None:
     save_daemon_state(graph_root, state)
     logger = TokenLogger(log_path=graph_root / "ops.log")
 
-    snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    snap, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
 
     assert snap.bootstrap_complete is True
     assert snap.current_cluster == "cluster-3"
@@ -158,7 +163,7 @@ def test_collect_snapshot_phase2_cluster_progress_bar(graph_root: Path) -> None:
     save_daemon_state(graph_root, state)
     logger = TokenLogger(log_path=graph_root / "ops.log")
 
-    snap = collect_snapshot(graph_root=graph_root, token_logger=logger)
+    snap, _ = collect_snapshot(graph_root=graph_root, token_logger=logger)
 
     assert snap.current_cluster_files_total == 4
     assert snap.current_cluster_files_done == 2
@@ -195,9 +200,25 @@ def test_collect_snapshot_safe_falls_back_to_last_good_state_on_read_failure(
 
     assert second.session_prompt_tokens == 42
     assert still_cached is cached_state
-    logged.assert_any_call("TUI dashboard failed to load daemon state; using fallback state")
-    logged.assert_any_call("TUI dashboard failed to refresh last good daemon state")
-    assert logged.call_count == 2
+    logged.assert_called_once_with(
+        "TUI dashboard failed to load daemon state; using fallback state",
+    )
+
+
+def test_collect_snapshot_safe_loads_daemon_state_once_on_success(
+    graph_root: Path,
+) -> None:
+    _write_page(graph_root, "Once", "- once\n")
+    logger = TokenLogger(log_path=graph_root / "ops.log")
+    save_daemon_state(graph_root, DaemonState(status="running"))
+
+    with patch(
+        "src.cli.tui_dashboard.load_daemon_state",
+        wraps=load_daemon_state,
+    ) as load_state:
+        collect_snapshot_safe(graph_root=graph_root, token_logger=logger)
+
+    assert load_state.call_count == 1
 
 
 @pytest.mark.parametrize(

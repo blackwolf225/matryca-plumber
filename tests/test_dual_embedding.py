@@ -12,9 +12,19 @@ from src.semantic.math_util import cosine_similarity, hybrid_score
 from src.semantic.search import hybrid_block_search
 from src.semantic.store import (
     BlockVectorRecord,
+    apply_page_block_vector_updates,
     clear_block_vector_store_cache,
+    iter_block_records_from_disk,
     load_block_vector_store,
 )
+
+
+@pytest.fixture(autouse=True)
+def _resident_block_vector_store_for_round_trip_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Store round-trip tests expect resident caching unless they override mode."""
+    monkeypatch.setenv("MATRYCA_BLOCK_VECTOR_STORE_MODE", "resident")
 
 
 class MockApplicabilityLLM:
@@ -454,6 +464,231 @@ def test_index_page_blocks_skips_without_flag_enabled(
         embedding_client=MockEmbeddingClient(),
     )
     assert count == 0
+
+
+def test_index_page_blocks_respects_injected_runtime_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.semantic.config import (
+        EmbeddingSettings,
+        HybridWeights,
+        SemanticRuntimeConfig,
+    )
+
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+    pages = tmp_path / "pages"
+    pages.mkdir(parents=True)
+    (pages / "Demo.md").write_text("- No id line\n", encoding="utf-8")
+    disabled = SemanticRuntimeConfig(
+        dual_embedding_enabled=False,
+        embedding=EmbeddingSettings(
+            base_url="http://127.0.0.1:9",
+            model="test",
+            api_key="test",
+        ),
+        hybrid=HybridWeights(content=0.5, applicability=0.5),
+    )
+    count = index_page_blocks(
+        tmp_path,
+        pages / "Demo.md",
+        "Demo",
+        llm_client=MockApplicabilityLLM(),
+        embedding_client=MockEmbeddingClient(),
+        runtime_config=disabled,
+    )
+    assert count == 0
+
+
+def test_hybrid_block_search_streams_without_resident_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.semantic import store as store_module
+
+    clear_block_vector_store_cache()
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "uuid-alpha",
+        BlockVectorRecord(
+            page_title="P",
+            block_text="alpha content",
+            applicability_text="Useful when asking about: alpha content",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[0.8, 0.2],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    hits = hybrid_block_search(
+        tmp_path,
+        "query",
+        embedding_client=MockEmbeddingClient(),
+        limit=5,
+    )
+    assert hits
+    assert len(store_module._loaded) == 0
+
+
+def test_hybrid_block_search_caps_candidates_while_streaming(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_block_vector_store_cache()
+    monkeypatch.setenv("MATRYCA_DUAL_EMBEDDING_ENABLED", "true")
+    monkeypatch.setenv("MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES", "3")
+
+    store = load_block_vector_store(tmp_path)
+    for index in range(10):
+        store.upsert(
+            f"uuid-{index}",
+            BlockVectorRecord(
+                page_title="P",
+                block_text=f"block {index} query token",
+                applicability_text=f"Useful when asking about: block {index}",
+                vec_content=[1.0, 0.0],
+                vec_applicability=[0.8, 0.2],
+                updated_at=f"2026-01-{index + 1:02d}",
+            ),
+        )
+    store.save()
+    clear_block_vector_store_cache()
+
+    hits = hybrid_block_search(
+        tmp_path,
+        "query token",
+        embedding_client=MockEmbeddingClient(),
+        limit=5,
+    )
+    assert hits
+    assert hits[0].block_uuid.startswith("uuid-")
+
+
+def test_block_vector_store_lru_eviction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.semantic import store as store_module
+
+    clear_block_vector_store_cache()
+    monkeypatch.setattr(store_module, "_block_vector_store_max_graphs", lambda: 2)
+    roots = [tmp_path / f"g{i}" for i in range(3)]
+    for root in roots:
+        root.mkdir()
+        store = load_block_vector_store(root)
+        store.save()
+    assert len(store_module._loaded) == 2
+
+
+def test_block_vector_store_ondemand_does_not_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from src.semantic import store as store_module
+
+    clear_block_vector_store_cache()
+    monkeypatch.setenv("MATRYCA_BLOCK_VECTOR_STORE_MODE", "ondemand")
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "uuid-1",
+        BlockVectorRecord(
+            page_title="P",
+            block_text="alpha",
+            applicability_text="app",
+            vec_content=[1.0],
+            vec_applicability=[1.0],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    assert len(store_module._loaded) == 0
+    reloaded = load_block_vector_store(tmp_path)
+    assert reloaded.blocks == {}
+    on_disk = dict(iter_block_records_from_disk(tmp_path))
+    assert on_disk["uuid-1"].page_title == "P"
+
+
+def test_apply_page_block_vector_updates_preserves_other_pages(
+    tmp_path: Path,
+) -> None:
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "other-page-block",
+        BlockVectorRecord(
+            page_title="Other",
+            block_text="keep me",
+            applicability_text="keep",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[1.0, 0.0],
+            updated_at="t",
+        ),
+    )
+    store.upsert(
+        "demo-stale",
+        BlockVectorRecord(
+            page_title="Demo",
+            block_text="stale",
+            applicability_text="stale",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[1.0, 0.0],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    indexed, pruned = apply_page_block_vector_updates(
+        tmp_path,
+        "Demo",
+        upserts={
+            "demo-new": BlockVectorRecord(
+                page_title="Demo",
+                block_text="fresh",
+                applicability_text="fresh",
+                vec_content=[0.0, 1.0],
+                vec_applicability=[0.5, 0.5],
+                updated_at="t2",
+            ),
+        },
+        keep_uuids={"demo-new"},
+    )
+    assert indexed == 1
+    assert pruned == 1
+
+    reloaded = load_block_vector_store(tmp_path, force_reload=True)
+    assert "other-page-block" in reloaded.blocks
+    assert "demo-stale" not in reloaded.blocks
+    assert reloaded.blocks["demo-new"].block_text == "fresh"
+
+
+def test_load_block_vector_store_ondemand_reads_header_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clear_block_vector_store_cache()
+    store = load_block_vector_store(tmp_path)
+    store.upsert(
+        "uuid-a",
+        BlockVectorRecord(
+            page_title="P",
+            block_text="alpha",
+            applicability_text="when alpha",
+            vec_content=[1.0, 0.0],
+            vec_applicability=[0.8, 0.2],
+            updated_at="t",
+        ),
+    )
+    store.save()
+    clear_block_vector_store_cache()
+
+    monkeypatch.setenv("MATRYCA_BLOCK_VECTOR_STORE_MODE", "ondemand")
+    shell = load_block_vector_store(tmp_path)
+    assert shell.blocks == {}
+    assert shell.embedding_dim == 2
+
+    monkeypatch.setenv("MATRYCA_BLOCK_VECTOR_STORE_MODE", "resident")
+    clear_block_vector_store_cache()
+    resident = load_block_vector_store(tmp_path, force_reload=True)
+    assert "uuid-a" in resident.blocks
 
 
 def test_load_block_vector_store_self_heals_corrupt_vectors(tmp_path: Path) -> None:

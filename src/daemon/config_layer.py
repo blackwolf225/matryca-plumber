@@ -170,6 +170,9 @@ class IdentityConfigStore:
         if page_title is None:
             return IdentityConfig(telos="", constraints="", source_page=None)
         cache = get_graph_ast_cache(self.graph_root)
+        config_path = resolve_identity_config_path(self.graph_root, for_write=False)
+        if config_path.is_file():
+            cache.apply_file_event(config_path, "modified")
         graph = cache.get_graph()
         page = graph.pages.get(page_title)
         if page is None:

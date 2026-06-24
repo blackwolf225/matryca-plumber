@@ -17,7 +17,11 @@ from .alias_index import (
 )
 from .generational_cache import cached_build_alias_index
 from .link_tag_hop import _WIKILINK
-from .master_catalog import MATRYCA_GENERATED_INDEX_TITLES, load_master_catalog
+from .master_catalog import (
+    MATRYCA_GENERATED_INDEX_TITLES,
+    CatalogLoadError,
+    load_master_catalog,
+)
 from .page_properties import is_plumber_authored_page
 from .path_sandbox import read_graph_file_text
 
@@ -120,7 +124,8 @@ def _count_catalog_summaries(graph_root: Path) -> int:
     root = graph_root.expanduser().resolve(strict=False)
     try:
         catalog = load_master_catalog(root)
-    except Exception:
+    except (CatalogLoadError, OSError, BoundedJsonError) as exc:
+        logger.warning("Could not load master catalog for summary count: {}", exc)
         return 0
     return sum(
         1

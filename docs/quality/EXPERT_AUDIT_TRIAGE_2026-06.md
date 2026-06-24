@@ -60,6 +60,10 @@ Target layout (`domain/` / `adapters/` / `orchestration/`) documented in ROADMAP
 
 **Related (Repomix audit):** [`REPOmix_AUDIT_TRIAGE_2026-06.md`](REPOmix_AUDIT_TRIAGE_2026-06.md) · [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142)
 
+**Related (Clean Architecture audit):** [`CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md) · [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153)–[#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154)
+
+**Related (Claude Architectural audit):** [`CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md) · [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155)–[#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157)
+
 ---
 
 ## GitHub issues from this triage

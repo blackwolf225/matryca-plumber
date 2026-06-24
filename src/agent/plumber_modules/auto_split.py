@@ -14,7 +14,7 @@ from ...graph.markdown_blocks import (
     graph_safe_page_path,
     locate_block_by_uuid,
     occ_snapshot,
-    read_file_mtime,
+    read_file_mtime_ns,
 )
 from ...graph.page_properties import inject_page_property, stamp_plumber_authored_page
 from ...graph.page_write_lock import page_rmw_lock
@@ -76,7 +76,7 @@ def run_auto_split(
         if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
             return outcome
         if baseline_mtime is None:
-            baseline_mtime = read_file_mtime(page_path)
+            baseline_mtime = read_file_mtime_ns(page_path)
         if baseline_mtime is None:
             return outcome
         lines = text.splitlines(keepends=True)
@@ -122,12 +122,17 @@ def run_auto_split(
                     "auto",
                 )
                 header = stamp_plumber_authored_page(header)
-                atomic_write_bytes(
-                    new_page_path,
-                    (header + "\n" + subtree).encode("utf-8"),
-                    graph_root=graph_root,
-                )
-                outcome.pages_created.append(child_title)
+                created_child = False
+                with page_rmw_lock(new_page_path):
+                    if not new_page_path.is_file():
+                        atomic_write_bytes(
+                            new_page_path,
+                            (header + "\n" + subtree).encode("utf-8"),
+                            graph_root=graph_root,
+                        )
+                        created_child = True
+                if created_child:
+                    outcome.pages_created.append(child_title)
 
             bullet_match = _BULLET.match(lines[bullet_idx].rstrip("\n"))
             indent = bullet_match.group(1) if bullet_match else ""

@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 
+import pytest
 from src.graph.graph_analytics import _count_catalog_summaries, compute_graph_analytics
 from src.graph.master_catalog import CatalogEntry, load_master_catalog
 
@@ -115,6 +116,28 @@ def test_compute_graph_analytics_page_summaries_from_catalog_and_ledger(
     assert _count_catalog_summaries(tmp_path) == 1
     metrics = compute_graph_analytics(tmp_path, page_summaries_created=3)
     assert metrics.page_summaries == 3
+
+
+def test_count_catalog_summaries_logs_and_returns_zero_on_load_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.graph import master_catalog
+
+    warnings: list[str] = []
+
+    def _capture(msg: str, *args: object) -> None:
+        warnings.append(msg.format(*args) if args else msg)
+
+    monkeypatch.setattr("src.graph.graph_analytics.logger.warning", _capture)
+
+    def _fail(_root: Path, *, force_reload: bool = False) -> master_catalog.MasterCatalog:
+        _ = force_reload
+        raise master_catalog.CatalogLoadError("catalog unreadable")
+
+    monkeypatch.setattr("src.graph.graph_analytics.load_master_catalog", _fail)
+    assert _count_catalog_summaries(tmp_path) == 0
+    assert any("master catalog" in warning.lower() for warning in warnings)
 
 
 def test_compute_graph_analytics_reflects_deleted_ai_page(tmp_path: Path) -> None:

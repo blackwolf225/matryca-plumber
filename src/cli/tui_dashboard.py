@@ -104,16 +104,19 @@ def collect_snapshot(
     graph_root: Path | None = None,
     token_logger: TokenLogger | None = None,
     last_good_state: DaemonState | None = None,
-) -> DashboardSnapshot:
+) -> tuple[DashboardSnapshot, DaemonState]:
     """Build a dashboard snapshot from on-disk state and logs."""
     root = graph_root or _resolve_graph_root_safe()
     logger = token_logger or _plumber_token_logger()
     log_file = str(logger.log_path)
     if root is None:
-        return DashboardSnapshot(
-            status="Error",
-            activity_lines=["LOGSEQ_GRAPH_PATH is not set"],
-            log_file=log_file,
+        return (
+            DashboardSnapshot(
+                status="Error",
+                activity_lines=["LOGSEQ_GRAPH_PATH is not set"],
+                log_file=log_file,
+            ),
+            DaemonState(),
         )
 
     state = _try_load_daemon_state(root, last_good=last_good_state)
@@ -187,7 +190,7 @@ def collect_snapshot(
 
     control_room = resolve_control_room_progress(state)
 
-    return DashboardSnapshot(
+    snapshot = DashboardSnapshot(
         status=status,
         model=state.model or resolve_lm_model(),
         bootstrap_complete=state.bootstrap_complete,
@@ -210,6 +213,7 @@ def collect_snapshot(
         log_file=log_file,
         refreshed_at=datetime.now(tz=UTC).strftime("%H:%M:%S"),
     )
+    return snapshot, state
 
 
 def collect_snapshot_safe(
@@ -222,7 +226,7 @@ def collect_snapshot_safe(
     root = graph_root or _resolve_graph_root_safe()
     logger = token_logger or _plumber_token_logger()
     try:
-        snapshot = collect_snapshot(
+        snapshot, loaded_state = collect_snapshot(
             graph_root=root,
             token_logger=logger,
             last_good_state=last_good_state,
@@ -235,12 +239,7 @@ def collect_snapshot_safe(
             refreshed_at=datetime.now(tz=UTC).strftime("%H:%M:%S"),
         ), last_good_state
 
-    if root is not None:
-        try:
-            last_good_state = load_daemon_state(root)
-        except (OSError, BoundedJsonError, ValueError):
-            loguru_logger.exception("TUI dashboard failed to refresh last good daemon state")
-    return snapshot, last_good_state
+    return snapshot, loaded_state
 
 
 __all__ = [

@@ -162,7 +162,7 @@ Every imported page and block carries provenance. **Tana node IDs never become L
 | `made-by::` | New pages | `matryca plumber v…` via `stamp_plumber_authored_page` |
 | `id::` | Every block | **Fresh UUID v4** — same policy as [`ingest.md`](ingest.md) |
 
-**Idempotency (v1):** before write, scan vault for existing `tana-id::` values; if found → **skip** that page or subtree and increment `skipped_duplicates` (no `--merge` in v1).
+**Idempotency (v1):** before write, scan vault for existing `tana-id::` values; if found → **skip** that page or subtree and increment `skipped_duplicates` (no `--merge` in v1). Implementation: `scan_existing_tana_ids` in `write.py` — today loads full page text per file ([#156](https://github.com/MarcoPorcellato/matryca-plumber/issues/156) targets line-level streaming).
 
 **Idempotency limits (v1):** skip is **ID-only** — if the operator edits imported content in Logseq, a re-import still skips the subtree when `tana-id::` matches, even when Tana export content diverges. Content-hash comparison and `--merge` are v2 scope ([#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139)).
 
@@ -172,11 +172,12 @@ Every imported page and block carries provenance. **Tana node IDs never become L
 
 | Stage | Mechanism | RAM |
 |-------|-----------|-----|
-| JSON parse | `ijson` stream over `docs[]` | O(1) DOM — no `json.load()` |
-| Node index | `load_tana_nodes_by_id` → `dict[str, NodeDump]` | **O(nodes)** — full payloads retained today |
+| JSON parse | `ijson` stream over `docs[]` via `iter_tana_nodes` | O(1) DOM — no `json.load()` |
+| Graph build | `TanaWorkspaceGraph.from_export` → `StreamingGraphBuilder` single pass | **O(nodes)** — full `NodeDump` payloads retained in `_nodes` today |
+| Legacy helper | `load_tana_nodes_by_id` (tests / direct index API) | Same O(nodes) retention — not used by `tana_import.py` |
 | Conversion | `convert_tana_graph` + link rewrite | Additional structures on top of index |
 
-Large enterprise exports (50k+ nodes) can peak at hundreds of MB during the index phase before any write. Target improvement: incremental `StreamingGraphBuilder` retaining only parent/child indexes and tag definitions ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)).
+Large enterprise exports (50k+ nodes) can peak at hundreds of MB during the index phase before any write. **Shipped:** single-pass `from_export` ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)). **Open:** slim `NodeDump` payloads ([#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154)). Triage: [`CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](../quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md).
 
 **Journal format:** `get_logseq_journal_format()` in `logseq_config.py` re-reads and re-parses `logseq/config.edn` on each call (no in-process cache). Fixing `config.edn` and re-running import picks up the new format immediately.
 

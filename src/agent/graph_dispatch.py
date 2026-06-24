@@ -35,7 +35,7 @@ from ..graph.markdown_blocks import (
     atomic_write_bytes_if_unchanged,
     canonical_line_suffix,
     graph_safe_page_path,
-    read_file_mtime,
+    read_file_mtime_ns,
     strip_line_endings,
 )
 from ..graph.page_write_lock import page_rmw_lock
@@ -305,7 +305,7 @@ def _headless_append_child(
         raise OCCConflictError(
             page_path,
             baseline_mtime=occ.baseline_mtime,
-            current_mtime=read_file_mtime(page_path),
+            current_mtime=read_file_mtime_ns(page_path),
         )
 
     with page_rmw_lock(source_path):
@@ -313,7 +313,7 @@ def _headless_append_child(
             raise OCCConflictError(
                 page_path,
                 baseline_mtime=occ.baseline_mtime,
-                current_mtime=read_file_mtime(page_path),
+                current_mtime=read_file_mtime_ns(page_path),
             )
         graph = _cached_graph(graph_root)
         parent = _resolve_graph_node(graph, parent_uuid)
@@ -344,7 +344,7 @@ def _headless_append_child(
             file_lines.insert(insert_index + offset, line)
 
         updated = "".join(strip_line_endings(ln) + canonical_line_suffix(ln) for ln in file_lines)
-        baseline_mtime = occ.baseline_mtime if occ is not None else read_file_mtime(path)
+        baseline_mtime = occ.baseline_mtime if occ is not None else read_file_mtime_ns(path)
         commit_summary = f"appended block under parent {parent_uuid}"
         if baseline_mtime is None or not atomic_write_bytes_if_unchanged(
             path,
@@ -355,8 +355,8 @@ def _headless_append_child(
         ):
             raise OCCConflictError(
                 path,
-                baseline_mtime=baseline_mtime or 0.0,
-                current_mtime=read_file_mtime(path),
+                baseline_mtime=baseline_mtime or 0,
+                current_mtime=read_file_mtime_ns(path),
             )
         if occ is not None:
             occ.refresh_after_own_write()
@@ -461,7 +461,7 @@ def _headless_write_outline_empty_page(
             raise OCCConflictError(
                 page_path,
                 baseline_mtime=occ.baseline_mtime,
-                current_mtime=read_file_mtime(page_path),
+                current_mtime=read_file_mtime_ns(page_path),
             )
         prev = read_graph_file_text(page_path, graph_root) if page_path.is_file() else ""
         section = "".join(
@@ -479,8 +479,8 @@ def _headless_write_outline_empty_page(
             ):
                 raise OCCConflictError(
                     page_path,
-                    baseline_mtime=baseline_mtime or 0.0,
-                    current_mtime=read_file_mtime(page_path),
+                    baseline_mtime=baseline_mtime or 0,
+                    current_mtime=read_file_mtime_ns(page_path),
                 )
             if occ is not None:
                 occ.refresh_after_own_write()
@@ -514,21 +514,32 @@ async def _run_write_outline(
     target: object,
     outline: dict[str, Any],
 ) -> dict[str, Any]:
-    parent_uuid, empty_page_title, write_warnings = await asyncio.to_thread(
-        _resolve_write_parent_target,
+    return await asyncio.to_thread(
+        _run_write_outline_sync,
+        graph_path,
+        target,
+        outline,
+    )
+
+
+def _run_write_outline_sync(
+    graph_path: str,
+    target: object,
+    outline: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve parent and write in one thread (avoid resolve/write TOCTOU)."""
+    parent_uuid, empty_page_title, write_warnings = _resolve_write_parent_target(
         graph_path,
         target,
     )
     if empty_page_title:
-        result = await asyncio.to_thread(
-            _headless_write_outline_empty_page,
+        result = _headless_write_outline_empty_page(
             graph_path,
             empty_page_title,
             outline,
         )
     else:
-        result = await asyncio.to_thread(
-            _headless_write_outline,
+        result = _headless_write_outline(
             graph_path,
             parent_uuid or "",
             outline,
@@ -948,7 +959,7 @@ async def dispatch_mutate(
             return {"ok": False, "code": "security_violation", "error": str(exc)}
         except ValueError as exc:
             return _mutate_error(str(exc))
-        baseline_mtime = read_file_mtime(page_path) if page_path.is_file() else None
+        baseline_mtime = read_file_mtime_ns(page_path) if page_path.is_file() else None
 
         def _edit() -> dict[str, object]:
             return edit_block_property_lines(

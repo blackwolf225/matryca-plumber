@@ -21,6 +21,7 @@ from ..graph.markdown_blocks import atomic_write_bytes
 from ..graph.path_sandbox import read_graph_file_text
 from .graph_dispatch import _headless_append_child
 from .graph_tool_helpers import graph_missing_text, graph_path_from_env
+from .routing_hint import routing_hint_for_write_outline
 
 _CONFIG_PAGE_SKELETON = f"""- # {TELOS_HEADING}
 
@@ -103,7 +104,7 @@ async def dispatch_store_fact(fact: str) -> dict[str, Any]:
         "path": str(config_path.relative_to(graph_root)),
         "block_uuid": new_uuid,
         "fact": cleaned,
-        "routing_hint": "<!-- matryca_routing: hint=L2_graph_append -->",
+        "routing_hint": routing_hint_for_write_outline(),
     }
 
 

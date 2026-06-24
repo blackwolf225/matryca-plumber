@@ -107,22 +107,24 @@ Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
 #### Layer boundaries & known gaps (v1.11)
 
-Honest status after the [Expert Audit 2026-06](quality/EXPERT_AUDIT_TRIAGE_2026-06.md) triage:
+Honest status after Expert, Repomix, [Clean Architecture Audit 2026-06](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md), and [Claude Architectural Audit 2026-06-24](quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md) triage:
 
 | Gap | Current behavior | Tracking |
 |-----|------------------|----------|
-| Graph → daemon coupling | `markdown_blocks` calls `daemon.post_write_hooks.emit_post_write_commit` directly; `post_write_hooks` already has a subscriber API but dependency direction is inverted | [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) |
-| `lock_backoff` ledger | After successful Phase 2 write, a post-write embedding lock failure can downgrade `processed` → `lock_backoff` | [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) |
-| `graph_dispatch` resolve/write | Parent UUID resolved in a separate thread from OCC snapshot capture | [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) |
-| Generational alias/BM25 cache | Per-graph mtime invalidation works; no LRU cap when switching `LOGSEQ_GRAPH_PATH` across vaults | [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) |
-| Tana import memory | `ijson` avoids full JSON DOM; `load_tana_nodes_by_id` still materializes O(nodes) `NodeDump` dict | [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) |
+| Graph → daemon coupling | `markdown_blocks` calls `daemon.post_write_hooks.emit_post_write_commit` directly; `post_write_hooks` already has a subscriber API but dependency direction is inverted | [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) — fixed in working tree |
+| Tana import memory (index phase) | `ijson` avoids full JSON DOM; `from_export` single-pass shipped; `StreamingGraphBuilder` still retains O(nodes) full `NodeDump` payloads | [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) partial — [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154) |
 | Tana idempotency v1 | Skip on `tana-id::` match only — no content-hash merge (v2 scope) | [#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139) |
-| Identity AST stale on reload | mtime-based reload without invalidating AST page parse | [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140) |
-| Dual-embedding `block_vectors.json` in RAM | Full JSON catalog in `BlockVectorStore.blocks` | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) |
+| Dual-embedding `block_vectors.json` in RAM | Streaming merge + ondemand mode shipped; full resident catalog still possible | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial |
+| OCC mtime granularity | Page writes use `st_mtime` float; catalog uses `st_mtime_ns` | [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153); content-hash CAS → [#17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) v2 |
+| `auto_split` child page lock | Creates child pages with `is_file()` + `atomic_write_bytes` under parent lock only — no `page_rmw_lock(child)` | [#39](https://github.com/MarcoPorcellato/matryca-plumber/issues/39) |
+| Generational BM25/alias cache | Mtime signature invalidation; build-then-`sig_after` can pair stale corpus with fresh sig on concurrent writes | [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) |
+| Tana `tana-id` pre-scan RAM | `scan_existing_tana_ids` loads full page text per file before import | [#156](https://github.com/MarcoPorcellato/matryca-plumber/issues/156) |
+| `maintenance_daemon` SRP | ~3300 lines; scheduling, LLM, telemetry, watcher in one class | [#58](https://github.com/MarcoPorcellato/matryca-plumber/issues/58) |
+| `graph_dispatch` SRP | Mega-module; MCP routes through single dispatch plane | [#59](https://github.com/MarcoPorcellato/matryca-plumber/issues/59) |
 
-**Already closed from Expert Audit:** `alias_index` ↔ `generational_cache` import cycle (v1.11.0); NoRedirect DRY; Phase 2 denominator journal exclusion ([#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70)). **Audit correction:** `get_logseq_journal_format()` has no in-process cache — it re-reads `config.edn` each call (repeated I/O, not staleness).
+**Already closed (Expert Audit 2026-06, fixed in working tree):** [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) `lock_backoff`; [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) resolve/write TOCTOU; [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) generational cache LRU; [#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137)–[#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) progress/TUI; [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142) identity AST / routing / semantic config; `alias_index` ↔ `generational_cache` cycle (v1.11.0); NoRedirect DRY; Phase 2 denominator journal exclusion ([#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70)). **Audit correction:** `get_logseq_journal_format()` has no in-process cache — it re-reads `config.edn` each call (repeated I/O, not staleness).
 
-Repomix audit triage: [`docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md`](quality/REPOmix_AUDIT_TRIAGE_2026-06.md). Rejected claims: OCC lock leak (context managers release); Tana “no streaming” (`ijson` shipped); identity path hardcoding (centralized in `config_layer.py`).
+Audit triage index: [`EXPERT_AUDIT_TRIAGE_2026-06.md`](quality/EXPERT_AUDIT_TRIAGE_2026-06.md) · [`REPOmix_AUDIT_TRIAGE_2026-06.md`](quality/REPOmix_AUDIT_TRIAGE_2026-06.md) · [`CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md) · [`CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md). Rejected claims: OCC lock leak; Tana “no streaming” / `json.load()`; BM25 SQLite outbox (distinct from #155 sig_after); identity path hardcoding; immediate hexagonal `domain/ports.py` split.
 
 v2.0 north-star layout (`domain/` / `adapters/` / `orchestration/`) aligns with [Epic #20](https://github.com/MarcoPorcellato/matryca-plumber/issues/20) and [GraphRepository #17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) — not an immediate monolith split.
 
@@ -163,7 +165,7 @@ sequenceDiagram
 | CLI | `src/cli/__init__.py` | `matryca import tana --file … [--apply]` — dry-run default; JSON stdout |
 | MCP surface | `src/agent/mcp_server.py` | `import_tana(export_path, dry_run=True)` |
 
-Parse uses **`ijson`** on the export file only — never materializes the full JSON DOM. The loader still builds an O(nodes) `id → NodeDump` index for wikilink resolution ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)). Writes stamp fresh `id::` UUIDs and `tana-id::` provenance; re-import skips nodes whose `tana-id` already exists in the vault. Spec: [`docs/openspec/tana-import.md`](openspec/tana-import.md).
+Parse uses **`ijson`** on the export file only — never materializes the full JSON DOM. Production import uses **`TanaWorkspaceGraph.from_export`** (single streaming pass). The builder still retains O(nodes) full `NodeDump` payloads during the index phase ([#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) partial). Writes stamp fresh `id::` UUIDs and `tana-id::` provenance; re-import skips nodes whose `tana-id` already exists in the vault. Spec: [`docs/openspec/tana-import.md`](openspec/tana-import.md).
 
 #### Dual embedding (optional MCP semantic search)
 
@@ -426,6 +428,12 @@ Local LLM inference is **slow** (seconds to minutes). Logseq users keep editing 
 | **Serialization** | `page_rmw_lock(path)` — in-process `threading.Lock` registry + cross-process `fcntl.flock` sidecar | Torn interleaved RMW from daemon + MCP + second daemon |
 | **Lost-update detection** | `baseline_mtime` via `st_mtime` — snapshot → work → verify → atomic commit | Stale LLM output overwriting fresher human bytes |
 
+`page_rmw_lock` and OCC mtime checks are **complementary**, not interchangeable: the lock prevents torn RMW interleaving; mtime detects human edits during slow LLM work. External audits sometimes mislabel this as “pessimistic locking masquerading as OCC” — see [Clean Architecture Audit triage](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md).
+
+### Known limitation — mtime granularity
+
+Page OCC compares `st_mtime` as a float (`read_file_mtime`). Master catalog and bootstrap harvest already use **`st_mtime_ns`** for finer invalidation. On coarse-grained filesystems (FAT32/exFAT) or when two Plumber writers observe the same second-level mtime after an identical snapshot, OCC alone may not detect a conflict — **`page_rmw_lock` during commit** remains the serialization backstop. v1 hardening: [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) (nanosecond parity). **Content-hash compare-and-swap** (SHA-256 of page bytes) is v2 scope under [GraphRepository #17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17).
+
 ### OCC lifecycle (canonical order)
 
 1. **`occ_snapshot(page_path)`** — capture `baseline_mtime` **before** reading content or calling the LLM (Phase 1).
@@ -636,7 +644,7 @@ Settings persistence uses **`_atomic_write_text`** in `ui_server.py`: `mkstemp` 
 
 ### Page-lock registry with LRU eviction
 
-**`page_write_lock.py`** keeps an in-process `OrderedDict` of `threading.RLock` instances keyed by normalized absolute paths (cap **`_MAX_PAGE_LOCK_REGISTRY = 4096`**). When the cap is reached, **unlocked** entries are evicted LRU-style instead of clearing the entire registry — preserving hot-path lock stability on large vaults without unbounded memory growth.
+**`page_write_lock.py`** keeps an in-process `OrderedDict` of `threading.RLock` instances keyed by normalized absolute paths (cap **`_MAX_PAGE_LOCK_REGISTRY = 4096`**). When the cap is reached, entries are evicted LRU-style only when `not old_lock.locked()`; a full registry of held locks raises **`PageLockUnavailableError`** rather than evicting an active lock ([#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157) optional `acquire(blocking=False)` hardening).
 
 Cross-process exclusivity delegates to **`platform_lock.cross_process_sidecar_lock`** (`.matryca.lock` sidecar beside each page). Same NB/backoff/blocking/reentrancy semantics as JSON sidecar flock (v1.10.6). **`MATRYCA_ALLOW_FLOCK_DEGRADATION=true`** permits thread-only locking on iCloud/Dropbox filesystems that reject `flock` (at operator risk). **`PageLockUnavailableError`** causes the daemon to **skip** the file without marking it processed — no false success, no torn write.
 

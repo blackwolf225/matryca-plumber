@@ -14,6 +14,7 @@ from ...graph.markdown_blocks import (
     file_mtime_drifted,
     occ_snapshot,
 )
+from ...graph.page_namespace import detect_marpa_namespace
 from ...graph.page_properties import inject_page_properties, page_property_keys
 from ...graph.page_write_lock import page_rmw_lock
 from ...graph.path_sandbox import read_graph_file_text, resolved_graph_root
@@ -76,15 +77,6 @@ _BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
 _MIN_DUP_CHARS = 80
 _MARPA_HEADING = "### Matryca MARPA Validation"
 _MARPA_HEADER = f"- {_MARPA_HEADING}"
-
-
-def detect_marpa_namespace(page_title: str) -> str | None:
-    """Return namespace segment from ``Area/Topic`` or ``Area___Topic`` titles."""
-    if "/" in page_title:
-        return page_title.split("/", 1)[0].casefold()
-    if "___" in page_title:
-        return page_title.split("___", 1)[0].casefold()
-    return None
 
 
 def _has_top_level_type(content: str) -> bool:

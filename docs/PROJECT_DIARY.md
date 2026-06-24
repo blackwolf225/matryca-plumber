@@ -10,6 +10,34 @@ Entries are chronological (**newest first** within each major release block). Wh
 
 ---
 
+## [2026-06-24] Claude Architectural Audit 2026-06-24 — Staff review triaged
+
+### Context
+
+External Staff-level audit (Repomix snapshot) flagged 13 items: lock registry eviction, generational cache sig_after TOCTOU, bootstrap mtime truncation, `auto_split` child lock, daemon god-object, env leakage, insights triple-scan, catalog per-page save, triple daemon checkpoint, Tana id scan RAM, shutdown logging, `lru_cache` test bleed, O(n²) tag clusters, double Phase-2 read.
+
+### Outcome
+
+**2 new P1/P2 issues filed:** [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) (BM25/alias sig_after), [#156](https://github.com/MarcoPorcellato/matryca-plumber/issues/156) (Tana id stream scan), [#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157) (lock registry hardening, good-first). **9 findings already on GitHub** (#39, #48, #49, #50, #53, #58, #38). **2 obsolete:** bootstrap `st_mtime_ns` shipped; shutdown logging fixed (#44).
+
+Triage: [`docs/quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md).
+
+---
+
+## [2026-06-24] Clean Architecture Audit 2026-06 — simulated Staff review triaged
+
+### Context
+
+External simulated audit proposed hexagonal `PageRepository` + SHA-256 CAS, Tana `json.load()` OOM, MCP↔AST coupling, BM25 SQLite outbox, import-time config globals, and `PageId` lock normalization.
+
+### Outcome
+
+Verified against current `src/` — **no new P1 issues**. Four findings obsolete or rejected (lock leak, `json.load`, BM25 outbox, `PageId` VO). Two follow-ups filed: [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) OCC `st_mtime_ns` parity; [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154) Tana slim `NodeDump` payloads (extends #135). Hexagonal ports deferred to [#17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) / Epic [#20](https://github.com/MarcoPorcellato/matryca-plumber/issues/20).
+
+Triage: [`docs/quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md). Backlog slice: [`docs/quality/GITHUB_BUG_BACKLOG.md`](quality/GITHUB_BUG_BACKLOG.md).
+
+---
+
 ## [2026-06-23] Good-first #118 — httpx2 dev dependency (@blackwolf225)
 
 ### Context
@@ -19,7 +47,7 @@ Entries are chronological (**newest first** within each major release block). Wh
 ### Shipped
 
 1. **`httpx2>=2.4.0`** in `[project.optional-dependencies] dev` — aligned with Makefile/CI `--extra dev` (not a separate `[dependency-groups]` block).
-2. **Contributor path** — first external merge from @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)); maintainer rebased `uv.lock` on updated `main` before landing.
+2. **Contributor path** — first external contribution from @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)); maintainer rebased `uv.lock` on updated `main` before landing ([`b7b9cdf`](https://github.com/MarcoPorcellato/matryca-plumber/commit/b7b9cdf5d8877a069da84ae423414333ef339c88)). PR closed (not GitHub-merged) with explicit credit comment — git author on [`5fea6b1`](https://github.com/MarcoPorcellato/matryca-plumber/commit/5fea6b118ac0dd608bf43a6887ba32ee8a30413a) / [`616b5f0`](https://github.com/MarcoPorcellato/matryca-plumber/commit/616b5f099ba1f9f16c58711447a1493860689ac9).
 
 **Verify:** `uv run pytest tests/test_ui_server.py -q -W error::DeprecationWarning` · `make check`.
 

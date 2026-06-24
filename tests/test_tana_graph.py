@@ -90,6 +90,53 @@ def test_streaming_builder_matches_from_export() -> None:
     assert set(built.nodes) == set(direct.nodes)
 
 
+def test_streaming_builder_slims_unused_props() -> None:
+    fat = NodeDump(
+        id="N1",
+        props={
+            "name": "Hello",
+            "_docType": "data",
+            "bloatedPayload": "x" * 10_000,
+            "description": "unused",
+        },
+        children=[],
+        inbound_refs=["REF_A", "REF_B"],
+    )
+    builder = StreamingGraphBuilder()
+    builder.ingest_node(fat)
+    node = builder.build().nodes["N1"]
+    assert node.props == {"name": "Hello", "_docType": "data"}
+    assert node.inbound_refs == []
+
+
+def test_streaming_builder_strips_outbound_refs_except_tuple_values() -> None:
+    nodes = [
+        NodeDump(
+            id="ROOT",
+            props={"name": "Root", "_docType": "data"},
+            children=["TUPLE"],
+            outbound_refs=["REF_ONLY"],
+        ),
+        NodeDump(
+            id="TUPLE",
+            props={"_docType": "tuple"},
+            children=["LABEL", "VALUE"],
+        ),
+        NodeDump(id="LABEL", props={"name": "Status", "_docType": "data"}, children=[]),
+        NodeDump(
+            id="VALUE",
+            props={"name": "Target", "_docType": "data"},
+            children=[],
+            outbound_refs=["REF_TARGET"],
+        ),
+        NodeDump(id="REF_ONLY", props={"name": "Side ref"}, children=[]),
+    ]
+    graph = TanaWorkspaceGraph.from_iterable(nodes)
+    assert graph.nodes["ROOT"].outbound_refs == []
+    assert graph.nodes["VALUE"].outbound_refs == ["REF_TARGET"]
+    assert graph.nodes["REF_ONLY"].outbound_refs == []
+
+
 def test_from_export_single_pass_no_load_tana_nodes_by_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

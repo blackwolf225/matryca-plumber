@@ -63,7 +63,7 @@ from ..graph.markdown_blocks import (
     locate_block_by_uuid,
     occ_snapshot,
     occ_verify_before_write,
-    read_file_mtime,
+    read_file_mtime_ns,
     strip_lines_for_match,
 )
 from ..graph.master_catalog import (
@@ -376,6 +376,7 @@ class DaemonState:
     current_cluster_files_done: int = 0
     phase2_cognitive_total: int = 0
     phase2_cognitive_done: int = 0
+    phase2_vault_baseline_total: int = 0
     phase2_cluster_file_in_flight: bool = False
     phase2_llm_turns: int = 0
     last_scan_at: str | None = None
@@ -405,6 +406,7 @@ class DaemonState:
             "current_cluster_files_done": self.current_cluster_files_done,
             "phase2_cognitive_total": self.phase2_cognitive_total,
             "phase2_cognitive_done": self.phase2_cognitive_done,
+            "phase2_vault_baseline_total": self.phase2_vault_baseline_total,
             "phase2_cluster_file_in_flight": self.phase2_cluster_file_in_flight,
             "phase2_llm_turns": self.phase2_llm_turns,
             "last_scan_at": self.last_scan_at,
@@ -482,6 +484,7 @@ class DaemonState:
             current_cluster_files_done=int(payload.get("current_cluster_files_done", 0)),
             phase2_cognitive_total=int(payload.get("phase2_cognitive_total", 0)),
             phase2_cognitive_done=int(payload.get("phase2_cognitive_done", 0)),
+            phase2_vault_baseline_total=int(payload.get("phase2_vault_baseline_total", 0)),
             phase2_cluster_file_in_flight=bool(payload.get("phase2_cluster_file_in_flight", False)),
             phase2_llm_turns=int(payload.get("phase2_llm_turns", 0)),
             last_scan_at=payload.get("last_scan_at"),
@@ -565,6 +568,8 @@ def _record_page_lock_backoff(
     message: str,
     prior: FileState | None,
 ) -> None:
+    if prior is not None and prior.status == "processed":
+        return
     interval = _next_lock_backoff_seconds(prior)
     state.files[key] = FileState(
         mtime=mtime,
@@ -786,8 +791,13 @@ def load_daemon_state(graph_root: Path) -> DaemonState:
         )
         payload = _read_daemon_state_payload(bak_path)
         if payload is not None:
-            with contextlib.suppress(OSError):
+            try:
                 shutil.copy2(bak_path, path)
+            except OSError:
+                logger.exception(
+                    "Recovered daemon state from backup but failed to restore primary at {}",
+                    path,
+                )
 
     if payload is None:
         logger.warning(
@@ -823,8 +833,13 @@ def save_daemon_state(graph_root: Path, state: DaemonState) -> None:
             os.replace(str(tmp_path), str(path))
             committed = True
             bak_path = state_bak_path(graph_root)
-            with contextlib.suppress(OSError):
+            try:
                 shutil.copy2(path, bak_path)
+            except OSError:
+                logger.exception(
+                    "Daemon state primary write succeeded but backup copy failed for {}",
+                    bak_path,
+                )
         finally:
             if not committed:
                 tmp_path.unlink(missing_ok=True)
@@ -1437,7 +1452,7 @@ def apply_semantic_page_result(
         if page_path.is_file():
             prev = read_graph_file_text(page_path, graph_root, errors="replace")
             if baseline_mtime is None:
-                baseline_mtime = read_file_mtime(page_path)
+                baseline_mtime = read_file_mtime_ns(page_path)
         else:
             prev = ""
             baseline_mtime = None
@@ -1520,11 +1535,13 @@ def run_dual_embedding_after_semantic_write(
     from loguru import logger
 
     from ..semantic.applicability import InstructorApplicabilityLLM
-    from ..semantic.config import dual_embedding_enabled
+    from ..semantic.config import SemanticRuntimeConfig
     from ..semantic.embedding import get_openai_embedding_client
     from ..semantic.indexer import index_page_blocks
+    from ..semantic.store import release_block_vector_store
 
-    if not dual_embedding_enabled():
+    runtime_config = SemanticRuntimeConfig.from_env()
+    if not runtime_config.dual_embedding_enabled:
         return
     try:
         index_page_blocks(
@@ -1533,12 +1550,15 @@ def run_dual_embedding_after_semantic_write(
             page_title,
             llm_client=InstructorApplicabilityLLM(llm_client),
             embedding_client=get_openai_embedding_client(),
+            runtime_config=runtime_config,
         )
     except Exception as exc:  # noqa: BLE001 — never fail semantic write path
         logger.bind(page=page_title, path=str(page_path)).warning(
             "Dual embedding sidecar failed: {}",
             exc,
         )
+    finally:
+        release_block_vector_store(graph_root)
 
 
 def append_semantic_index(
@@ -1986,6 +2006,8 @@ class MaintenanceDaemon:
             state.bootstrap_failed = False
             state.bootstrap_failed_reason = None
             self.bootstrap_failed = False
+            if state.phase2_vault_baseline_total <= 0 and state.phase2_cognitive_total > 0:
+                state.phase2_vault_baseline_total = state.phase2_cognitive_total
         elif not self.bootstrap_complete:
             self.bootstrap_complete = False
 
@@ -2014,6 +2036,8 @@ class MaintenanceDaemon:
             refresh_phase2_cognitive_totals(self.graph_root, state)
         except OSError as exc:
             logger.warning("Phase 2 progress totals skipped after bootstrap: {}", exc)
+        if state.phase2_vault_baseline_total <= 0 and state.phase2_cognitive_total > 0:
+            state.phase2_vault_baseline_total = state.phase2_cognitive_total
         self._sync_live_telemetry(state)
         save_daemon_state(self.graph_root, state)
 
@@ -2101,8 +2125,10 @@ class MaintenanceDaemon:
 
         refresh_identity_config(self.graph_root, path)
         if kind == "deleted" and link_verify_enabled():
-            with contextlib.suppress(OSError):
+            try:
                 register_page_links_from_path(self.graph_root, path)
+            except OSError:
+                logger.exception("Link registry update failed for deleted page {}", path)
         self._cycle_wake.set()
 
     def _start_file_watcher(self) -> None:
@@ -2534,8 +2560,10 @@ class MaintenanceDaemon:
             )
             return True
         if link_verify_enabled():
-            with contextlib.suppress(OSError):
+            try:
                 merge_page_links_into_registry(self.graph_root, path, content)
+            except OSError:
+                logger.exception("Fast-track link registry merge failed")
         return False
 
     def _settle_journal_structural_cycle_file(
@@ -2620,8 +2648,10 @@ class MaintenanceDaemon:
             if path.is_file():
                 content = read_graph_file_text(path, self.graph_root, errors="replace")
                 if link_verify_enabled():
-                    with contextlib.suppress(OSError):
+                    try:
                         merge_page_links_into_registry(self.graph_root, path, content)
+                    except OSError:
+                        logger.exception("Phase 2 cognitive lint link registry merge failed")
             cognitive_outcome: CognitiveLintOutcome | None = None
             prompt_session: PagePromptSession | None = None
             if self.bootstrap_complete and lint_config.any_enabled:
@@ -2867,7 +2897,7 @@ class MaintenanceDaemon:
             state.journey_day.reset_if_new_day(today)
             state.journey_day.accumulate(stats)
             journey_state_updated = True
-            with contextlib.suppress(OSError):
+            try:
                 result = upsert_journey_log(
                     str(self.graph_root),
                     state.journey_day,
@@ -2875,6 +2905,8 @@ class MaintenanceDaemon:
                 )
                 if result.get("ok") and result.get("code") == "applied":
                     self._settle_journey_journal_in_state(state)
+            except OSError:
+                logger.exception("Journey log upsert failed")
         if journey_state_updated:
             save_daemon_state(self.graph_root, state)
 
@@ -2946,8 +2978,10 @@ class MaintenanceDaemon:
                 cycle_budget -= 1
                 fast_track_count += 1
                 if link_verify_enabled():
-                    with contextlib.suppress(OSError):
+                    try:
                         register_page_links_from_path(self.graph_root, path)
+                    except OSError:
+                        logger.exception("Fast-track link registry registration failed")
 
         if self._stop_requested:
             self._prune_stale_catalog_entries()
@@ -3027,8 +3061,10 @@ class MaintenanceDaemon:
         heal_daemon_state_ledger(self.graph_root, state)
         state.phase2_cluster_file_in_flight = False
         if self.bootstrap_complete and self._vault_refresh_counter % 10 == 0:
-            with contextlib.suppress(OSError):
+            try:
                 refresh_phase2_cognitive_totals(self.graph_root, state)
+            except OSError as exc:
+                logger.warning("Phase 2 progress totals skipped at cycle end: {}", exc)
         if not self._stop_requested:
             state.status = "idle"
         self._persist_daemon_state(state)

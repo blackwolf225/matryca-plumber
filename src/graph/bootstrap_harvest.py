@@ -11,20 +11,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
-from ..agent.cooperative_yield import io_batch_pause_seconds, yield_host
-from ..agent.plumber_config import PlumberLintConfig, load_plumber_lint_config
-from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
-from ..agent.plumber_modules.marpa_framework import detect_marpa_namespace
 from .alias_index import iter_alias_source_paths, page_title_from_path
 from .backlink_index import load_incoming_backlinks
 from .bootstrap_stop import BootstrapHarvestStopped
+from .cognitive_llm import BootstrapSummaryResult, HarvestLLM
+from .cooperative_yield import io_batch_pause_seconds, yield_host
 from .generational_cache import patch_generational_caches_for_paths
+from .harvest_runtime import HarvestRuntimeConfig, load_harvest_runtime_config
 from .hierarchical_summarization import mapreduce_harvest_page_summary
 from .markdown_blocks import (
     atomic_write_bytes,
     atomic_write_bytes_if_unchanged,
     file_mtime_drifted,
-    read_file_mtime,
+    read_file_mtime_ns,
 )
 from .markdown_io import mmap_graph_page, read_graph_page_text
 from .master_catalog import (
@@ -39,6 +38,7 @@ from .master_catalog import (
     master_index_page_path,
     write_master_index_page,
 )
+from .page_namespace import detect_marpa_namespace
 from .page_write_lock import page_rmw_lock
 
 _TYPE_LINE = re.compile(r"^\s*type::\s*(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -138,7 +138,7 @@ def _append_minimal_semantic_index(
     baseline_mtime: float | None = None,
 ) -> bool:
     if baseline_mtime is None and page_path.is_file():
-        baseline_mtime = read_file_mtime(page_path)
+        baseline_mtime = read_file_mtime_ns(page_path)
     if baseline_mtime is not None and file_mtime_drifted(page_path, baseline_mtime):
         return False
     with page_rmw_lock(page_path):
@@ -191,7 +191,7 @@ def harvest_page_into_catalog(
     *,
     llm: HarvestLLM | None = None,
     incoming_counts: dict[str, int] | None = None,
-    config: PlumberLintConfig | None = None,
+    config: HarvestRuntimeConfig | None = None,
     stop_event: threading.Event | None = None,
 ) -> tuple[str, bool, bool]:
     """Harvest one page into the catalog.
@@ -242,9 +242,9 @@ def harvest_page_into_catalog(
     if stop_event is not None and stop_event.is_set():
         raise BootstrapHarvestStopped
 
-    lint_config = config or load_plumber_lint_config()
+    lint_config = config or load_harvest_runtime_config()
     domain = _infer_domain_from_content(title, content)
-    baseline_mtime = read_file_mtime(page_path)
+    baseline_mtime = read_file_mtime_ns(page_path)
     summary_result = mapreduce_harvest_page_summary(
         llm,
         page_title=title,
@@ -285,7 +285,7 @@ def run_bootstrap_harvest(
     incremental: bool = False,
     rebuild_index: bool = True,
     phase1_strict: bool = False,
-    config: PlumberLintConfig | None = None,
+    config: HarvestRuntimeConfig | None = None,
     progress_interval: int = BOOTSTRAP_PROGRESS_INTERVAL,
     on_progress: BootstrapProgressCallback | None = None,
     on_page_cataloged: BootstrapProgressCallback | None = None,
@@ -294,7 +294,7 @@ def run_bootstrap_harvest(
 ) -> HarvestMetrics:
     """Scan the graph, populate the master catalog, and compile the master index."""
     root = graph_root.expanduser().resolve(strict=False)
-    lint_config = config or load_plumber_lint_config()
+    lint_config = config or load_harvest_runtime_config()
     catalog = load_master_catalog(root, force_reload=True)
     metrics = HarvestMetrics()
     incoming = load_incoming_backlinks(root)

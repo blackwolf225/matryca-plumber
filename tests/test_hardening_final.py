@@ -46,6 +46,65 @@ def test_markdown_append_bounds_reject_oversized_body() -> None:
     assert issues and "markdown_body" in issues[0]
 
 
+def test_lock_registry_evicts_unheld_lru_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Eviction must use acquire(blocking=False), not locked(), to close the TOCTOU gap."""
+    clear_page_write_locks()
+    import src.graph.page_write_lock as pwl
+
+    monkeypatch.setattr(pwl, "_MAX_PAGE_LOCK_REGISTRY", 2)
+
+    pwl._lock_for_key("/pages/a.md")
+    pwl._lock_for_key("/pages/b.md")
+    assert len(pwl._page_locks) == 2
+
+    pwl._lock_for_key("/pages/c.md")
+    assert len(pwl._page_locks) == 2
+    assert "/pages/c.md" in pwl._page_locks
+    assert "/pages/a.md" not in pwl._page_locks
+
+
+def test_lock_registry_grows_when_all_entries_held(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When every registry entry is held, grow past the cap instead of evicting live locks."""
+    clear_page_write_locks()
+    import src.graph.page_write_lock as pwl
+    from src.graph.page_write_lock import normalize_page_lock_key
+
+    monkeypatch.setattr(pwl, "_MAX_PAGE_LOCK_REGISTRY", 2)
+
+    p1 = tmp_path / "p1.md"
+    p2 = tmp_path / "p2.md"
+    p3 = tmp_path / "p3.md"
+    p1.write_text("a\n", encoding="utf-8")
+    p2.write_text("b\n", encoding="utf-8")
+
+    t1_ready = threading.Event()
+    t2_ready = threading.Event()
+    release = threading.Event()
+
+    def hold(path: Path, ready: threading.Event) -> None:
+        with page_rmw_lock(path):
+            ready.set()
+            release.wait(timeout=5)
+
+    t1 = threading.Thread(target=hold, args=(p1, t1_ready))
+    t2 = threading.Thread(target=hold, args=(p2, t2_ready))
+    t1.start()
+    t2.start()
+    assert t1_ready.wait(timeout=5)
+    assert t2_ready.wait(timeout=5)
+
+    try:
+        pwl._lock_for_key(normalize_page_lock_key(p3))
+        assert len(pwl._page_locks) == 3
+    finally:
+        release.set()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+
 def test_concurrent_page_rmw_lock_serializes_writes(tmp_path: Path) -> None:
     clear_page_write_locks()
     target = tmp_path / "pages" / "Shared.md"

@@ -9,7 +9,7 @@ from typing import Literal
 
 from ...graph.alias_index import AliasIndex, resolve_canonical_page_title
 from ...graph.generational_cache import patch_generational_caches_for_paths
-from ...graph.markdown_blocks import atomic_write_bytes_if_unchanged, read_file_mtime
+from ...graph.markdown_blocks import atomic_write_bytes_if_unchanged, read_file_mtime_ns
 from ...graph.page_write_lock import page_rmw_lock
 from ...graph.path_sandbox import read_graph_file_text
 from ._shared import ModuleOutcome, page_file_exists, resolve_page_path
@@ -230,7 +230,7 @@ def run_backlink_backpropagator(
                 prev = read_graph_file_text(target_path, graph_root, errors="replace")
                 if not prev.strip():
                     continue
-                baseline_mtime = read_file_mtime(target_path)
+                baseline_mtime = read_file_mtime_ns(target_path)
                 if baseline_mtime is None:
                     continue
                 new_text, changed = _upsert_backlink_in_content(

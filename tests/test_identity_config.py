@@ -100,6 +100,30 @@ def test_reload_on_apply_file_event(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "Version two" in store.get().telos
 
 
+def test_reload_on_mtime_without_manual_ast_apply(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    path = _write_config_page(
+        pages,
+        "matryca-config.md",
+        f"- # {TELOS_HEADING}\n  - Version one\n- # AI Constraints\n",
+    )
+    monkeypatch.setenv("LOGSEQ_GRAPH_PATH", str(tmp_path))
+    get_graph_ast_cache(tmp_path).bootstrap()
+    store = get_identity_store(tmp_path)
+    assert "Version one" in store.get().telos
+
+    path.write_text(
+        f"- # {TELOS_HEADING}\n  - Version two\n- # AI Constraints\n",
+        encoding="utf-8",
+    )
+    store.reload_if_stale(force=False)
+    assert "Version two" in store.get().telos
+
+
 def test_system_prompt_contains_persona(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pages = tmp_path / "pages"
     pages.mkdir()

@@ -8,9 +8,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..agent.plumber_llm import GraphInsightsLLMResult, InsightsLLM
-from ..agent.prompt_constraints import finalize_system_prompt
 from .alias_index import iter_alias_source_paths, page_title_from_path
+from .cognitive_llm import GraphInsightsLLMResult, InsightsLLM
 from .generated_hub_write import write_generated_hub_page
 from .generational_cache import patch_generational_caches_for_paths
 from .link_tag_hop import (
@@ -23,6 +22,7 @@ from .markdown_blocks import occ_snapshot
 from .master_catalog import MasterCatalog, load_master_catalog
 from .page_path import filename_to_page_title
 from .path_sandbox import graph_safe_page_path, read_graph_file_text
+from .prompt_constraints import finalize_system_prompt
 
 GRAPH_INSIGHTS_TITLE = "Matryca Graph Insights"
 _DENSE_WIKILINK_THRESHOLD = 25

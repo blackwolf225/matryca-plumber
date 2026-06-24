@@ -6,10 +6,10 @@ import re
 import threading
 from pathlib import Path
 
-from ..agent.plumber_config import PlumberLintConfig, apply_thermal_pause_bootstrap
-from ..agent.plumber_llm import BootstrapSummaryResult, HarvestLLM
-from ..agent.prompt_layout import build_cache_aligned_prompt
 from .bootstrap_stop import BootstrapHarvestStopped
+from .cognitive_llm import BootstrapSummaryResult, HarvestLLM
+from .harvest_runtime import HarvestRuntimeConfig, apply_thermal_pause_harvest
+from .prompt_layout import build_cache_aligned_prompt
 
 _ROOT_BULLET = re.compile(r"^[-*+]\s+")
 
@@ -120,7 +120,7 @@ def mapreduce_harvest_page_summary(
     content: str,
     page_path: Path | None = None,
     graph_root: Path | None = None,
-    config: PlumberLintConfig,
+    config: HarvestRuntimeConfig,
     stop_event: threading.Event | None = None,
 ) -> BootstrapSummaryResult:
     """Harvest a page summary via structural MapReduce when content exceeds the trigger."""
@@ -139,7 +139,7 @@ def mapreduce_harvest_page_summary(
             graph_root=graph_root,
             task_instruction=task_instruction,
         )
-        apply_thermal_pause_bootstrap(config, stop_event=stop_event)
+        apply_thermal_pause_harvest(config, stop_event=stop_event)
         return result
 
     if len(content) <= config.mapreduce_trigger_chars:

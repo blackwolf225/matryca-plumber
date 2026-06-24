@@ -45,7 +45,7 @@ class BootstrapStatusSnapshot:
 def collect_bootstrap_status(graph_root: str | Path) -> BootstrapStatusSnapshot:
     """Merge daemon checkpoint fields with on-disk catalog completeness."""
     root = Path(graph_root).expanduser().resolve(strict=False)
-    from ..daemon.checkpoint import read_daemon_checkpoint
+    from .daemon_checkpoint import read_daemon_checkpoint
 
     checkpoint = read_daemon_checkpoint(root)
     master_present = master_index_page_path(root).is_file()

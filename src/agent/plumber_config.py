@@ -12,6 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..utils.env_parse import env_int
+
+
+def _env_int(key: str, default: int) -> int:
+    return env_int(key, default)
+
+
 DEFAULT_LLM_BASE_URL = "http://localhost:1234/v1"
 DEFAULT_LLM_MODEL_NAME = "local-model"
 DEFAULT_LLM_API_KEY = "dummy-key"
@@ -46,33 +53,6 @@ def reload_plumber_dotenv(*, override: bool = False) -> None:
     from dotenv import load_dotenv
 
     load_dotenv(env_path, override=override)
-
-
-def _env_bool(key: str, default: bool = False) -> bool:
-    raw = os.environ.get(key, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
-
-
-def _env_int(key: str, default: int) -> int:
-    raw = os.environ.get(key, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-def _env_float(key: str, default: float) -> float:
-    raw = os.environ.get(key, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
 
 
 def _env_str(key: str, default: str) -> str:
@@ -263,9 +243,10 @@ def apply_thermal_pause_bootstrap(
     stop_event: threading.Event | None = None,
 ) -> None:
     """GPU cool-down after one bootstrap harvest LLM turn (reads live env each call)."""
+    from ..graph.harvest_runtime import apply_thermal_pause_harvest
+
     _ = config
-    delay = _safe_thermal_seconds(load_plumber_lint_config().thermal_delay_bootstrap)
-    _interruptible_thermal_sleep(delay, stop_event=stop_event)
+    apply_thermal_pause_harvest(stop_event=stop_event)
 
 
 def apply_thermal_pause_cognitive(

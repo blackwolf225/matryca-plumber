@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -27,7 +29,7 @@ from src.agent.plumber_modules.marpa_framework import run_marpa_framework
 from src.agent.plumber_modules.property_hygiene import run_property_hygiene
 from src.agent.semantic_lint_prompts import build_semantic_lint_system_prompt
 from src.graph.master_catalog import load_master_catalog
-from src.graph.page_write_lock import clear_page_write_locks
+from src.graph.page_write_lock import clear_page_write_locks, page_rmw_lock
 from src.graph.path_sandbox import graph_safe_page_path
 
 
@@ -276,6 +278,36 @@ def test_auto_split_extracts_dense_subtree(graph_root: Path) -> None:
     assert "[[" in updated
     child = graph_safe_page_path(graph_root, outcome.pages_created[0])
     assert child.is_file()
+
+
+def test_auto_split_acquires_child_page_rmw_lock(
+    graph_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Child page creation must hold ``page_rmw_lock(child)`` (#39)."""
+    lines = ["- Root topic\n", "  id:: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\n"]
+    for i in range(20):
+        lines.append(f"  - child item {i}\n")
+    path = _write_page(graph_root, "DenseLock", "".join(lines))
+    locked: list[Path] = []
+
+    @contextmanager
+    def track_page_lock(page_path: Path) -> Iterator[None]:
+        locked.append(Path(page_path).resolve())
+        with page_rmw_lock(page_path):
+            yield
+
+    monkeypatch.setattr(
+        "src.agent.plumber_modules.auto_split.page_rmw_lock",
+        track_page_lock,
+    )
+
+    outcome = run_auto_split(graph_root, path, "DenseLock", threshold=15)
+    assert outcome.pages_created
+    parent = Path(path).resolve()
+    child = graph_safe_page_path(graph_root, outcome.pages_created[0]).resolve()
+    assert parent in locked
+    assert child in locked
 
 
 def test_cognitive_pipeline_rebuilds_prompt_session_after_auto_split(

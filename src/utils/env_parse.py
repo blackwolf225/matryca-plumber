@@ -1,0 +1,39 @@
+"""Shared environment variable parsing (graph + agent safe)."""
+
+from __future__ import annotations
+
+import os
+
+from loguru import logger
+
+
+def env_bool(key: str, default: bool = False) -> bool:
+    raw = os.environ.get(key, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def env_int(key: str, default: int) -> int:
+    raw = os.environ.get(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid integer for {}={!r}; using default {}", key, raw, default)
+        return default
+
+
+def env_float(key: str, default: float) -> float:
+    raw = os.environ.get(key, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("Invalid float for {}={!r}; using default {}", key, raw, default)
+        return default
+
+
+__all__ = ["env_bool", "env_float", "env_int"]

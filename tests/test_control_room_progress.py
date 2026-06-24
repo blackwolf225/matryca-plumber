@@ -108,6 +108,18 @@ def test_legacy_checkpoint_vault_fallback() -> None:
     assert progress.total == 1
 
 
+def test_phase2_vault_uses_frozen_baseline_denominator() -> None:
+    state = DaemonState(
+        bootstrap_complete=True,
+        phase2_vault_baseline_total=10,
+        phase2_cognitive_total=12,
+        phase2_cognitive_done=8,
+    )
+    progress = resolve_control_room_progress(state)
+    assert progress.total == 10
+    assert progress.percent == 80.0
+
+
 def test_to_api_fields() -> None:
     progress = ControlRoomProgress(
         mode="phase2_cluster",

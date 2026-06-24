@@ -22,7 +22,7 @@ from .markdown_blocks import (
     find_id_line_index,
     graph_safe_page_path,
     occ_snapshot,
-    read_file_mtime,
+    read_file_mtime_ns,
     strip_line_endings,
     strip_lines_for_match,
 )
@@ -345,7 +345,7 @@ def edit_block_property_lines(
 
         bak = path.with_suffix(path.suffix + ".bak")
         shutil.copy2(path, bak)
-        write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime(path)
+        write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime_ns(path)
         if write_mtime is None or not atomic_write_bytes_if_unchanged(
             path,
             new_bytes,
@@ -580,7 +580,7 @@ def append_page_alias_line(
                 )
             bak = path.with_suffix(path.suffix + ".bak")
             shutil.copy2(path, bak)
-            write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime(path)
+            write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime_ns(path)
             if write_mtime is None or not atomic_write_bytes_if_unchanged(
                 path,
                 new_bytes_preview,
@@ -641,7 +641,7 @@ def append_page_alias_line(
                 current_size_bytes=previous_size,
             )
         shutil.copy2(path, bak)
-        write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime(path)
+        write_mtime = baseline_mtime if baseline_mtime is not None else read_file_mtime_ns(path)
         if write_mtime is None or not atomic_write_bytes_if_unchanged(
             path,
             new_bytes,

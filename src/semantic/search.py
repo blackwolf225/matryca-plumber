@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import heapq
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,27 +16,45 @@ from .store import (
     BlockVectorRecord,
     BlockVectorStore,
     _semantic_search_max_candidates,
-    load_block_vector_store,
+    iter_block_records_from_disk,
 )
 
 
+def _lexical_rank_key(
+    item: tuple[str, BlockVectorRecord],
+    query: str,
+) -> tuple[int, str]:
+    _uuid, record = item
+    tokens = [part.casefold() for part in query.split() if len(part) >= 2]
+    blob = f"{record.block_text} {record.applicability_text}".casefold()
+    lexical_hits = sum(1 for token in tokens if token in blob)
+    return (lexical_hits, record.updated_at or "")
+
+
 def _cap_records_for_scoring(
-    records: list[tuple[str, BlockVectorRecord]],
+    records: Iterator[tuple[str, BlockVectorRecord]],
     query: str,
     cap: int,
-) -> list[tuple[str, BlockVectorRecord]]:
-    """Prefer lexical overlap with ``query``, then newest ``updated_at``, before embedding."""
-    if len(records) <= cap:
-        return records
-    tokens = [part.casefold() for part in query.split() if len(part) >= 2]
+) -> tuple[list[tuple[str, BlockVectorRecord]], int]:
+    """Keep top ``cap`` records by lexical overlap without materializing the full index."""
+    if cap <= 0:
+        return [], 0
 
-    def rank_key(item: tuple[str, BlockVectorRecord]) -> tuple[int, str]:
-        _uuid, record = item
-        blob = f"{record.block_text} {record.applicability_text}".casefold()
-        lexical_hits = sum(1 for token in tokens if token in blob)
-        return (lexical_hits, record.updated_at or "")
+    heap: list[tuple[tuple[int, str], tuple[str, BlockVectorRecord]]] = []
+    total = 0
+    for item in records:
+        total += 1
+        key = _lexical_rank_key(item, query)
+        if len(heap) < cap:
+            heapq.heappush(heap, (key, item))
+        elif key > heap[0][0]:
+            heapq.heapreplace(heap, (key, item))
 
-    return sorted(records, key=rank_key, reverse=True)[:cap]
+    if total <= cap:
+        return [item for _key, item in heap], total
+
+    ranked = sorted(heap, key=lambda entry: entry[0], reverse=True)
+    return [item for _key, item in ranked], total
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,20 +85,22 @@ def hybrid_block_search(
         return []
 
     root = Path(graph_root).expanduser().resolve(strict=False)
-    store = load_block_vector_store(root)
-    records = store.iter_records()
+    cap = _semantic_search_max_candidates()
+    records, total = _cap_records_for_scoring(
+        iter_block_records_from_disk(root),
+        cleaned,
+        cap,
+    )
     if not records:
         return []
 
-    cap = _semantic_search_max_candidates()
-    if len(records) > cap:
+    if total > cap:
         logger.warning(
             "Semantic index has {} blocks; scoring first {} "
             "(MATRYCA_SEMANTIC_SEARCH_MAX_CANDIDATES)",
-            len(records),
+            total,
             cap,
         )
-        records = _cap_records_for_scoring(records, cleaned, cap)
 
     query_vec = embedding_client.embed_text(cleaned)
     weights = hybrid_weights()

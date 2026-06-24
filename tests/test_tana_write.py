@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from src.agent.importers.tana.convert import ConvertedPagePlan, TanaConvertResult
 from src.agent.importers.tana.link import TanaLinkResult
 from src.agent.importers.tana.provenance import PROP_TANA_ID
@@ -74,6 +75,33 @@ def test_apply_creates_page_and_ledger(tmp_path: Path) -> None:
     ledger = ledger_path.read_text(encoding="utf-8")
     assert "mini.json" in ledger
     assert "pages_created:: 1" in ledger
+
+
+def test_scan_existing_tana_ids_streams_multiple_pages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pre-import scan must stream line-by-line, not load full page bodies."""
+    graph_root = tmp_path / "vault"
+    pages = graph_root / "pages"
+    pages.mkdir(parents=True)
+    journals = graph_root / "journals"
+    journals.mkdir(parents=True)
+
+    (pages / "Alpha.md").write_text("- alpha\n  tana-id:: ID-A\n", encoding="utf-8")
+    (pages / "Beta.md").write_text("- beta\n  tana-id:: ID-B\n", encoding="utf-8")
+    (journals / "2026_01_01.md").write_text("- journal\n  tana-id:: ID-J\n", encoding="utf-8")
+
+    def fail_full_page_read(*_args: object, **_kwargs: object) -> str:
+        raise AssertionError("scan_existing_tana_ids must not load full page text")
+
+    monkeypatch.setattr(
+        "src.agent.importers.tana.write.read_graph_file_text",
+        fail_full_page_read,
+    )
+
+    existing = scan_existing_tana_ids(graph_root)
+    assert existing == {"ID-A", "ID-B", "ID-J"}
 
 
 def test_existing_tana_id_skips_page_write(tmp_path: Path) -> None:

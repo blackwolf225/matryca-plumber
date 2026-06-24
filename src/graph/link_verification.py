@@ -21,6 +21,7 @@ import httpx
 from loguru import logger
 
 from ..utils.bounded_json import BoundedJsonError, read_bounded_json
+from ..utils.env_parse import env_bool
 from .global_fence_scanner import compute_page_protected_line_indices
 from .json_flock import cross_process_json_flock
 from .markdown_blocks import (
@@ -65,15 +66,8 @@ def link_registry_path(graph_root: Path) -> Path:
     return graph_root.expanduser().resolve() / LINK_REGISTRY_FILENAME
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
-
-
 def link_verify_enabled() -> bool:
-    return _env_bool("MATRYCA_LINK_VERIFY_ENABLED", True)
+    return env_bool("MATRYCA_LINK_VERIFY_ENABLED", True)
 
 
 def link_verify_strikes_threshold() -> int:

@@ -24,6 +24,9 @@ _ENV_GET_RE = re.compile(
 _ENV_HELPER_RE = re.compile(
     r"""_env_(?:bool|int|float|str)\(\s*["']([A-Z][A-Z0-9_]*)["']""",
 )
+_ENV_PARSE_RE = re.compile(
+    r"""env_(?:bool|int|float)\(\s*["']([A-Z][A-Z0-9_]*)["']""",
+)
 _ENV_MAP_RE = re.compile(
     r"""_map_(?:bool|int|float|str)(?:_nonempty)?\(\s*env\s*,\s*["']([A-Z][A-Z0-9_]*)["']""",
     re.DOTALL,
@@ -44,6 +47,7 @@ def _keys_read_in_src() -> set[str]:
         text = path.read_text(encoding="utf-8")
         keys.update(_ENV_GET_RE.findall(text))
         keys.update(_ENV_HELPER_RE.findall(text))
+        keys.update(_ENV_PARSE_RE.findall(text))
         keys.update(_ENV_MAP_RE.findall(text))
         keys.update(_ENV_CONST_RE.findall(text))
         match = _REDACT_KEYS_RE.search(text)

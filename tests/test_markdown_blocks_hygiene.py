@@ -2,11 +2,39 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from src.graph.markdown_blocks import atomic_write_bytes, sweep_dangling_atomic_tmp_files
+from src.graph.markdown_blocks import (
+    atomic_write_bytes,
+    file_mtime_drifted,
+    occ_snapshot,
+    sweep_dangling_atomic_tmp_files,
+)
+
+
+def test_occ_snapshot_returns_mtime_ns(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text("- note\n", encoding="utf-8")
+    assert occ_snapshot(page) == page.stat().st_mtime_ns
+
+
+def test_file_mtime_drifted_detects_one_nanosecond_change(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text("- stable\n", encoding="utf-8")
+    baseline = page.stat().st_mtime_ns
+    os.utime(page, ns=(baseline + 1, baseline + 1))
+    assert file_mtime_drifted(page, baseline)
+    assert not file_mtime_drifted(page, baseline + 1)
+
+
+def test_file_mtime_drifted_accepts_legacy_second_baseline(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    page.write_text("- stable\n", encoding="utf-8")
+    seconds = page.stat().st_mtime
+    assert not file_mtime_drifted(page, seconds)
 
 
 def test_atomic_write_unlinks_temp_when_replace_fails(

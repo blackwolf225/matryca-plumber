@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from .load import iter_tana_nodes
-from .schema import NodeDump
+from .schema import NodeDump, slim_node_dump
 
 _STASH_SUFFIX = "_STASH"
 _SCHEMA_SUFFIX = "_SCHEMA"
@@ -192,6 +192,7 @@ class StreamingGraphBuilder:
         self._tag_def_names: dict[str, str] = {}
 
     def ingest_node(self, node: NodeDump) -> None:
+        node = slim_node_dump(node)
         node_id = node.id
         self._nodes[node_id] = node
         if node_id.endswith(_SCHEMA_SUFFIX):
@@ -219,6 +220,8 @@ class StreamingGraphBuilder:
             owner_id = node.props.get("_ownerId")
             if isinstance(owner_id, str) and owner_id in self._nodes:
                 self._parent_by_child[node_id] = owner_id
+        self._strip_unneeded_outbound_refs()
+        assert self.page_like_supertags is not None
         return TanaWorkspaceGraph(
             nodes=self._nodes,
             children_by_parent=self._children_by_parent,
@@ -228,6 +231,28 @@ class StreamingGraphBuilder:
             tag_def_names=self._tag_def_names,
             page_like_supertags=self.page_like_supertags,
         )
+
+    def _tuple_value_node_ids(self) -> set[str]:
+        """Node ids used as tuple field values (reference formatting may need outbound_refs)."""
+        value_ids: set[str] = set()
+        for node in self._nodes.values():
+            if node.props.get("_docType") != "tuple" or len(node.children) < 2:
+                continue
+            value_ids.update(node.children[1:])
+        return value_ids
+
+    def _strip_unneeded_outbound_refs(self) -> None:
+        """Drop outbound_refs on nodes that never participate in reference field decode."""
+        keep_outbound = self._tuple_value_node_ids()
+        for node_id, node in self._nodes.items():
+            if node_id in keep_outbound or not node.outbound_refs:
+                continue
+            self._nodes[node_id] = NodeDump(
+                id=node.id,
+                props=node.props,
+                children=node.children,
+                outbound_refs=[],
+            )
 
 
 def build_graph_from_export(

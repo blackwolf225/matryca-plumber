@@ -40,25 +40,39 @@ def _sidecar_lock_path(page_path: str | Path) -> Path:
     return path.parent / f".{path.name}.matryca.lock"
 
 
+def _lock_is_held(lock: threading.RLock) -> bool:
+    probe = getattr(lock, "locked", None)
+    if probe is None:
+        return False
+    return bool(probe())
+
+
+def _try_evict_unlocked_registry_entry() -> bool:
+    """Evict one LRU registry entry after proving it is unheld (#157).
+
+    When ``RLock.locked()`` exists, skip entries held by any thread (including
+    reentrant same-thread holders). ``acquire(blocking=False)`` closes the TOCTOU
+    between an unheld probe and registry deletion.
+    """
+    for old_key in list(_page_locks):
+        old_lock = _page_locks[old_key]
+        if _lock_is_held(old_lock):
+            continue
+        if old_lock.acquire(blocking=False):
+            old_lock.release()
+            del _page_locks[old_key]
+            return True
+    return False
+
+
 def _lock_for_key(key: str) -> threading.RLock:
     with _registry_guard:
         lock = _page_locks.get(key)
         if lock is not None:
             _page_locks.move_to_end(key)
             return lock
-        while len(_page_locks) >= _MAX_PAGE_LOCK_REGISTRY:
-            evicted = False
-            for old_key in list(_page_locks):
-                old_lock = _page_locks[old_key]
-                if not getattr(old_lock, "locked", lambda: False)():
-                    del _page_locks[old_key]
-                    evicted = True
-                    break
-            if not evicted:
-                raise PageLockUnavailableError(
-                    f"In-process page lock registry full ({_MAX_PAGE_LOCK_REGISTRY}); "
-                    f"cannot register lock for {key}",
-                )
+        if len(_page_locks) >= _MAX_PAGE_LOCK_REGISTRY:
+            _try_evict_unlocked_registry_entry()
         lock = threading.RLock()
         _page_locks[key] = lock
         return lock

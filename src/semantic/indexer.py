@@ -10,9 +10,13 @@ from loguru import logger
 
 from ..daemon.ast_cache import get_graph_ast_cache
 from .applicability import ApplicabilityLLM, synthesize_applicability
-from .config import dual_embedding_enabled
+from .config import SemanticRuntimeConfig
 from .embedding import EmbeddingClient
-from .store import BlockVectorRecord, load_block_vector_store
+from .store import (
+    BlockVectorRecord,
+    apply_page_block_vector_updates,
+    release_block_vector_store,
+)
 
 
 def _block_uuid(node: LogseqNode) -> str | None:
@@ -33,10 +37,14 @@ def _block_text(node: LogseqNode) -> str:
 
 
 def _prune_page_vectors(graph_root: Path, page_title: str, keep_uuids: set[str]) -> int:
-    store = load_block_vector_store(graph_root)
-    pruned = store.remove_blocks_for_page_except(page_title, keep_uuids)
+    _indexed, pruned = apply_page_block_vector_updates(
+        graph_root,
+        page_title,
+        upserts={},
+        keep_uuids=keep_uuids,
+    )
     if pruned > 0:
-        store.save()
+        release_block_vector_store(graph_root)
     return pruned
 
 
@@ -85,9 +93,11 @@ def index_page_blocks(
     *,
     llm_client: ApplicabilityLLM,
     embedding_client: EmbeddingClient,
+    runtime_config: SemanticRuntimeConfig | None = None,
 ) -> int:
     """Dual-embed all blocks with ``id::`` on ``page_title``. Returns blocks indexed."""
-    if not dual_embedding_enabled():
+    config = runtime_config or SemanticRuntimeConfig.from_env()
+    if not config.dual_embedding_enabled:
         return 0
 
     root = graph_root.expanduser().resolve(strict=False)
@@ -107,8 +117,7 @@ def index_page_blocks(
         _prune_page_vectors(root, canonical_title, keep_uuids)
         return 0
 
-    store = load_block_vector_store(root)
-    indexed = 0
+    upserts: dict[str, BlockVectorRecord] = {}
     now = datetime.now(tz=UTC).isoformat()
 
     for node in nodes:
@@ -129,22 +138,22 @@ def index_page_blocks(
             )
             continue
 
-        if store.upsert(
-            block_id,
-            BlockVectorRecord(
-                page_title=canonical_title,
-                block_text=text,
-                applicability_text=applicability,
-                vec_content=vec_content,
-                vec_applicability=vec_app,
-                updated_at=now,
-            ),
-        ):
-            indexed += 1
+        upserts[block_id] = BlockVectorRecord(
+            page_title=canonical_title,
+            block_text=text,
+            applicability_text=applicability,
+            vec_content=vec_content,
+            vec_applicability=vec_app,
+            updated_at=now,
+        )
 
-    pruned = store.remove_blocks_for_page_except(canonical_title, keep_uuids)
-    if indexed > 0 or pruned > 0:
-        store.save()
+    indexed, _pruned = apply_page_block_vector_updates(
+        root,
+        canonical_title,
+        upserts=upserts,
+        keep_uuids=keep_uuids,
+    )
+    release_block_vector_store(graph_root)
     logger.bind(page=canonical_title, blocks=indexed).info("Dual embedding indexed blocks")
     return indexed
 

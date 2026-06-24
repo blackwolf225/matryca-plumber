@@ -24,13 +24,14 @@ from ..graph.markdown_blocks import (
     atomic_write_bytes,
     atomic_write_bytes_if_unchanged,
     graph_safe_page_path,
-    read_file_mtime,
+    read_file_mtime_ns,
 )
 from ..graph.page_properties import stamp_plumber_authored_page
 from ..graph.page_write_lock import page_rmw_lock
 from ..graph.path_sandbox import read_graph_file_text
 from ..utils.secret_redaction import secret_violations_in_text
 from .graph_tool_helpers import graph_missing_text, graph_path_from_env
+from .routing_hint import routing_hint_for_write_outline
 
 INGEST_ENV_KEY = "MATRYCA_INGEST_PAGE"
 LOG_PAGE_TITLE = "LOG"
@@ -216,7 +217,7 @@ def _append_markdown_page(
                 raise OCCConflictError(
                     path,
                     baseline_mtime=occ.baseline_mtime,
-                    current_mtime=read_file_mtime(path),
+                    current_mtime=read_file_mtime_ns(path),
                 )
             if not atomic_write_bytes_if_unchanged(
                 path,
@@ -229,7 +230,7 @@ def _append_markdown_page(
                 raise OCCConflictError(
                     path,
                     baseline_mtime=occ.baseline_mtime,
-                    current_mtime=read_file_mtime(path),
+                    current_mtime=read_file_mtime_ns(path),
                 )
             occ.refresh_after_own_write()
         else:
@@ -375,7 +376,7 @@ async def dispatch_ingest_document(source_name: str, raw_text: str) -> dict[str,
         "log_path": result.log_path,
         "glossary_path": result.glossary_path,
         "files_touched": result.files_touched,
-        "routing_hint": "<!-- matryca_routing: hint=L2_graph_append -->",
+        "routing_hint": routing_hint_for_write_outline(),
     }
 
 

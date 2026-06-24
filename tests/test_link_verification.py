@@ -21,7 +21,8 @@ from src.graph.link_verification import (
 )
 
 BLOCK = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-_BASELINE_MTIME_NS = 1_000_000_000
+# Must be >= 1e12 so _normalize_baseline_mtime_ns treats it as nanoseconds, not seconds.
+_BASELINE_MTIME_NS = 1_700_000_000_000_000_000
 
 
 @pytest.fixture
@@ -96,7 +97,7 @@ def test_flag_block_proceeds_when_mtime_unchanged_ns(
         ),
         patch("src.graph.link_verification.occ_verify_before_write", return_value=True),
         patch(
-            "src.graph.markdown_blocks.read_file_mtime",
+            "src.graph.markdown_blocks.read_file_mtime_ns",
             return_value=_BASELINE_MTIME_NS,
         ),
         patch(
@@ -127,7 +128,7 @@ def test_flag_block_aborts_on_one_nanosecond_mtime_drift(
         ),
         patch("src.graph.link_verification.occ_verify_before_write", return_value=True),
         patch(
-            "src.graph.markdown_blocks.read_file_mtime",
+            "src.graph.markdown_blocks.read_file_mtime_ns",
             return_value=_BASELINE_MTIME_NS + 1,
         ),
         patch(

@@ -6,6 +6,28 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Props read by graph indexes, tag extraction, convert, link, and provenance.
+_RETAINED_TANA_PROP_KEYS = frozenset(
+    {
+        "_docType",
+        "_done",
+        "_flags",
+        "_metaNodeId",
+        "_ownerId",
+        "_sourceId",
+        "amount",
+        "created",
+        "done",
+        "href",
+        "modifiedTs",
+        "name",
+        "number",
+        "source",
+        "url",
+        "value",
+    },
+)
+
 
 class NodeDump(BaseModel):
     """One element from the flat ``docs[]`` array in a Tana workspace export."""
@@ -35,3 +57,21 @@ class NodeDump(BaseModel):
         if isinstance(value, dict):
             return dict(value)
         return {}
+
+
+def slim_node_dump(node: NodeDump) -> NodeDump:
+    """Drop export props/refs not used by the conversion pipeline (RAM on large exports)."""
+    slim_props = {
+        key: value for key, value in node.props.items() if key in _RETAINED_TANA_PROP_KEYS
+    }
+    if len(slim_props) == len(node.props) and not node.inbound_refs:
+        return node
+    return NodeDump(
+        id=node.id,
+        props=slim_props,
+        children=node.children,
+        outbound_refs=node.outbound_refs,
+    )
+
+
+__all__ = ["NodeDump", "slim_node_dump"]

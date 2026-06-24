@@ -21,7 +21,12 @@ from ....graph.markdown_blocks import (
 )
 from ....graph.page_properties import inject_page_properties, stamp_plumber_authored_page
 from ....graph.page_write_lock import page_rmw_lock
-from ....graph.path_sandbox import read_graph_file_text, resolved_graph_root
+from ....graph.path_sandbox import (
+    PathTraversalSecurityError,
+    assert_path_within_graph,
+    read_graph_file_text,
+    resolved_graph_root,
+)
 from ....utils.secret_redaction import secret_violations_in_text
 from ...outline_models import OutlineNode
 from .convert import ConvertedJournalPlan, ConvertedPagePlan
@@ -66,13 +71,25 @@ class TanaWriteReport:
         return json.dumps(self.to_dict(), indent=2, sort_keys=True)
 
 
+def _collect_tana_ids_from_file(path: Path, graph_root: Path) -> set[str]:
+    """Stream ``tana-id::`` values from one markdown file (O(longest line) RAM)."""
+    found: set[str] = set()
+    try:
+        safe = assert_path_within_graph(path, graph_root)
+        with safe.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                found.update(_TANA_ID_PATTERN.findall(line))
+    except (OSError, PathTraversalSecurityError):
+        pass
+    return found
+
+
 def scan_existing_tana_ids(graph_root: str | Path) -> set[str]:
     """Collect every ``tana-id::`` value already present under ``pages/`` and ``journals/``."""
     root = resolved_graph_root(graph_root)
     found: set[str] = set()
     for path in _iter_graph_markdown_paths(root):
-        text = read_graph_file_text(path, root, errors="replace")
-        found.update(_TANA_ID_PATTERN.findall(text))
+        found.update(_collect_tana_ids_from_file(path, root))
     return found
 
 
