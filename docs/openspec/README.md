@@ -10,6 +10,8 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 |----------|--------|
 | [`live-telemetry-ui.md`](live-telemetry-ui.md) | v1.9.3 Sovereign UI polling; v1.9.11 graph-analytics cache/timeout/offline handling; v1.10.3 non-blocking config saves. |
 | [`agent-onboarding.md`](agent-onboarding.md) | v1.9.2 `llms.txt` / `.well-known/llms.txt`, PyPI `uvx` contract, agent anti-patterns. |
+| [`agent/`](agent/) | **`SYSTEM_PROMPT.md` fragments** — `_assembly_order.txt`, paradigm, soft-gate, MCP, formatting (`make build-system-prompt`). |
+| [`logseq-paradigm.md`](logseq-paradigm.md) | Logseq OG blocks/properties SSOT for contributor and runtime docs. |
 | [`agent-ax-robustness.md`](agent-ax-robustness.md) | v1.9.7+ lenient page resolution, safe `write_outline` fallback, `heading_level` coercion, chaos tests. |
 | [`security-sandbox.md`](security-sandbox.md) | v1.9.9 path sandbox reads, bounded JSON checkpoints, CI `sandbox-read-check`; v1.10.0 flock + atomic JSON sidecars ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); v1.10.3 flock sidecar `0o600`. |
 | [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md) | v1.9.6 Hermes Agent MCP: lazy AST handshake, `connect_timeout` vs tool `timeout`, verified config. |

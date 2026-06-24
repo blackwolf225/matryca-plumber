@@ -1,0 +1,11 @@
+# Assembly order for SYSTEM_PROMPT.md (one fragment per line)
+identity.md
+soft-gate.md
+mcp-tools.md
+paradigm.md
+synthetic-ids.md
+formatting.md
+xray.md
+l1-l2-routing.md
+tool-reference.md
+workflow-footer.md

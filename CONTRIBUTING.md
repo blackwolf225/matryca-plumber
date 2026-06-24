@@ -292,6 +292,15 @@ Matryca Plumber enforces **`[tool.mypy] strict = true`** on `src/` and `tests/` 
 
 Verification: `uv run mypy src tests` (also run via `make typecheck` / `make check`).
 
+### `SYSTEM_PROMPT.md` assembly
+
+Runtime cognitive law is assembled from [`docs/openspec/agent/`](docs/openspec/agent/) fragments — **do not edit** [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) by hand.
+
+```bash
+make build-system-prompt   # after fragment edits
+make check-system-prompt   # CI: build-hash comment must match fragment bytes
+```
+
 ---
 
 ## Releases

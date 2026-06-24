@@ -3,6 +3,9 @@
 ### Added
 
 - **L0 write safety** — `src/graph/safety/validators.py` (`reject_id_line_deletion`, `reject_protected_zones_modification`) invoked before semantic index commits; `tests/test_safety_validators.py`.
+- **Paradigm SSOT** — [`docs/openspec/logseq-paradigm.md`](docs/openspec/logseq-paradigm.md) → [`docs/openspec/agent/paradigm.md`](docs/openspec/agent/paradigm.md).
+- **`SYSTEM_PROMPT.md` assembly** — [`docs/openspec/agent/`](docs/openspec/agent/) fragments, `make build-system-prompt`, `make check-system-prompt` (fragment `build-hash` in generated banner); Soft Gate decision tree in `soft-gate.md`.
+- **Assembly guard** — `build_system_prompt.py` fails when `docs/openspec/agent/*.md` exists but is missing from `_assembly_order.txt`.
 
 ## [1.11.2] - 2026-06-24
 
