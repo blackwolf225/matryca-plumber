@@ -19,9 +19,9 @@ from ...graph.page_properties import inject_page_properties, page_property_keys
 from ...graph.page_write_lock import page_rmw_lock
 from ...graph.path_sandbox import read_graph_file_text, resolved_graph_root
 from ..plumber_llm import MarpaClassificationResult
-from ..prompt_constraints import finalize_system_prompt
 from ..prompt_layout import build_cache_aligned_prompt
 from ._shared import ModuleOutcome, is_blank_page_content
+from .marpa.prompts import build_marpa_classify_system_prompt
 
 MarpaDomain = Literal["mappa", "area", "risorsa", "progetto", "archivio"]
 
@@ -37,18 +37,6 @@ MARPA_DOMAIN_DEFINITIONS = (
     "- archivio: Closed or dormant node — completed, cancelled, or superseded material removed "
     "from active planning surfaces."
 )
-
-_MARPA_CLASSIFY_SYSTEM_INSTRUCTIONS = (
-    "You are the MARPA semantic taxonomy compiler for Logseq OG. Return JSON only. "
-    "Assign exactly one domain from the user-provided catalog. "
-    "Populate inferred_properties for missing structural fields (deadline, status, owner). "
-    "Use standardized Logseq property keys; leave values empty when unknown."
-)
-
-
-def build_marpa_classify_system_prompt() -> str:
-    """System prompt for MARPA domain classification (English instructions, multilingual output)."""
-    return finalize_system_prompt(_MARPA_CLASSIFY_SYSTEM_INSTRUCTIONS)
 
 
 def build_marpa_classify_user_prompt(

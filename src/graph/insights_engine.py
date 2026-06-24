@@ -12,6 +12,7 @@ from .alias_index import iter_alias_source_paths, page_title_from_path
 from .cognitive_llm import GraphInsightsLLMResult, InsightsLLM
 from .generated_hub_write import write_generated_hub_page
 from .generational_cache import patch_generational_caches_for_paths
+from .insights.prompts import build_insights_system_prompt
 from .link_tag_hop import (
     _WIKILINK,
     _extract_inline_tags,
@@ -22,7 +23,6 @@ from .markdown_blocks import occ_snapshot
 from .master_catalog import MasterCatalog, load_master_catalog
 from .page_path import filename_to_page_title
 from .path_sandbox import graph_safe_page_path, read_graph_file_text
-from .prompt_constraints import finalize_system_prompt
 
 GRAPH_INSIGHTS_TITLE = "Matryca Graph Insights"
 _DENSE_WIKILINK_THRESHOLD = 25
@@ -413,20 +413,7 @@ def run_graph_insights_engine(
     )
 
 
-INSIGHTS_JSON_CONSTRAINT = (
-    "\n\n[CRITICAL JSON OUTPUT CONSTRAINT]\n"
-    "NEVER GENERATE NESTED UNESCAPED QUOTES OR TRAILING GARBAGE CONTEXT. "
-    "TERMINATE THE JSON BLOCK CLEANLY IMMEDIATELY AFTER THE CLOSING OBJECT BRACKET. "
-    "Return valid JSON only — no markdown fences, no prose after the closing brace."
-)
-
-INSIGHTS_SYSTEM_PROMPT = finalize_system_prompt(
-    "You are Matryca Plumber's Graph Insights Engine. Analyze structural topology metrics "
-    "for a personal Logseq knowledge graph. Write in clear, beautiful English prose. "
-    "Surface hidden conceptual clusters, naming drift, and structural debt without "
-    "prescribing destructive edits. Cleanup suggestions must be non-destructive and "
-    "formatted as short actionable sentences (no markdown bullets)." + INSIGHTS_JSON_CONSTRAINT
-)
+INSIGHTS_SYSTEM_PROMPT = build_insights_system_prompt()
 
 
 __all__ = [

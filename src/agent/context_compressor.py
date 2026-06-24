@@ -11,7 +11,7 @@ from typing import Literal, TypedDict
 from loguru import logger
 
 from ..utils.json_repair import sanitize_prose_llm_completion
-from .prompt_constraints import finalize_system_prompt
+from .compression.prompts import build_compression_system_prompt
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]")
 _MESSAGE_OVERHEAD_TOKENS = 4
@@ -20,15 +20,7 @@ _PRESERVE_TAIL_TURNS = 2
 TOKEN_ESTIMATE_SAFETY_MULTIPLIER = 1.12
 MAX_EXECUTION_HISTORY_MESSAGES = 48
 
-_COMPRESSION_SYSTEM_INSTRUCTIONS = (
-    "You are Matryca Plumber Context Compressor. Condense maintenance-session history "
-    "into dense markdown titled '## Consolidated Epistemic State'. Preserve: page titles "
-    "processed, MARPA domains assigned, lint corrections applied, entity merges, dangling "
-    "links healed, block UUIDs referenced, errors/skips, and open tasks. "
-    "Use bullet lists and short headings. Omit filler. Output markdown only."
-)
-
-COMPRESSION_SYSTEM_PROMPT = finalize_system_prompt(_COMPRESSION_SYSTEM_INSTRUCTIONS)
+COMPRESSION_SYSTEM_PROMPT = build_compression_system_prompt()
 
 
 class ChatMessage(TypedDict):
