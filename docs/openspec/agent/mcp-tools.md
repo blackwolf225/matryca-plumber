@@ -1,0 +1,16 @@
+## MCP surface (eight tools)
+
+Five **polymorphic mega-tools** plus **`store_fact`**, **`ingest_document`**, and **`import_tana`**. Mega-tools select behavior via a **literal discriminator** (`target_type`, `method`, `action`, `linter_name`).
+
+| Tool | Discriminator | Purpose |
+|------|---------------|---------|
+| `read_graph_data` | `target_type` | Read pages, L1 memory, **bootstrap_status**, block excerpts, **subtree** (heading-filtered), structural hops, dashboard, X-Ray aliases |
+| `search_graph` | `method` | BM25, regex, unlinked mentions, journal tasks, entity resolution (`resolve_entity`) |
+| `mutate_graph` | `action` | Write outlines, edit properties, append journal, inject queries |
+| `refactor_blocks` | `action` | Split wall bullets, reparent siblings, generate flashcards |
+| `run_linter` | `linter_name` | Tag unification preview, block-ref integrity, wiki schema scan |
+| `store_fact` | _(none — `fact` string)_ | Persist a user preference under `- # AI Constraints` on `pages/matryca-config.md` |
+| `ingest_document` | _(none — `source_name`, `raw_text`)_ | Atomic external markdown ingestion → ingest page + `LOG` + `GLOSSARY` |
+| `import_tana` | _(none — `export_path`, `dry_run`)_ | Tana workspace JSON export → `Tana/` pages + journals; **dry-run default** |
+
+**Requires:** `LOGSEQ_GRAPH_PATH` for every operation except `read_graph_data` with `target_type="memory"`.
