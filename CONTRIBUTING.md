@@ -292,6 +292,18 @@ Matryca Plumber enforces **`[tool.mypy] strict = true`** on `src/` and `tests/` 
 
 Verification: `uv run mypy src tests` (also run via `make typecheck` / `make check`).
 
+### Tier-1 daemon prompt hashes
+
+`tests/test_daemon_prompts.py` pins **SHA-256** snapshots of each Tier-1 **system prompt** in [`tests/prompt_hash_snapshots.json`](tests/prompt_hash_snapshots.json) (budget/substring asserts run in the same file).
+
+**If you intentionally change a builder:**
+
+```bash
+uv run pytest tests/test_daemon_prompts.py --update-prompt-hashes
+git add tests/prompt_hash_snapshots.json
+# commit message: prompt(builder-name): <why the contract changed>
+```
+
 ### `SYSTEM_PROMPT.md` assembly
 
 Runtime cognitive law is assembled from [`docs/openspec/agent/`](docs/openspec/agent/) fragments — **do not edit** [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) by hand.

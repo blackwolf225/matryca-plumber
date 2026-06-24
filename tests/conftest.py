@@ -23,6 +23,23 @@ _THERMAL_DELAY_ENV_KEYS = (
 )
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--update-prompt-hashes",
+        action="store_true",
+        default=False,
+        help="Rewrite tests/prompt_hash_snapshots.json from current Tier-1 builders",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if config.getoption("--update-prompt-hashes", default=False):
+        from tests.test_daemon_prompts import update_prompt_hash_snapshots
+
+        update_prompt_hash_snapshots()
+        print("Updated tests/prompt_hash_snapshots.json")
+
+
 @pytest.fixture(autouse=True)
 def zero_thermal_delays_in_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """Skip real thermal cool-down sleeps unless a test overrides these env vars."""

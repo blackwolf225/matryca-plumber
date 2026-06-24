@@ -4,9 +4,15 @@
 
 - **L0 write safety** — `src/graph/safety/validators.py` (`reject_id_line_deletion`, `reject_protected_zones_modification`) invoked before semantic index commits; `tests/test_safety_validators.py`.
 - **Agent instruction router** — root [`AGENTS.md`](AGENTS.md) maps Cursor vs runtime vault audiences; `make agents-check` / `scripts/check_agents_coherence.py` guard path drift, `llms.txt` byte-identity, and `SYSTEM_PROMPT.md` citation.
+- **Tier-1 prompt architecture** — `src/agent/prompts/core.py` (`SystemPromptBuilder`, Tier-1A/B templates); domain builders under `semantic_lint/`, `bootstrap/`, `compression/`, `plumber_modules/marpa/`, `plumber_modules/llm_prompts/`, `graph/insights/`; constructor injection on `InstructorLLMClient`.
 - **Paradigm SSOT** — [`docs/openspec/logseq-paradigm.md`](docs/openspec/logseq-paradigm.md) → [`docs/openspec/agent/paradigm.md`](docs/openspec/agent/paradigm.md).
 - **`SYSTEM_PROMPT.md` assembly** — [`docs/openspec/agent/`](docs/openspec/agent/) fragments, `make build-system-prompt`, `make check-system-prompt` (fragment `build-hash` in generated banner); Soft Gate decision tree in `soft-gate.md`.
+- **Prompt hash snapshots** — `tests/prompt_hash_snapshots.json` + `pytest tests/test_daemon_prompts.py --update-prompt-hashes`; `tests/test_llm_client_prompt_injection.py` verifies DI on `InstructorLLMClient`.
 - **Assembly guard** — `build_system_prompt.py` fails when `docs/openspec/agent/*.md` exists but is missing from `_assembly_order.txt`.
+
+### Changed
+
+- **Semantic lint prompt** — rule (6) dead-zone invariant; harvest/insights prompts aligned to cross-lingual output (no English-only hardcoding).
 
 ## [1.11.2] - 2026-06-24
 

@@ -30,10 +30,20 @@ Every local LLM call that reads page text should follow:
 
 | Module | Role |
 |--------|------|
+| [`prompts/core.py`](../../src/agent/prompts/core.py) | `SystemPromptBuilder` protocol, Tier-1A/B compile helpers (domain builders import **only** this module) |
+| [`semantic_lint/prompts.py`](../../src/agent/semantic_lint/prompts.py) | Tier-1A semantic lint compiler (rules 1–6) |
+| [`bootstrap/prompts.py`](../../src/agent/bootstrap/prompts.py) | Tier-1A harvest summaries |
+| [`plumber_modules/marpa/prompts.py`](../../src/agent/plumber_modules/marpa/prompts.py) | Tier-1A MARPA classify |
+| [`plumber_modules/llm_prompts/`](../../src/agent/plumber_modules/llm_prompts/) | Tier-1A entity/seed/tag prompts |
+| [`compression/prompts.py`](../../src/agent/compression/prompts.py) | Tier-1B session compression |
+| [`graph/insights/prompts.py`](../../src/graph/insights/prompts.py) | Tier-1A `GraphInsightsLLMResult` |
+| [`graph/safety/validators.py`](../../src/graph/safety/validators.py) | L0 hard rejection before LLM-backed disk writes |
 | [`prompt_layout.py`](../../src/agent/prompt_layout.py) | `build_cache_aligned_prompt(content, task_instruction)` |
-| [`semantic_lint_prompts.py`](../../src/agent/semantic_lint_prompts.py) | `build_semantic_lint_system_prompt()` — shared across index + cognitive pipeline |
+| [`semantic_lint_prompts.py`](../../src/agent/semantic_lint_prompts.py) | Deprecated re-export → `semantic_lint.prompts` |
 | [`page_prompt_session.py`](../../src/agent/page_prompt_session.py) | One `PagePromptSession` per file per daemon cycle |
-| [`llm_context_payload.py`](../../src/agent/llm_context_payload.py) | Shrinks giant pages to Phase 1 summary / skeleton before they enter the stable block |
+| [`llm_context_payload.py`](../../src/agent/llm_context_payload.py) | Shrinks giant pages before they enter the stable block |
+
+**Maintainer checklist:** new cognitive module → add domain `prompts.py` builder + extend `tests/test_daemon_prompts.py` (system prompt only, no SHA256 snapshots).
 
 ### Per-page session lifecycle
 
