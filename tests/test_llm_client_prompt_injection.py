@@ -12,14 +12,14 @@ from src.agent.prompts.core import PromptContext
 
 
 class _MarkerBuilder:
-  tier: Literal["1A", "1B"] = "1A"
+    tier: Literal["1A", "1B"] = "1A"
 
-  def __init__(self, marker: str) -> None:
-      self._marker = marker
+    def __init__(self, marker: str) -> None:
+        self._marker = marker
 
-  def build(self, ctx: PromptContext | None = None) -> str:
-      _ = ctx
-      return self._marker
+    def build(self, ctx: PromptContext | None = None) -> str:
+        _ = ctx
+        return self._marker
 
 
 def test_harvest_page_summary_uses_injected_builder_system_prompt(

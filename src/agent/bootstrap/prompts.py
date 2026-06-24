@@ -29,8 +29,7 @@ class HarvestPromptBuilder:
                 "Fields: summary, suggested_tags, domain."
             ),
             abort=(
-                "If the page body is empty or unreadable, return an empty summary "
-                "and omit domain."
+                "If the page body is empty or unreadable, return an empty summary and omit domain."
             ),
             ctx=ctx,
         )

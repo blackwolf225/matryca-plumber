@@ -9,10 +9,8 @@ from ..prompts.core import PromptContext, compile_tier1a_prompt
 
 _SEMANTIC_LINT_INVARIANTS = (
     "(1) block_uuid must match an id:: line from the page;",
-    "(2) original_text must copy the bullet-line text verbatim "
-    "(exclude id:: / property lines);",
-    "(3) corrected_text must preserve original_text unchanged "
-    "and only add [[WikiLinks]] or #tags;",
+    "(2) original_text must copy the bullet-line text verbatim (exclude id:: / property lines);",
+    "(3) corrected_text must preserve original_text unchanged and only add [[WikiLinks]] or #tags;",
     "(4) never delete, shorten, or paraphrase user prose;",
     "(5) if unsure, omit the correction.",
     "(6) never propose edits inside fenced code (```), HTML comments, "
