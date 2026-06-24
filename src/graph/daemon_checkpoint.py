@@ -81,9 +81,7 @@ def read_daemon_checkpoint(graph_root: str | Path) -> DaemonCheckpointView:
     return DaemonCheckpointView(
         bootstrap_complete=bool(payload.get("bootstrap_complete", False)),
         bootstrap_failed=bool(payload.get("bootstrap_failed", False)),
-        bootstrap_failed_reason=(
-            str(reason) if reason not in (None, "") else None
-        ),
+        bootstrap_failed_reason=(str(reason) if reason not in (None, "") else None),
         bootstrap_scanned=int(payload.get("bootstrap_scanned", 0)),
         bootstrap_total=int(payload.get("bootstrap_total", 0)),
         status=str(status) if status not in (None, "") else None,

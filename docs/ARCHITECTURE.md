@@ -1,6 +1,6 @@
 # Matryca Plumber — System Architecture
 
-**Version:** 1.11.1 (parser 1.4.0 alignment + Tana workspace JSON import + unified flock + hub page OCC + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
+**Version:** 1.11.2 (graph layer boundary refactor + bounded RAM LRU caches + OCC nanosecond parity + parser 1.4.0 alignment + Tana workspace JSON import + unified flock + hub page OCC + CI/deps maintenance + Sovereign UI resilience + strict LLM contracts + flock sidecar permissions + catalog/registry integrity + OSS CI maturity + strict mypy + journal Phase-2 semantic bypass + LLM OS agent contract)  
 **Package:** `matryca-plumber` on PyPI  
 **Audience:** maintainers, contributors, and operators integrating Logseq OG with local LLMs
 
@@ -68,6 +68,8 @@ flowchart TB
 
 **v1.10.3 focus:** **Sovereign UI resilience & LLM contract hardening** — config/graph-path saves offloaded from the FastAPI event loop (`asyncio.to_thread`); rotating Loguru at UI startup; Pydantic `extra="forbid"` on plumber/outline structured models; recursive OpenAI strict JSON Schema generation; adaptive `max_tokens` / `max_completion_tokens`; flock sidecar files created as `0o600`. Spec: [`openspec/live-telemetry-ui.md`](openspec/live-telemetry-ui.md#v1103-non-blocking-config-saves), [`resilience-llm-json-triz.md`](resilience-llm-json-triz.md).
 
+**v1.11.2 focus:** **Graph layer boundary refactor** — canonical graph primitives (`post_write`, `ast_cache`, `daemon_checkpoint`, cooperative yield, harvest runtime, prompt layout/constraints, cognitive LLM protocols) live in `src/graph/` with agent/daemon shims; `tests/test_graph_layer_boundary.py` forbids graph→agent/daemon imports ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) closed). **Bounded RAM** — generational alias/BM25 LRU (`MATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS`) and dual-embedding ondemand/resident modes (`MATRYCA_BLOCK_VECTOR_STORE_MODE`, `MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS`) ([#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136), [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial). **OCC nanosecond parity** — page writes use `st_mtime_ns` via `read_file_mtime_ns` ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial). **Shared env parsing** — `src/utils/env_parse.py`.
+
 **v1.11.1 focus:** **Logseq Matryca Parser 1.4.0 alignment** — minimum dependency `logseq-matryca-parser>=1.4.0`; inherits 1.3.x root public API and graph parity; picks up 1.4.0 robustness (canonical page iteration, case-insensitive tag/search, watcher delete/move, SYNAPSE embed safety, 31 bug-hunt fixes).
 
 **v1.11.0 focus:** **Tana → Logseq OG migration** — streaming `ijson` loader over Tana workspace JSON exports; hybrid entity placement under `Tana/`; `#day` journal routing via `logseq/config.edn`; depth-split at configurable limit; in-flight + catalog wikilink resolution; `tana-id::` idempotent OCC writes; CLI `matryca import tana` and MCP `import_tana` (dry-run default). Spec: [`openspec/tana-import.md`](openspec/tana-import.md).
@@ -99,30 +101,98 @@ Persistent artifacts at the graph root include `.matryca_daemon_state.json` (che
 | Component | Module | Role |
 |-----------|--------|------|
 | File watcher | `src/daemon/file_watcher.py` | Debounced `watchdog` on `pages/` + `journals/`; wakes duty cycle on external edits |
-| AST RAM cache | `src/daemon/ast_cache.py` | `LogseqGraph` full load + per-page `invalidate_and_reload_page` |
+| AST RAM cache | `src/graph/ast_cache.py` (shim: `src/daemon/ast_cache.py`) | `LogseqGraph` full load + per-page `invalidate_and_reload_page`; auto-registers post-write delta handler |
 | Identity store | `src/daemon/config_layer.py` | Telos / AI Constraints from config page; LLM + MCP injection |
-| Post-write hooks | `src/daemon/post_write_hooks.py` | After atomic markdown writes: cache delta, identity refresh, robot git commit |
+| Post-write port | `src/graph/post_write.py` (adapter: `src/daemon/post_write_hooks.py`) | `PageWrittenEvent` pub/sub after atomic markdown writes: cache delta, identity refresh, robot git commit |
+| Bootstrap gate (read-only) | `src/graph/daemon_checkpoint.py` | Lightweight `.matryca_daemon_state.json` reader for Soft Gate / MCP — no `maintenance_daemon` import |
 
 Spec: [`docs/openspec/identity-config.md`](openspec/identity-config.md).
 
-#### Layer boundaries & known gaps (v1.11)
+#### Graph layer modules (v1.11.2)
+
+Canonical graph primitives moved from agent/daemon orchestration into `src/graph/`. Agent and daemon modules **re-export** for backward compatibility; `tests/test_graph_layer_boundary.py` enforces that graph code never imports `agent` or `daemon` (except the filename `daemon_checkpoint.py`, which reads JSON only).
+
+| Module | Role |
+|--------|------|
+| `post_write.py` | `PageWrittenEvent` pub/sub port — `emit_page_written` after successful atomic writes |
+| `ast_cache.py` | AST RAM cache + post-write page delta handler |
+| `daemon_checkpoint.py` | Read-only bootstrap gate fields from `.matryca_daemon_state.json` + `.bak` recovery |
+| `cooperative_yield.py` | Bootstrap I/O yielding (`yield_host`, env-driven intervals) |
+| `harvest_runtime.py` | MapReduce thresholds + thermal pause (graph-local) |
+| `cognitive_llm.py` | `HarvestLLM` / `InsightsLLM` protocols + Pydantic payloads |
+| `prompt_constraints.py` | Cross-lingual output constraint + `finalize_system_prompt()` |
+| `prompt_layout.py` | KV-cache-aligned prompt layout |
+| `page_namespace.py` | `detect_marpa_namespace()` for MARPA path segments |
+
+```mermaid
+flowchart TB
+  subgraph surfaces [Surfaces]
+    Agent[src/agent orchestration]
+    Daemon[src/daemon adapters]
+    MCP[MCP graph_dispatch]
+  end
+
+  subgraph graph [src/graph canonical layer]
+    MW[markdown_blocks atomic_write]
+    PW[post_write emit_page_written]
+    AST[ast_cache delta handler]
+    CP[daemon_checkpoint read-only]
+    GC[generational_cache LRU]
+    Alias[alias_index journal detect]
+  end
+
+  subgraph vault [LOGSEQ_GRAPH_PATH]
+    MD[pages and journals md]
+    State[.matryca_daemon_state.json]
+  end
+
+  Agent --> graph
+  Daemon --> graph
+  MCP --> graph
+  MW --> PW
+  PW --> AST
+  PW --> Daemon
+  CP --> State
+  MW --> MD
+  AST --> MD
+```
+
+```mermaid
+sequenceDiagram
+  participant Writer as markdown_blocks atomic_write
+  participant Port as graph.post_write
+  participant AST as graph.ast_cache
+  participant Adapter as daemon.post_write_hooks
+  participant Identity as config_layer
+  participant Git as robot git commit
+
+  Writer->>Writer: OCC verify st_mtime_ns
+  Writer->>Port: emit_page_written PageWrittenEvent
+  Port->>AST: invalidate_and_reload_page
+  Port->>Adapter: adapter handler
+  Adapter->>Identity: refresh if config page
+  Adapter->>Git: optional auto-commit
+  Note over Writer,Git: Handler failures logged never propagated
+```
+
+#### Layer boundaries & known gaps (v1.11.2)
 
 Honest status after Expert, Repomix, [Clean Architecture Audit 2026-06](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md), and [Claude Architectural Audit 2026-06-24](quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md) triage:
 
 | Gap | Current behavior | Tracking |
 |-----|------------------|----------|
-| Graph → daemon coupling | `markdown_blocks` calls `daemon.post_write_hooks.emit_post_write_commit` directly; `post_write_hooks` already has a subscriber API but dependency direction is inverted | [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) — fixed in working tree |
+| ~~Graph → daemon coupling~~ | **Shipped v1.11.2:** `markdown_blocks` emits `graph.post_write.emit_page_written`; daemon adapter subscribes | ~~[#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134)~~ closed |
 | Tana import memory (index phase) | `ijson` avoids full JSON DOM; `from_export` single-pass shipped; `StreamingGraphBuilder` still retains O(nodes) full `NodeDump` payloads | [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) partial — [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154) |
 | Tana idempotency v1 | Skip on `tana-id::` match only — no content-hash merge (v2 scope) | [#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139) |
-| Dual-embedding `block_vectors.json` in RAM | Streaming merge + ondemand mode shipped; full resident catalog still possible | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial |
-| OCC mtime granularity | Page writes use `st_mtime` float; catalog uses `st_mtime_ns` | [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153); content-hash CAS → [#17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) v2 |
+| Dual-embedding `block_vectors.json` in RAM | **Shipped v1.11.2:** ondemand default + page-scoped streaming merge + LRU resident cap; full vault resident still possible with `resident` mode | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial |
+| OCC mtime granularity | **Shipped v1.11.2 (page writes):** `st_mtime_ns` via `read_file_mtime_ns`; catalog parity already ns; content-hash CAS → v2 | [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial — [#17](https://github.com/MarcoPorcellato/matryca-plumber/issues/17) v2 |
 | `auto_split` child page lock | Creates child pages with `is_file()` + `atomic_write_bytes` under parent lock only — no `page_rmw_lock(child)` | [#39](https://github.com/MarcoPorcellato/matryca-plumber/issues/39) |
-| Generational BM25/alias cache | Mtime signature invalidation; build-then-`sig_after` can pair stale corpus with fresh sig on concurrent writes | [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) |
+| Generational BM25/alias cache | Mtime signature invalidation + LRU cap; build-then-`sig_after` mitigated with 3-attempt retry (not full fix) | [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) |
 | Tana `tana-id` pre-scan RAM | `scan_existing_tana_ids` loads full page text per file before import | [#156](https://github.com/MarcoPorcellato/matryca-plumber/issues/156) |
 | `maintenance_daemon` SRP | ~3300 lines; scheduling, LLM, telemetry, watcher in one class | [#58](https://github.com/MarcoPorcellato/matryca-plumber/issues/58) |
 | `graph_dispatch` SRP | Mega-module; MCP routes through single dispatch plane | [#59](https://github.com/MarcoPorcellato/matryca-plumber/issues/59) |
 
-**Already closed (Expert Audit 2026-06, fixed in working tree):** [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) `lock_backoff`; [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) resolve/write TOCTOU; [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) generational cache LRU; [#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137)–[#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) progress/TUI; [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142) identity AST / routing / semantic config; `alias_index` ↔ `generational_cache` cycle (v1.11.0); NoRedirect DRY; Phase 2 denominator journal exclusion ([#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70)). **Audit correction:** `get_logseq_journal_format()` has no in-process cache — it re-reads `config.edn` each call (repeated I/O, not staleness).
+**Closed in v1.11.2 (Expert Audit 2026-06):** [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) `lock_backoff`; [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) resolve/write TOCTOU; [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) post-write inversion; [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) generational cache LRU; [#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137)–[#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) progress/TUI; [#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142) identity AST / routing / semantic config; [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71) journal detection partial; `alias_index` ↔ `generational_cache` cycle (v1.11.0); NoRedirect DRY; Phase 2 denominator journal exclusion ([#70](https://github.com/MarcoPorcellato/matryca-plumber/issues/70)). **Audit correction:** `get_logseq_journal_format()` has no in-process cache — it re-reads `config.edn` each call (repeated I/O, not staleness).
 
 Audit triage index: [`EXPERT_AUDIT_TRIAGE_2026-06.md`](quality/EXPERT_AUDIT_TRIAGE_2026-06.md) · [`REPOmix_AUDIT_TRIAGE_2026-06.md`](quality/REPOmix_AUDIT_TRIAGE_2026-06.md) · [`CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md) · [`CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md). Rejected claims: OCC lock leak; Tana “no streaming” / `json.load()`; BM25 SQLite outbox (distinct from #155 sig_after); identity path hardcoding; immediate hexagonal `domain/ports.py` split.
 
@@ -171,11 +241,31 @@ Parse uses **`ijson`** on the export file only — never materializes the full J
 
 | Component | Module | Role |
 |-----------|--------|------|
-| Block vectors | `src/semantic/store.py` | `block_vectors.json` — `vec_content` + `vec_applicability` per UUID |
-| Indexer | `src/semantic/indexer.py` | Daemon sidecar after semantic writes when `MATRYCA_DUAL_EMBEDDING_ENABLED` |
-| Retrieval | `src/semantic/search.py` | `search_graph` / `method=semantic` hybrid cosine |
+| Block vectors | `src/semantic/store.py` | `block_vectors.json` — `vec_content` + `vec_applicability` per UUID; **ondemand** (default) streams from disk; **resident** + LRU via `MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS` |
+| Indexer | `src/semantic/indexer.py` | Daemon sidecar after semantic writes when `MATRYCA_DUAL_EMBEDDING_ENABLED`; page-scoped upsert via `apply_page_block_vector_updates()` |
+| Retrieval | `src/semantic/search.py` | `search_graph` / `method=semantic` hybrid cosine; lexical pre-filter + disk iteration to avoid full RAM load |
+| Config | `src/semantic/config.py` | `SemanticRuntimeConfig.from_env()` — injectable embedding/hybrid settings |
 
 Does not replace BM25 or TF-IDF page clustering. Spec: [`docs/openspec/dual-embedding.md`](openspec/dual-embedding.md).
+
+```mermaid
+flowchart LR
+  subgraph modes [MATRYCA_BLOCK_VECTOR_STORE_MODE]
+    OD[ondemand default]
+    RS[resident LRU]
+  end
+
+  subgraph pools [Bounded RAM pools v1.11.2]
+    GC[generational_cache\nMATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS]
+    BV[block_vectors store\nMATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS]
+  end
+
+  Indexer[indexer page-scoped merge] --> OD
+  Indexer --> RS
+  OD --> BV
+  RS --> BV
+  Alias[alias_index BM25] --> GC
+```
 
 #### Structural link verification (v1.9)
 
@@ -1076,6 +1166,7 @@ Background service: `matryca service install` → LaunchAgent / systemd user uni
 | **1.9.9** | Security & Sandbox | `read_graph_file_text()` migration, bounded JSON, link-registry validation, CI `sandbox-read-check`, debug-log allowlist |
 | **1.10.0** | Catalog/registry integrity | Master catalog flock load + merge-on-save; link registry atomic save; harvest OCC catalog guard ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); OSS CI maturity |
 | **1.10.3** | UI/LLM hardening | Non-blocking Sovereign UI config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` |
+| **1.11.2** | Graph layer boundary + bounded RAM | `post_write` port ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134)); graph canonical modules; generational + block-vector LRU; OCC `st_mtime_ns` page writes ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial); `env_parse` shared helpers |
 | **1.11.1** | Parser 1.4.0 alignment | `logseq-matryca-parser>=1.4.0`; canonical page iteration; case-insensitive tag/search; watcher delete/move; SYNAPSE embed safety |
 | **1.11.0** | Tana → Logseq OG import | `ijson` streaming loader; hybrid placement; `config.edn` journals; depth-split; `tana-id` idempotency; CLI + MCP `import_tana` (879+ tests) |
 | **1.10.6** | Concurrency integrity | Unified `platform_lock` flock for page + JSON sidecars ([#40](https://github.com/MarcoPorcellato/matryca-plumber/issues/40)); hub page OCC via `write_generated_hub_page` ([#34](https://github.com/MarcoPorcellato/matryca-plumber/issues/34)); contributor backlog hygiene |

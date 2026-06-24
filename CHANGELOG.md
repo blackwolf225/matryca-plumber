@@ -7,19 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [1.11.2] - 2026-06-24
 
-- **Journal settle (#128):** Link registry merge failures during journal structural settle now log exception details while preserving the existing non-blocking settle flow.
-- **CI / deps (#118):** Added `httpx2>=2.4.0` to `[project.optional-dependencies] dev` to silence `StarletteDeprecationWarning` from `fastapi/testclient` during tests (thanks to @blackwolf225 in #122).
+**Graph layer boundary refactor, bounded RAM caches, and OCC nanosecond parity**
+
+### Added
+
+- **Graph layer ports** — `src/graph/post_write.py` (`PageWrittenEvent` pub/sub), `src/graph/ast_cache.py` (canonical AST RAM cache + auto-registered post-write delta handler), `src/graph/daemon_checkpoint.py` (read-only `.matryca_daemon_state.json` bootstrap gate without importing `maintenance_daemon`), `src/graph/cognitive_llm.py`, `src/graph/cooperative_yield.py`, `src/graph/harvest_runtime.py`, `src/graph/page_namespace.py`, `src/graph/prompt_constraints.py`, `src/graph/prompt_layout.py`; agent/daemon modules re-export for backward compatibility. Enforced by `tests/test_graph_layer_boundary.py`.
+- **Shared env parsing** — `src/utils/env_parse.py` (`env_bool`, `env_int`, `env_float` with invalid-value warnings); adopted across graph, semantic, and agent config paths ([#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62) partial).
+- **Generational cache LRU** — `MATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS` (default 4, clamp 1–32) caps concurrent vault alias/BM25 caches ([#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136)).
+- **Dual-embedding memory modes** — `MATRYCA_BLOCK_VECTOR_STORE_MODE=ondemand|resident` (default **ondemand**); `MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS` LRU cap; page-scoped streaming merge via `apply_page_block_vector_updates()` ([#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial).
+- **Phase 2 progress baseline** — `DaemonState.phase2_vault_baseline_total` stabilizes Sovereign UI vault denominator when live totals shrink ([#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137)).
+- **`SemanticRuntimeConfig`** — injectable embedding/hybrid settings for the semantic indexer path.
 
 ### Changed
 
-- **Quality triage — Claude Architectural Audit 2026-06-24** — [`docs/quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](docs/quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md); GitHub [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155)–[#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157); nine findings mapped to existing v1.9.x issues.
-- **Quality triage — Clean Architecture Audit 2026-06** — [`docs/quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](docs/quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md); GitHub [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) (OCC `st_mtime_ns`) and [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154) (Tana slim payloads, extends #135).
-- **Contributor onboarding:** Good-first [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118) shipped via @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)); **Tier E** backlog [#143](https://github.com/MarcoPorcellato/matryca-plumber/issues/143)–[#152](https://github.com/MarcoPorcellato/matryca-plumber/issues/152) (metadata recovery, link-registry, journey-log, and config observability slices) — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
-- **Repomix pack** — `repomix.config.json` now uses an `include` allowlist aligned with code-graph clusters (Graph, Agent, Daemon, Cli, Semantic, Tana, Frontend, Tests); `.repomixignore` deduplicated and scoped to vault/runtime/maintainer noise; pack header documents entry points and reading order.
-- **Local graph indexer layout** — Index data stays under gitignored `.local/graph-index/`; root `.gitnexus` symlink and vendor skills are excluded via `.git/info/exclude` (not public `.gitignore`); `analyze-embeddings.sh` uses `--skip-skills` so skills are not written to `.claude/skills/`.
-- **Repository hygiene (TRIZ separation-in-space)** — Vendor-specific graph indexer tooling moved under gitignored `.local/`; public wrappers `scripts/provision-local-workspace.sh` and `scripts/reindex-code-graph.sh` delegate via `LOCAL_GRAPH_ANALYZER_NPM_PACKAGE` / `CODE_GRAPH_CLI` with no vendor names in the OSS tree.
+- **Graph → daemon dependency inversion ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134))** — `markdown_blocks.atomic_write_bytes` emits `graph.post_write.emit_page_written`; daemon `post_write_hooks` is a thin adapter; AST refresh registers as a graph-local handler.
+- **Agent → graph moves** — cooperative yield, prompt layout/constraints, cognitive LLM protocols, harvest runtime, and page namespace detection canonical in `src/graph/`; agent modules re-export.
+- **OCC mtime nanoseconds ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial)** — `occ_snapshot` / `read_file_mtime_ns` / exact `st_mtime_ns` drift checks on page writes (legacy second-resolution snapshots preserved).
+- **`graph_dispatch` write_outline TOCTOU ([#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133))** — resolve + write run in one `asyncio.to_thread` sync function.
+- **`bootstrap_status.collect_bootstrap_status`** — reads checkpoint via `graph.daemon_checkpoint`, not full daemon state load.
+- **Generational alias build retry** — up to 3 attempts when `sig_before != sig_after` during concurrent writes ([#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) mitigation).
+- **Journal detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71) partial)** — `is_journal_page_title_in_index()` in `alias_index`; cached wrapper in `generational_cache`; injectable `alias_index` on `should_skip_entity_overlap_pair`.
+- **Observability** — daemon state/checkpoint `.bak` restore/copy failures, link-registry merges, journey-log upsert, and watcher deletes now log exceptions instead of silent `suppress(OSError)`.
+- **Documentation** — README, `llms.txt`, ROADMAP, ARCHITECTURE, PROJECT_DIARY harmonized for **v1.11.2** with layer-boundary Mermaid diagrams and memory-budget flow.
+- **Quality triage — Claude Architectural Audit 2026-06-24** — [`docs/quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](docs/quality/CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md); GitHub [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155)–[#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157).
+- **Quality triage — Clean Architecture Audit 2026-06** — [`docs/quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](docs/quality/CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md); [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153), [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154).
+- **Contributor onboarding** — Good-first [#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118) shipped via @blackwolf225 ([#122](https://github.com/MarcoPorcellato/matryca-plumber/pull/122)); **Tier E** backlog [#143](https://github.com/MarcoPorcellato/matryca-plumber/issues/143)–[#152](https://github.com/MarcoPorcellato/matryca-plumber/issues/152) — see [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md).
+- **Repomix pack** — `repomix.config.json` `include` allowlist aligned with code-graph clusters; `.repomixignore` deduplicated.
+- **Repository hygiene (TRIZ separation-in-space)** — vendor graph indexer tooling under gitignored `.local/`; public wrappers `scripts/provision-local-workspace.sh` and `scripts/reindex-code-graph.sh`.
+
+### Fixed
+
+- **Lock backoff downgrade ([#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132))** — skip re-backoff when file was already `processed`.
+- **TUI daemon state load ([#130](https://github.com/MarcoPorcellato/matryca-plumber/issues/130))** — narrow exception catch + breadcrumb log.
+- **Journal link registry ([#131](https://github.com/MarcoPorcellato/matryca-plumber/issues/131))** — log merge failures during structural settle.
+- **Journal settle (#128)** — link registry merge failures during journal structural settle log exception details while preserving non-blocking settle flow.
+- **CI / deps ([#118](https://github.com/MarcoPorcellato/matryca-plumber/issues/118))** — `httpx2>=2.4.0` in `[project.optional-dependencies] dev` silences `StarletteDeprecationWarning` from `fastapi/testclient` during tests (thanks to @blackwolf225 in #122).
 
 ## [1.11.1] - 2026-06-23
 

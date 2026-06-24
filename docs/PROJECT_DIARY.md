@@ -1,12 +1,31 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.11.1** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.11.1]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.11.2** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.11.2]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
 For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-24] v1.11.2 — Graph layer boundary refactor
+
+### Context
+
+Expert and Clean Architecture audits flagged inverted dependencies (`graph` → `daemon` post-write calls), unbounded generational/BM25 and block-vector RAM, OCC second-resolution drift on page writes, and scattered env parsing. v1.11.2 ships the first structural correction without a v2.0 monolith split.
+
+### Shipped
+
+1. **Graph layer ports** — `post_write`, `ast_cache`, `daemon_checkpoint`, cooperative yield, harvest runtime, prompt layout/constraints, cognitive LLM protocols, page namespace in `src/graph/`; agent/daemon shims; `tests/test_graph_layer_boundary.py` enforces no graph→agent/daemon imports ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) closed).
+2. **Bounded RAM** — `MATRYCA_GENERATIONAL_CACHE_MAX_GRAPHS` LRU ([#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136)); dual-embedding ondemand default + `MATRYCA_BLOCK_VECTOR_STORE_MAX_GRAPHS` ([#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) partial).
+3. **OCC nanoseconds** — page writes use `st_mtime_ns` via `read_file_mtime_ns` ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial).
+4. **Shared env parsing** — `src/utils/env_parse.py` ([#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62) partial).
+5. **Observability** — daemon checkpoint `.bak` restore, link-registry merges, journey-log upsert, and watcher deletes log exceptions instead of silent suppress.
+6. **Docs** — ARCHITECTURE layer-boundary Mermaid diagrams; ROADMAP/CHANGELOG/README/`llms.txt` harmonized for v1.11.2.
+
+**Verify:** `make ci` · `tests/test_graph_layer_boundary.py` · `tests/test_generational_cache.py` · `tests/test_dual_embedding.py` · `tests/test_env_parse.py`.
 
 ---
 

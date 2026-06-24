@@ -7,13 +7,13 @@ Authoritative triage matrices:
 - [`CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md`](CLEAN_ARCH_AUDIT_TRIAGE_2026-06.md)
 - [`CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md)
 
-## Fixed in working tree (2026-06-23)
+## Shipped in v1.11.2 (2026-06-24)
 
 | Issue | Priority | Area | Status |
 |-------|----------|------|--------|
 | [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132) | P1 | `lock_backoff` downgrades `processed` | fixed |
 | [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) | P1 | `graph_dispatch` resolve/write TOCTOU | fixed |
-| [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) | P1 | graph→daemon post-write inversion | fixed (main) |
+| [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134) | P1 | graph→daemon post-write inversion | shipped v1.11.2 |
 | [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135) | P2 | Tana streaming graph builder | fixed — single-pass `from_export` + slim payloads ([#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154)) |
 | [#136](https://github.com/MarcoPorcellato/matryca-plumber/issues/136) | P2 | Generational cache LRU | fixed |
 | [#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137) | P2 | Phase 2 progress regression | fixed |
@@ -23,13 +23,13 @@ Authoritative triage matrices:
 | [#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142) | P3 | `SemanticRuntimeConfig` injection | fixed |
 | [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51) | P1 | `block_vectors.json` in-RAM | partial — default `ondemand`, streaming search/indexer; resident opt-in; SQLite v2 → [#24](https://github.com/MarcoPorcellato/matryca-plumber/issues/24) |
 | [#115](https://github.com/MarcoPorcellato/matryca-plumber/issues/115)–[#117](https://github.com/MarcoPorcellato/matryca-plumber/issues/117) | P2 | graph→agent coupling | fixed |
-| Observability (#143–#144 local bodies) | P3 | silent catalog/checkpoint failures | fixed in working tree |
-| Observability (#145–#151 local bodies) | P3 | daemon state / journey / link registry logs | fixed in working tree |
-| [#152](https://github.com/MarcoPorcellato/matryca-plumber/issues/152) / #91 | P3 | `_env_int` / `_env_float` invalid warnings | fixed in working tree |
-| [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90) | P3 | `_env_bool` dedup (graph/markdown_io/link_verification) | fixed — `src/utils/env_parse.py` |
-| [#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57) | P3 | env parser DRY (cooperative_yield / harvest_runtime) | fixed in working tree |
-| [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) | P3 | OCC `st_mtime_ns` parity on page writes | fixed in working tree |
-| [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) | P1 | Generational BM25/alias cache sig_after TOCTOU | fixed in working tree |
+| Observability (#143–#144 local bodies) | P3 | silent catalog/checkpoint failures | shipped v1.11.2 |
+| Observability (#145–#151 local bodies) | P3 | daemon state / journey / link registry logs | shipped v1.11.2 |
+| [#152](https://github.com/MarcoPorcellato/matryca-plumber/issues/152) / #91 | P3 | `_env_int` / `_env_float` invalid warnings | shipped v1.11.2 |
+| [#90](https://github.com/MarcoPorcellato/matryca-plumber/issues/90) | P3 | `_env_bool` dedup (graph/markdown_io/link_verification) | shipped v1.11.2 — `src/utils/env_parse.py` |
+| [#57](https://github.com/MarcoPorcellato/matryca-plumber/issues/57) | P3 | env parser DRY (cooperative_yield / harvest_runtime) | shipped v1.11.2 |
+| [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) | P3 | OCC `st_mtime_ns` parity on page writes | shipped v1.11.2 (partial) |
+| [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) | P1 | Generational BM25/alias cache sig_after TOCTOU | mitigated v1.11.2 (3-attempt retry) |
 | [#156](https://github.com/MarcoPorcellato/matryca-plumber/issues/156) | P2 | Tana `scan_existing_tana_ids` streaming scan | fixed in working tree |
 | [#157](https://github.com/MarcoPorcellato/matryca-plumber/issues/157) | P3 | Page lock registry eviction hardening (+ config `lru_cache` note) | fixed in working tree |
 
@@ -52,7 +52,7 @@ Full matrix: [`CLAUDE_ARCH_AUDIT_TRIAGE_2026-06-24.md`](CLAUDE_ARCH_AUDIT_TRIAGE
 |---------|---------|----------|
 | `page_rmw_lock` masquerading as OCC / lock leak | By design + rejected leak | Repomix P1.3; [#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) `st_mtime_ns` parity |
 | Tana `json.load()` OOM | Obsolete — `ijson` shipped | Partial RAM: #135 / [#154](https://github.com/MarcoPorcellato/matryca-plumber/issues/154) |
-| MCP ↔ AST coupling | Partially addressed DTOs | #59, #134, #17 |
+| MCP ↔ AST coupling | Partially addressed DTOs | #59; ~~#134~~ shipped v1.11.2; #17 |
 | BM25 cache SQLite outbox | Rejected — in-process mtime cache; vectors use atomic tmp+replace | **Claude P1-02 is different:** sig_after after build → [#155](https://github.com/MarcoPorcellato/matryca-plumber/issues/155) |
 | Config import-time globals | Partially addressed | #57, #142 fixed |
 | `PageId` lock normalization | Rejected | `graph_safe_page_path` + resolved lock keys |

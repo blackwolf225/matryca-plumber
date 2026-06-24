@@ -6,7 +6,7 @@ Matryca Plumber is local data infrastructure for headless AI agents working with
 
 Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](https://github.com/MarcoPorcellato/matryca-plumber/discussions/19).
 
-*Status as of v1.11.1 — issue numbers link to GitHub; scope may shift as milestones close.*
+*Status as of v1.11.2 — issue numbers link to GitHub; scope may shift as milestones close.*
 
 ---
 
@@ -42,17 +42,17 @@ Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](ht
 
 - Split `maintenance_daemon.py`; handler registry for `graph_dispatch.py`
 - `BootstrapHarvestStatus` Literal dedup ([#85](https://github.com/MarcoPorcellato/matryca-plumber/issues/85), good-first slice of [#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62))
-- Centralize env parsing; ~~eliminate `type: ignore` suppressions~~ — **done** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60); zero `# type: ignore` in `src/`)
+- ~~Centralize env parsing~~ — **done (v1.11.2):** `src/utils/env_parse.py` ([#62](https://github.com/MarcoPorcellato/matryca-plumber/issues/62) partial); ~~eliminate `type: ignore` suppressions~~ — **done** ([#60](https://github.com/MarcoPorcellato/matryca-plumber/issues/60); zero `# type: ignore` in `src/`)
 - ~~Public API on `SessionAliasRegistry`~~ — scoped v1.9.14 helpers in `alias_state.py` (#64 partial); full upstream API deferred to v2.0
-- Journal page detection in graph layer ([#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71))
+- ~~Journal page detection in graph layer~~ — **done (v1.11.2 partial):** [#71](https://github.com/MarcoPorcellato/matryca-plumber/issues/71) — `is_journal_page_title_in_index()` in `alias_index`; cached wrapper in `generational_cache`
 
 **Expert Architectural Audit 2026-06** — triage: [`docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md`](docs/quality/EXPERT_AUDIT_TRIAGE_2026-06.md). Four findings were already closed or tracked; eight new issues opened:
 
 | Issue | Area |
 |-------|------|
-| [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132), [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) | Concurrency — `lock_backoff` downgrade, `graph_dispatch` resolve/write TOCTOU |
-| [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)–[#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137) | Performance — Tana RAM peak, generational cache LRU, Phase 2 progress UX |
-| [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134), [#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) | Tech debt — graph→daemon post-write inversion, TUI state dedup load |
+| [#132](https://github.com/MarcoPorcellato/matryca-plumber/issues/132), [#133](https://github.com/MarcoPorcellato/matryca-plumber/issues/133) | Concurrency — ~~`lock_backoff` downgrade~~ **done (v1.11.2)**, ~~`graph_dispatch` resolve/write TOCTOU~~ **done (v1.11.2)** |
+| [#135](https://github.com/MarcoPorcellato/matryca-plumber/issues/135)–[#137](https://github.com/MarcoPorcellato/matryca-plumber/issues/137) | Performance — Tana RAM peak, ~~generational cache LRU~~ **done (v1.11.2)**, ~~Phase 2 progress UX~~ **done (v1.11.2)** |
+| [#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134), [#138](https://github.com/MarcoPorcellato/matryca-plumber/issues/138) | Tech debt — ~~graph→daemon post-write inversion~~ **done (v1.11.2)**, TUI state dedup load |
 | [#139](https://github.com/MarcoPorcellato/matryca-plumber/issues/139) | v2.0 — Tana content-aware re-import (`--merge`) |
 
 **Repomix Architectural Audit 2026-06** — triage: [`docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md`](docs/quality/REPOmix_AUDIT_TRIAGE_2026-06.md). Three new issues ([#140](https://github.com/MarcoPorcellato/matryca-plumber/issues/140)–[#142](https://github.com/MarcoPorcellato/matryca-plumber/issues/142)); vector RAM tracked on existing [#51](https://github.com/MarcoPorcellato/matryca-plumber/issues/51).
@@ -112,6 +112,7 @@ Not backlog — context for where we are today:
 | v1.9.15 | Mypy strict `#60` (zero `src/` ignores); journal Phase-2 semantic bypass with Phase-1 AST/OCC preserved (712+ tests) |
 | v1.10.0 | Catalog/registry integrity (#35–#37, #41); OSS/GitHub hygiene (PR template, CodeQL, frontend ESLint); `make test-fast` local gate; dependency advisory bumps (720+ tests) |
 | v1.10.3 | Sovereign UI non-blocking config saves; strict Pydantic LLM/outline contracts; recursive OpenAI strict JSON Schema; flock sidecars `0o600` (725+ tests) |
+| v1.11.2 | **Graph layer boundary refactor** — `post_write` port ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134)); canonical graph modules; generational + block-vector LRU; OCC `st_mtime_ns` page writes; `env_parse`; observability logging (879+ tests) |
 | v1.11.1 | `logseq-matryca-parser` 1.4.0 alignment — canonical page iteration, case-insensitive tag/search, watcher delete/move, SYNAPSE embed safety (879+ tests) |
 | v1.11.0 | **Tana workspace JSON import** — `ijson` streaming, hybrid placement, `config.edn` journals, depth-split, `tana-id` idempotent writes, CLI `matryca import tana`, MCP `import_tana` (879+ tests) |
 | v1.10.6 | Unified `platform_lock` flock (#40); hub page OCC (#34); contributor backlog hygiene (725+ tests) |
