@@ -1,6 +1,6 @@
-# Agent onboarding (`llms.txt`) — v1.9.11
+# Agent onboarding (`llms.txt`) — v1.11.2
 
-**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status` · v1.9.6 — Hermes lazy AST · v1.9.7 — AX robustness · v1.9.8 — doc harmonization · v1.9.9 — Security & Sandbox · v1.9.10 — Sovereign UI fast startup + `status` vs `start` docs · v1.9.11 — Sovereign UI reliability (lazy bootstrap on save/start/L1)  
+**Milestone:** v1.9.2 — Agent-zero-friction distribution · v1.9.5 — LLM OS / `bootstrap_status` · v1.9.6 — Hermes lazy AST · v1.9.7 — AX robustness · v1.9.8 — doc harmonization · v1.9.9 — Security & Sandbox · v1.9.10 — Sovereign UI fast startup + `status` vs `start` docs · v1.9.11 — Sovereign UI reliability (lazy bootstrap on save/start/L1) · v1.11.x — Tana import, graph layer boundary refactor  
 **Artifacts:** [`llms.txt`](../../llms.txt) (repo root), [`.well-known/llms.txt`](../../.well-known/llms.txt) (canonical URL path)  
 **Companion specs:** [`agent-dx.md`](agent-dx.md) (CLI `--json`, `context load`, Journey Log) · [`agent-ax-robustness.md`](agent-ax-robustness.md) (lenient page titles, safe writes) · [`security-sandbox.md`](security-sandbox.md) (path sandbox, bounded JSON, CI read gate)
 
