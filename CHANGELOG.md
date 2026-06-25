@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Tech Debt (#62):** `flock_available()` in `platform_lock.py`; unified `_format_node_markdown` in `matryca_hooks.py`; `BootstrapHarvestStatus` imported from `bootstrap_harvest.py`.
+
 ## [1.11.2] - 2026-06-24
 
 **Graph layer boundary refactor, bounded RAM caches, and OCC nanosecond parity**
@@ -21,8 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SemanticRuntimeConfig`** — injectable embedding/hybrid settings for the semantic indexer path.
 
 ### Changed
-- **Tech Debt (#62):** `flock_available()` in `platform_lock.py`; unified `_format_node_markdown` in `matryca_hooks.py`; `BootstrapHarvestStatus` imported from `bootstrap_harvest.py`.
-
 - **Graph → daemon dependency inversion ([#134](https://github.com/MarcoPorcellato/matryca-plumber/issues/134))** — `markdown_blocks.atomic_write_bytes` emits `graph.post_write.emit_page_written`; daemon `post_write_hooks` is a thin adapter; AST refresh registers as a graph-local handler.
 - **Agent → graph moves** — cooperative yield, prompt layout/constraints, cognitive LLM protocols, harvest runtime, and page namespace detection canonical in `src/graph/`; agent modules re-export.
 - **OCC mtime nanoseconds ([#153](https://github.com/MarcoPorcellato/matryca-plumber/issues/153) partial)** — `occ_snapshot` / `read_file_mtime_ns` / exact `st_mtime_ns` drift checks on page writes (legacy second-resolution snapshots preserved).
