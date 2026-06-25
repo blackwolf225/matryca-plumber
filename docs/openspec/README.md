@@ -10,6 +10,8 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 |----------|--------|
 | [`live-telemetry-ui.md`](live-telemetry-ui.md) | v1.9.3 Sovereign UI polling; v1.9.11 graph-analytics cache/timeout/offline handling; v1.10.3 non-blocking config saves. |
 | [`agent-onboarding.md`](agent-onboarding.md) | v1.9.2 `llms.txt` / `.well-known/llms.txt`, PyPI `uvx` contract, agent anti-patterns. |
+| [`agent/`](agent/) | **`SYSTEM_PROMPT.md` fragments** — `_assembly_order.txt`, paradigm, soft-gate, MCP, formatting (`make build-system-prompt`). |
+| [`logseq-paradigm.md`](logseq-paradigm.md) | Logseq OG blocks/properties SSOT for contributor and runtime docs. |
 | [`agent-ax-robustness.md`](agent-ax-robustness.md) | v1.9.7+ lenient page resolution, safe `write_outline` fallback, `heading_level` coercion, chaos tests. |
 | [`security-sandbox.md`](security-sandbox.md) | v1.9.9 path sandbox reads, bounded JSON checkpoints, CI `sandbox-read-check`; v1.10.0 flock + atomic JSON sidecars ([#35](https://github.com/MarcoPorcellato/matryca-plumber/issues/35)–[#37](https://github.com/MarcoPorcellato/matryca-plumber/issues/37), [#41](https://github.com/MarcoPorcellato/matryca-plumber/issues/41)); v1.10.3 flock sidecar `0o600`. |
 | [`../integrations/hermes-agent.md`](../integrations/hermes-agent.md) | v1.9.6 Hermes Agent MCP: lazy AST handshake, `connect_timeout` vs tool `timeout`, verified config. |
@@ -23,7 +25,8 @@ Trimmed behavioral specs aligned with [MehmetGoekce/llm-wiki](https://github.com
 | [`lint.md`](lint.md) | On-disk lint: block refs + wiki convention pack. |
 | [`l1-l2-routing.md`](l1-l2-routing.md) | L1 memory vs L2 graph routing and MCP hints. |
 | [`runtime-bootstrap.md`](runtime-bootstrap.md) | Startup directory/config provisioning (logs, L1, cache, wiki YAML); master catalog flock/merge persistence (v1.10.0). |
-| [`llm-performance.md`](llm-performance.md) | v1.8 KV-cache layout, RAM caps, cooperative bootstrap I/O; journal Phase-2 semantic bypass (structural-only `journals/` indexing). |
+| [`llm-performance.md`](llm-performance.md) | v1.8 KV-cache layout, RAM caps, cooperative bootstrap I/O; v1.12 Tier-1 builders + L0 safety; journal Phase-2 semantic bypass. |
+| [`../PROMPT_ARCHITECTURE.md`](../PROMPT_ARCHITECTURE.md) | **v1.12** — Clean Architecture map for prompts (plan v3), semver recommendation, mermaid/ASCII flows. |
 | [`../roadmaps/ROADMAP_V2_SHADOW_DB.md`](../roadmaps/ROADMAP_V2_SHADOW_DB.md) | **Planned** — v2.0 `shadow.sqlite` read cache (FTS5, CTEs, `src/shadow/schema.py`). |
 | [`../roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md`](../roadmaps/ROADMAP_V2_BIOLOGICAL_MEMORY.md) | **Planned** — Nacre-inspired decay/recall/procedure memory; openspec TBD at implementation. |
 | [`biological-memory.md`](biological-memory.md) | **Planned** — env vars, `search_graph(method=recall)`, Safe-Sync contract (not yet written). |

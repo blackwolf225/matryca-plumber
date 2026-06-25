@@ -1,9 +1,34 @@
-# LLM performance & edge computing (v1.8)
+# LLM performance & edge computing (v1.8+)
 
 **Roadmap:** [`../v1.8-OPTIMIZATION-PLAN.md`](../v1.8-OPTIMIZATION-PLAN.md)  
-**Related:** Phase 14d Context Acceleration in [`../PROJECT_DIARY.md`](../PROJECT_DIARY.md)
+**Related:** Phase 14d Context Acceleration in [`../PROJECT_DIARY.md`](../PROJECT_DIARY.md)  
+**Clean Architecture (v1.12):** [`../PROMPT_ARCHITECTURE.md`](../PROMPT_ARCHITECTURE.md) — Tier-1 builders, L0 safety, Tier-2 assembly
 
 Matryca Plumber targets **CPU-only laptops with 16 GB RAM** running a local OpenAI-compatible server (LM Studio, Ollama, llama.cpp). The vault may contain **up to ~10,000** Markdown pages. v1.8 adds **no new semantic features** — only memory governance, KV-cache-friendly prompts, and cooperative I/O so the host OS stays responsive during long harvests.
+
+---
+
+## Clean Architecture boundaries (v1.12)
+
+Robert C. Martin’s **Dependency Rule** applies to prompts: domain `*/prompts.py` modules depend inward on `prompts/core.py` only; use cases (`InstructorLLMClient`, `maintenance_daemon`) depend on builder callables, not inline strings.
+
+```text
+  Entities (Pydantic lint models)
+       ▲
+  Domain (*/prompts.py, safety/validators.py)
+       ▲
+  Use cases (llm_client, plumber_modules, index commit)
+       ▲
+  Adapters (build_system_prompt.py, semantic_lint_prompts re-export)
+       ▲
+  Frameworks (SYSTEM_PROMPT.md, llms.txt, MCP)
+```
+
+| Concern | Module | Clean Code note |
+|---------|--------|-----------------|
+| **SRP** | One `prompts.py` per cognitive domain | No `DaemonPromptRegistry` god-object |
+| **DIP** | `InstructorLLMClient(..., builders=...)` | Tests inject fakes (`test_llm_client_prompt_injection`) |
+| **Fail fast** | `validate_llm_write_diff` | L0 before OCC write — unsafe LLM output never hits disk |
 
 ---
 
@@ -30,10 +55,20 @@ Every local LLM call that reads page text should follow:
 
 | Module | Role |
 |--------|------|
+| [`prompts/core.py`](../../src/agent/prompts/core.py) | `SystemPromptBuilder` protocol, Tier-1A/B compile helpers (domain builders import **only** this module) |
+| [`semantic_lint/prompts.py`](../../src/agent/semantic_lint/prompts.py) | Tier-1A semantic lint compiler (rules 1–6) |
+| [`bootstrap/prompts.py`](../../src/agent/bootstrap/prompts.py) | Tier-1A harvest summaries |
+| [`plumber_modules/marpa/prompts.py`](../../src/agent/plumber_modules/marpa/prompts.py) | Tier-1A MARPA classify |
+| [`plumber_modules/llm_prompts/`](../../src/agent/plumber_modules/llm_prompts/) | Tier-1A entity/seed/tag prompts |
+| [`compression/prompts.py`](../../src/agent/compression/prompts.py) | Tier-1B session compression |
+| [`graph/insights/prompts.py`](../../src/graph/insights/prompts.py) | Tier-1A `GraphInsightsLLMResult` |
+| [`graph/safety/validators.py`](../../src/graph/safety/validators.py) | L0 hard rejection before LLM-backed disk writes |
 | [`prompt_layout.py`](../../src/agent/prompt_layout.py) | `build_cache_aligned_prompt(content, task_instruction)` |
-| [`semantic_lint_prompts.py`](../../src/agent/semantic_lint_prompts.py) | `build_semantic_lint_system_prompt()` — shared across index + cognitive pipeline |
+| [`semantic_lint_prompts.py`](../../src/agent/semantic_lint_prompts.py) | Deprecated re-export → `semantic_lint.prompts` |
 | [`page_prompt_session.py`](../../src/agent/page_prompt_session.py) | One `PagePromptSession` per file per daemon cycle |
-| [`llm_context_payload.py`](../../src/agent/llm_context_payload.py) | Shrinks giant pages to Phase 1 summary / skeleton before they enter the stable block |
+| [`llm_context_payload.py`](../../src/agent/llm_context_payload.py) | Shrinks giant pages before they enter the stable block |
+
+**Maintainer checklist:** new cognitive module → add domain `prompts.py` builder + extend `tests/test_daemon_prompts.py` (budget, substrings, SHA-256 via `prompt_hash_snapshots.json`).
 
 ### Per-page session lifecycle
 
@@ -155,6 +190,9 @@ Daemon checkpoint frequency during Phase 1 is controlled by `MATRYCA_BOOTSTRAP_C
 | Test area | Location |
 |-----------|----------|
 | Prompt layout / harvest | `tests/test_llm_context_payload.py` |
+| Tier-1 builders / hashes | `tests/test_daemon_prompts.py`, `tests/prompt_hash_snapshots.json` |
+| L0 write safety | `tests/test_safety_validators.py` |
+| SYSTEM_PROMPT assembly | `tests/test_build_system_prompt.py`, `make check-system-prompt` |
 | PagePromptSession | `tests/test_page_prompt_session.py` |
 | Semantic cache LRU | `tests/test_semantic_cache_router.py` |
 | Memory teardown | `tests/test_memory_budget.py` |

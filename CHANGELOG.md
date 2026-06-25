@@ -1,11 +1,28 @@
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
+
+## [1.12.0] - 2026-06-24
+
+**Prompt Clean Architecture (plan v3) — Tier-1 DI, L0 write safety, SYSTEM_PROMPT fragment assembly**
+
+### Added
+
+- **L0 write safety** — `src/graph/safety/validators.py` (`reject_id_line_deletion`, `reject_protected_zones_modification`) invoked before semantic index commits; `tests/test_safety_validators.py`.
+- **Agent instruction router** — root [`AGENTS.md`](AGENTS.md) maps Cursor vs runtime vault audiences; `make agents-check` / `scripts/check_agents_coherence.py` guard path drift, `llms.txt` byte-identity, and `SYSTEM_PROMPT.md` citation.
+- **Tier-1 prompt architecture** — `src/agent/prompts/core.py` (`SystemPromptBuilder`, Tier-1A/B templates); domain builders under `semantic_lint/`, `bootstrap/`, `compression/`, `plumber_modules/marpa/`, `plumber_modules/llm_prompts/`, `graph/insights/`; constructor injection on `InstructorLLMClient`.
+- **Paradigm SSOT** — [`docs/openspec/logseq-paradigm.md`](docs/openspec/logseq-paradigm.md) → [`docs/openspec/agent/paradigm.md`](docs/openspec/agent/paradigm.md).
+- **`SYSTEM_PROMPT.md` assembly** — [`docs/openspec/agent/`](docs/openspec/agent/) fragments, `make build-system-prompt`, `make check-system-prompt` (fragment `build-hash` in generated banner); Soft Gate decision tree in `soft-gate.md`.
+- **Prompt hash snapshots** — `tests/prompt_hash_snapshots.json` + `pytest tests/test_daemon_prompts.py --update-prompt-hashes`; `tests/test_llm_client_prompt_injection.py` verifies DI on `InstructorLLMClient`.
+- **Assembly guard** — `build_system_prompt.py` fails when `docs/openspec/agent/*.md` exists but is missing from `_assembly_order.txt`.
+- **Cursor rule `11-prompt-maintainer`** — on-request trigger→action checklist for prompt fragments, Tier-1 builders, and MCP docstrings; indexed in [`.cursorrules`](.cursorrules) and [`AGENTS.md`](AGENTS.md).
+
+### Changed
+
+- **Semantic lint prompt** — rule (6) dead-zone invariant; harvest/insights prompts aligned to cross-lingual output (no English-only hardcoding).
+
+### Documentation
+
+- **[`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md)** — Clean Architecture / Clean Code map for Tier-1, L0, Tier-2 assembly; mermaid + ASCII data-flow diagrams.
+- **`docs/ARCHITECTURE.md`**, **`README.md`**, **`ROADMAP.md`**, **`PROJECT_DIARY.md`** — harmonized for plan v3 and v1.12.0.
 
 ### Changed
 - **Tech Debt (#62):** `flock_available()` in `platform_lock.py`; unified `_format_node_markdown` in `matryca_hooks.py`; `BootstrapHarvestStatus` imported from `bootstrap_harvest.py`.

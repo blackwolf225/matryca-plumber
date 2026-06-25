@@ -6,6 +6,8 @@ globs: *
 ## Project context
 This repository builds Matryca Plumber, a local-first, background AI daemon and engine that operates directly on **Logseq OG** (local, pure Markdown graph notes) file systems.
 
+**SSOT:** full paradigm spec lives in [`docs/openspec/agent/paradigm.md`](docs/openspec/agent/paradigm.md). Pointer: [`docs/openspec/logseq-paradigm.md`](docs/openspec/logseq-paradigm.md). This rule is the Cursor summary only.
+
 ## Outliner paradigm (non-negotiable)
 - Logseq OG uses **pure Markdown files**. The atomic unit is the **block**: an indented bullet point that forms a tree, not a flat document body.
 - When generating or editing content, produce **hierarchical outliner text** (nested bullets). 

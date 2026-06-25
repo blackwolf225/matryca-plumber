@@ -1,12 +1,42 @@
 # Project diary — technical lifecycle log
 
-This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.11.2** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.11.2]`).
+This document records **architecture decisions**, **phase milestones**, and **real-world defects crushed** during the evolution of **Matryca Plumber** (`matryca-plumber` on PyPI; current line **v1.12.0** — see [`CHANGELOG.md`](../CHANGELOG.md) `[1.12.0]`).
 
 The project began as an MCP-first bridge so external LLM hosts could mutate Logseq Markdown safely. Phases **12–16** completed the pivot to a **fully autonomous background agent** — `MaintenanceDaemon`, Sovereign UI, native AST I/O, OCC, and Zero-Trust cockpit APIs — where **FastMCP is an optional auxiliary surface**, not the product’s center of gravity.
 
-For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
+For the engineering contract (modules, diagrams, concurrency), see [`ARCHITECTURE.md`](ARCHITECTURE.md). For **Clean Architecture** on prompts, see [`PROMPT_ARCHITECTURE.md`](PROMPT_ARCHITECTURE.md). For operator setup, see [`../README.md`](../README.md).
 
 Entries are chronological (**newest first** within each major release block). When a decision is superseded, add a new entry rather than rewriting history.
+
+---
+
+## [2026-06-24] v1.12.0 — Prompt Clean Architecture (plan v3)
+
+### Context
+
+Post–v1.11.2 graph boundary work, prompts still violated Uncle Bob’s **Dependency Rule**: inline system strings in `llm_client.py`, no L0 gate on LLM-proposed disk diffs, and `SYSTEM_PROMPT.md` edited by hand. External audits and Karpathy-style agent discipline required explicit tiers (L0 / Tier-1 / Tier-2) with CI enforcement.
+
+### Shipped (five stacked PRs → `main`)
+
+1. **L0 write safety** — `graph/safety/validators.py`; `validate_llm_write_diff` in `apply_semantic_page_result` ([#158](https://github.com/MarcoPorcellato/matryca-plumber/pull/158)).
+2. **SYSTEM_PROMPT assembly** — `docs/openspec/agent/` fragments, `build_system_prompt.py`, `make check-system-prompt`, unlisted-fragment guard ([#163](https://github.com/MarcoPorcellato/matryca-plumber/pull/163)).
+3. **`AGENTS.md` router** — three-audience map, `check_agents_coherence.py`, `make agents-check` ([#160](https://github.com/MarcoPorcellato/matryca-plumber/pull/160)).
+4. **Tier-1 DI** — `prompts/core.py`, domain `*/prompts.py`, hash snapshots, zero inline prompts in `llm_client.py` ([#161](https://github.com/MarcoPorcellato/matryca-plumber/pull/161)).
+5. **Cursor rule 11** — on-request maintainer checklist ([#162](https://github.com/MarcoPorcellato/matryca-plumber/pull/162)).
+
+### Clean Architecture decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| No `DaemonPromptRegistry` god-object | *Clean Code* SRP — one `prompts.py` per domain |
+| Domain imports only `prompts/core.py` | Dependency Rule — test-enforced |
+| Tier-1A vs Tier-1B templates | JSON/Pydantic vs free-text compression |
+| Fragment SHA-256, not assembled-file diff | CI stable across banner/version comments |
+| **Minor 1.12.0** recommended | New maintainer contracts + L0 behavioral change; no PyPI CLI break |
+
+**Verify:** `make ci` · `tests/test_daemon_prompts.py` · `tests/test_safety_validators.py` · `tests/test_build_system_prompt.py` · `make agents-check`.
+
+**Docs:** [`PROMPT_ARCHITECTURE.md`](PROMPT_ARCHITECTURE.md).
 
 ---
 

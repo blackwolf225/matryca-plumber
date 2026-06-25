@@ -88,6 +88,7 @@ from ..graph.path_sandbox import (
     normalize_daemon_file_key,
     read_graph_file_text,
 )
+from ..graph.safety.validators import validate_llm_write_diff
 from ..graph.semantic_clustering import (
     CLUSTER_IDS_WITHOUT_FOCUS,
     JOURNAL_CLUSTER_ID,
@@ -1475,6 +1476,16 @@ def apply_semantic_page_result(
         body = "".join(lines)
         if not _semantic_index_section_present(body):
             body = body.rstrip("\n") + _format_index_section(result, lint_outcome=lint_outcome)
+        safety = validate_llm_write_diff(prev, body)
+        if not safety.ok:
+            logger.warning(
+                "L0 safety rejection on {}: {}",
+                page_path,
+                safety.reason,
+            )
+            lint_outcome.write_aborted = True
+            lint_outcome.skip_reasons.append(f"l0_safety:{safety.reason}")
+            return lint_outcome
         commit_summary = f"semantic index update on {page_title}"
         if baseline_mtime is not None and not atomic_write_bytes_if_unchanged(
             page_path,

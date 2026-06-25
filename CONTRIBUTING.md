@@ -18,7 +18,7 @@ This project exists so humans and **autonomous local systems** can collaborate o
 | **Optional MCP ingress** | `src/agent/mcp_server.py` (`register_mcp_tools`, `@mcp.tool()`) | Thin registration over the same dispatch graph — not a second datastore or write path. Standalone tools: **`store_fact`** (identity), **`ingest_document`** (atomic external Markdown — [`docs/openspec/ingest.md`](docs/openspec/ingest.md)), **`import_tana`** (Tana workspace JSON — [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md)). |
 | **External graph migration** | `src/agent/tana_import.py`, `src/agent/importers/tana/` | Offline Tana JSON → Logseq OG pipeline (streaming parse, OCC writes, dry-run default). |
 
-Deep reference: [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) (v1.9.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (v1.9.3 Sovereign UI), [`llms.txt`](llms.txt) (agent execution guide).
+Deep reference: [`AGENTS.md`](AGENTS.md), [`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md) (Clean Architecture for prompts — plan v3), [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/openspec/README.md`](docs/openspec/README.md) (index), [`docs/openspec/llm-performance.md`](docs/openspec/llm-performance.md) (v1.8 edge), [`docs/openspec/link-verification.md`](docs/openspec/link-verification.md) / [`agent-dx.md`](docs/openspec/agent-dx.md) (v1.9), [`docs/openspec/security-sandbox.md`](docs/openspec/security-sandbox.md) (v1.9.9), [`docs/openspec/agent-onboarding.md`](docs/openspec/agent-onboarding.md) (v1.9.2 `llms.txt`), [`docs/openspec/live-telemetry-ui.md`](docs/openspec/live-telemetry-ui.md) (v1.9.3 Sovereign UI), [`llms.txt`](llms.txt) (agent execution guide).
 
 **Configuration:** [`.env.example`](.env.example) is the operator reference, split into **Operator essentials** (day-one / Settings drawer) and **Advanced / high impact** (mutating lint, MCP, security). Each key documents **Default (code)** and **Template** when they differ. Agents must keep `.env.example` in sync when changing env vars — see [`.cursor/rules/07-env-example.mdc`](.cursor/rules/07-env-example.mdc). `MATRYCA_LM_INSTRUCTOR_*` and `MATRYCA_LLM_PROMPT_CACHE_MODE` are legacy or reserved (not read by runtime). CI: `tests/test_env_example_coverage.py`.
 
@@ -291,6 +291,27 @@ Matryca Plumber enforces **`[tool.mypy] strict = true`** on `src/` and `tests/` 
 **Forbidden in `src/`:** new `# type: ignore`, `# mypy: ignore-errors`, or `@no_type_check` on modules. If mypy reports an error you cannot resolve without a suppression, refactor the types or open an issue — do not merge a ignore comment.
 
 Verification: `uv run mypy src tests` (also run via `make typecheck` / `make check`).
+
+### Tier-1 daemon prompt hashes
+
+`tests/test_daemon_prompts.py` pins **SHA-256** snapshots of each Tier-1 **system prompt** in [`tests/prompt_hash_snapshots.json`](tests/prompt_hash_snapshots.json) (budget/substring asserts run in the same file).
+
+**If you intentionally change a builder:**
+
+```bash
+uv run pytest tests/test_daemon_prompts.py --update-prompt-hashes
+git add tests/prompt_hash_snapshots.json
+# commit message: prompt(builder-name): <why the contract changed>
+```
+
+### `SYSTEM_PROMPT.md` assembly
+
+Runtime cognitive law is assembled from [`docs/openspec/agent/`](docs/openspec/agent/) fragments — **do not edit** [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) by hand.
+
+```bash
+make build-system-prompt   # after fragment edits
+make check-system-prompt   # CI: build-hash comment must match fragment bytes
+```
 
 ---
 

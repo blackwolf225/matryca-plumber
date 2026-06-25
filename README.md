@@ -5,7 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/matryca-plumber.svg)](https://pypi.org/project/matryca-plumber/)
 [![GitHub release](https://img.shields.io/github/v/release/MarcoPorcellato/matryca-plumber?display_name=tag)](https://github.com/MarcoPorcellato/matryca-plumber/releases)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.12-blue?logo=python&logoColor=white)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L10)
-[![Tests](https://img.shields.io/badge/tests-879%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-974%2B%20passing-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A570%25-brightgreen)](https://github.com/MarcoPorcellato/matryca-plumber/blob/main/pyproject.toml#L138)
 
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -40,7 +40,7 @@
   <b>AI agents:</b> read <a href="llms.txt"><code>llms.txt</code></a> — run <code>uvx matryca-plumber --help</code>; do not parse Markdown manually.
 </sub></p>
 
-**Matryca Plumber** is the definitive bridge between your trusted AI agent and your **Logseq OG** vault — a **headless CLI** and **MCP server** for safe read/write on Logseq's block tree (no raw Markdown parsing, no Logseq API, no silent overwrites), plus a **background daemon** and **Sovereign UI**. **v1.11.0** adds **Tana → Logseq OG migration**; **v1.11.1** pins **`logseq-matryca-parser` 1.4.0**; **v1.11.2** refactors the **graph layer boundary** with bounded RAM LRU caches and OCC nanosecond parity. Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **Current: v1.11.2** — [`CHANGELOG.md`](CHANGELOG.md).
+**Matryca Plumber** is the definitive bridge between your trusted AI agent and your **Logseq OG** vault — a **headless CLI** and **MCP server** for safe read/write on Logseq's block tree (no raw Markdown parsing, no Logseq API, no silent overwrites), plus a **background daemon** and **Sovereign UI**. **v1.11.0** adds **Tana → Logseq OG migration**; **v1.11.1** pins **`logseq-matryca-parser` 1.4.0**; **v1.11.2** refactors the **graph layer boundary**; **v1.12.0** applies **Clean Architecture** to Tier-1 prompts, L0 write safety, and fragment-assembled `SYSTEM_PROMPT.md`. Built on [Andrej Karpathy's LLM-Wiki vision](https://karpathy.ai/blog). **Current: v1.12.0** — [`CHANGELOG.md`](CHANGELOG.md).
 
 **Developed by [Marco Porcellato](https://github.com/MarcoPorcellato) · [Matryca.ai](https://matryca.ai)** — the product name is **Matryca Plumber** (not “Matryca” alone). See [`docs/BRANDING.md`](docs/BRANDING.md).
 
@@ -56,6 +56,8 @@
 - **Background daemon** — semantic summaries, dangling `[[link]]` healing, entity consolidation while you sleep (local LLM via LM Studio / Ollama)
 - **Sovereign UI** — browser dashboard at `:8500`; pre-flight checklist, trust tiers, live telemetry — configure everything without terminal env vars
 - **Link hygiene** — background URL/asset checks, Journey Log in today's journal — no per-cycle journal spam
+- **L0 write safety** — semantic index commits abort when an LLM diff would delete `id::` lines or edit protected zones (`graph/safety/validators.py`)
+- **Tier-1 prompt architecture** — domain `*/prompts.py` builders + DI on `InstructorLLMClient`; `SYSTEM_PROMPT.md` assembled from OpenSpec fragments (`make build-system-prompt`)
 - **100% local-first** — vault stays on disk; no cloud API key required
 
 ## Tana → Logseq OG migration
@@ -222,19 +224,21 @@ git clone https://github.com/MarcoPorcellato/matryca-plumber.git && cd matryca-p
 make install
 cd frontend && npm install && npm run build && cd ..
 make test-fast    # fast loop (~5s)
-make check        # full CI gate before PR
+make ci           # full CI gate before PR (format-check + lint + types + tests)
 ```
 
 ## Documentation
 
 | Start here | Go deeper |
 |------------|-----------|
+| [`AGENTS.md`](AGENTS.md) | [`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md) — Clean Architecture for prompts |
 | [`SUPPORT.md`](SUPPORT.md) | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | [`docs/openspec/README.md`](docs/openspec/README.md) |
 | [`llms.txt`](llms.txt) | [`docs/openspec/tana-import.md`](docs/openspec/tana-import.md) |
 | [`ROADMAP.md`](ROADMAP.md) | [`CHANGELOG.md`](CHANGELOG.md) |
 | [`SYSTEM_PROMPT.md`](SYSTEM_PROMPT.md) | [`docs/integrations/hermes-agent.md`](docs/integrations/hermes-agent.md) |
 | [Good first issues](https://github.com/MarcoPorcellato/matryca-plumber/issues?q=is%3Aopen+label%3A%22good+first+issue%22) | [`good_first_issues_blueprints.md`](good_first_issues_blueprints.md) |
+| [`docs/releases/v1.12.0-GITHUB.md`](docs/releases/v1.12.0-GITHUB.md) | Draft GitHub Release body for v1.12.0 (minor, plan v3) |
 | [`docs/releases/v1.11.2-GITHUB.md`](docs/releases/v1.11.2-GITHUB.md) | Copy-paste GitHub Release body for v1.11.2 |
 | [`docs/releases/v1.11.1-GITHUB.md`](docs/releases/v1.11.1-GITHUB.md) | Copy-paste GitHub Release body for v1.11.1 |
 

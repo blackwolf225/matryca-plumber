@@ -20,7 +20,7 @@ from openai.lib._pydantic import to_strict_json_schema as _openai_to_strict_json
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..daemon.config_layer import inject_identity_into_system_prompt
-from ..graph.insights_engine import INSIGHTS_SYSTEM_PROMPT
+from ..graph.insights.prompts import InsightsPromptBuilder
 from ..utils.agent_debug_log import agent_debug_log, completion_usage_tokens
 from ..utils.json_repair import (
     collapse_all_degenerate_llm_runs,
@@ -31,8 +31,9 @@ from ..utils.json_repair import (
     sanitize_prose_llm_completion,
 )
 from ..utils.token_logger import OperationType, TokenLogger
+from .bootstrap.prompts import HarvestPromptBuilder
+from .compression.prompts import CompressionPromptBuilder
 from .context_compressor import (
-    COMPRESSION_SYSTEM_PROMPT,
     MAX_EXECUTION_HISTORY_MESSAGES,
     ChatMessage,
     condense_messages,
@@ -58,18 +59,22 @@ from .plumber_llm import (
     InferredPropertiesResult,
     MarpaClassificationResult,
 )
-from .plumber_modules.marpa_framework import (
-    build_marpa_classify_system_prompt,
-    build_marpa_classify_user_prompt,
+from .plumber_modules.llm_prompts import (
+    ContextualSeedPromptBuilder,
+    EntityOverlapPromptBuilder,
+    TagPropertiesPromptBuilder,
 )
+from .plumber_modules.marpa.prompts import MarpaClassifyPromptBuilder
+from .plumber_modules.marpa_framework import build_marpa_classify_user_prompt
 from .plumber_modules.semantic_cache_router import (
     cache_get,
     cache_put,
     semantic_cache_key,
     validate_cached_model,
 )
-from .prompt_constraints import finalize_system_prompt
 from .prompt_layout import build_cache_aligned_prompt
+from .prompts.core import SystemPromptBuilder
+from .semantic_lint.prompts import SemanticLintPromptBuilder
 
 _LLM_HTTP_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=5.0, pool=5.0)
 
@@ -607,11 +612,27 @@ class InstructorLLMClient:
         model: str | None = None,
         api_key: str | None = None,
         token_logger: TokenLogger | None = None,
+        semantic_lint_builder: SystemPromptBuilder | None = None,
+        marpa_builder: SystemPromptBuilder | None = None,
+        harvest_builder: SystemPromptBuilder | None = None,
+        contextual_seed_builder: SystemPromptBuilder | None = None,
+        entity_overlap_builder: SystemPromptBuilder | None = None,
+        tag_properties_builder: SystemPromptBuilder | None = None,
+        compression_builder: SystemPromptBuilder | None = None,
+        insights_builder: SystemPromptBuilder | None = None,
     ) -> None:
         self.token_logger = token_logger or TokenLogger()
         self._explicit_model = model
         self._explicit_base_url = base_url
         self._explicit_api_key = api_key
+        self._semantic_lint_builder = semantic_lint_builder or SemanticLintPromptBuilder()
+        self._marpa_builder = marpa_builder or MarpaClassifyPromptBuilder()
+        self._harvest_builder = harvest_builder or HarvestPromptBuilder()
+        self._contextual_seed_builder = contextual_seed_builder or ContextualSeedPromptBuilder()
+        self._entity_overlap_builder = entity_overlap_builder or EntityOverlapPromptBuilder()
+        self._tag_properties_builder = tag_properties_builder or TagPropertiesPromptBuilder()
+        self._compression_builder = compression_builder or CompressionPromptBuilder()
+        self._insights_builder = insights_builder or InsightsPromptBuilder()
         self.base_url = resolve_validated_llm_base_url(override=base_url)
         self.model = resolve_llm_model_name(override=model)
         self.api_key = resolve_llm_api_key(override=api_key)
@@ -762,7 +783,7 @@ class InstructorLLMClient:
 
     def _compress_history_via_llm(self, compression_prompt: str) -> str:
         started = time.perf_counter()
-        compression_system = inject_identity_into_system_prompt(COMPRESSION_SYSTEM_PROMPT)
+        compression_system = inject_identity_into_system_prompt(self._compression_builder.build())
         response = call_openai_with_transport_retries(
             lambda: self._raw_client.chat.completions.create(
                 model=self.model,
@@ -929,10 +950,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=ContextualSeedResult,
-            system_prompt=finalize_system_prompt(
-                "You seed new Logseq pages from local context. Return JSON only. "
-                "Write a neutral, concise definition without markdown headings."
-            ),
+            system_prompt=self._contextual_seed_builder.build(),
             stateless=True,
             telemetry_target=source_page,
             telemetry_operation="Semantic Linting",
@@ -957,10 +975,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=EntityOverlapResult,
-            system_prompt=finalize_system_prompt(
-                "You are an entity consolidation linter for Logseq. Prefer one canonical title "
-                "and register the other as alias. Never suggest merging file contents."
-            ),
+            system_prompt=self._entity_overlap_builder.build(),
             stateless=True,
             telemetry_target=title_a,
             telemetry_operation="Semantic Linting",
@@ -988,10 +1003,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=InferredPropertiesResult,
-            system_prompt=finalize_system_prompt(
-                "Infer Logseq block properties from context. Use empty string when unknown. "
-                "Return JSON with a properties object."
-            ),
+            system_prompt=self._tag_properties_builder.build(),
             stateless=True,
             telemetry_target=page_title,
             telemetry_operation="Semantic Linting",
@@ -1030,7 +1042,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=MarpaClassificationResult,
-            system_prompt=build_marpa_classify_system_prompt(),
+            system_prompt=self._marpa_builder.build(),
             stateless=True,
             telemetry_target=page_title,
             telemetry_operation="Semantic Linting",
@@ -1062,10 +1074,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=BootstrapSummaryResult,
-            system_prompt=finalize_system_prompt(
-                "You are Matryca Plumber's bootstrap harvester. Return JSON only. "
-                "Write one crisp English sentence summarizing the page."
-            ),
+            system_prompt=self._harvest_builder.build(),
             stateless=True,
             telemetry_target=page_title,
             telemetry_operation="Concept Indexing",
@@ -1088,7 +1097,7 @@ class InstructorLLMClient:
         result, _ = self._completion_with_structured_output(
             prompt=prompt,
             response_model=GraphInsightsLLMResult,
-            system_prompt=INSIGHTS_SYSTEM_PROMPT,
+            system_prompt=self._insights_builder.build(),
             stateless=True,
             telemetry_target=str(graph_root),
             telemetry_operation="Concept Indexing",

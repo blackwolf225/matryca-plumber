@@ -6,7 +6,28 @@ Matryca Plumber is local data infrastructure for headless AI agents working with
 
 Architecture debate and RFC: [Discussion #19 — Core Architecture Evolution](https://github.com/MarcoPorcellato/matryca-plumber/discussions/19).
 
-*Status as of v1.11.2 — issue numbers link to GitHub; scope may shift as milestones close.*
+*Status as of **v1.12.0** — issue numbers link to GitHub; scope may shift as milestones close.*
+
+---
+
+## v1.12.0 — Prompt Clean Architecture (plan v3) ✓ on `main`
+
+| Deliverable | Status |
+|-------------|--------|
+| Tier-1 domain builders + `prompts/core.py` DI | **Done** ([#161](https://github.com/MarcoPorcellato/matryca-plumber/pull/161)) |
+| L0 `validate_llm_write_diff` before semantic commits | **Done** ([#158](https://github.com/MarcoPorcellato/matryca-plumber/pull/158)) |
+| `SYSTEM_PROMPT.md` fragment assembly + CI hash | **Done** ([#163](https://github.com/MarcoPorcellato/matryca-plumber/pull/163)) |
+| `AGENTS.md` router + `make agents-check` | **Done** ([#160](https://github.com/MarcoPorcellato/matryca-plumber/pull/160)) |
+| Cursor rule `11-prompt-maintainer` | **Done** ([#162](https://github.com/MarcoPorcellato/matryca-plumber/pull/162)) |
+| [`docs/PROMPT_ARCHITECTURE.md`](docs/PROMPT_ARCHITECTURE.md) | **Done** (maintainer SSOT) |
+
+**Recommended semver:** **minor 1.12.0** — new maintainer contracts and L0 behavioral gate; no intentional PyPI CLI/MCP break for vault operators.
+
+**v4 backlog (not in v3):**
+
+- **`llms.txt` §2.4 tiering** — reduce external-agent token waste (highest remaining prompt impact).
+- **`check_version_consistency.py`** — optional `llms` byte-identity + `agent-onboarding.md` header guard (partially covered by `agents-check`).
+- **Cursor rules `00` / `01` / `03` polish** — Karpathy checklist, paradigm SSOT links, HTTP vs headless clarification.
 
 ---
 
